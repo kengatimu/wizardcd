@@ -1,0 +1,403 @@
+/* ================================================================
+   WizardCD — Global Stylesheet
+   Enterprise Control Plane UI
+   ================================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base Layer ────────────────────────────────────────────────── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: #080B14;
+    color: #E8DCCA;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #080B14;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #243452;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2E4068;
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(201, 168, 76, 0.20);
+    color: #E8DCCA;
+  }
+}
+
+/* ── Component Layer ────────────────────────────────────────────── */
+@layer components {
+
+  /* ── Section Labels (monospace uppercase) ── */
+  .section-label {
+    @apply font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted;
+  }
+
+  /* ── Input Base ── */
+  .wiz-input {
+    @apply w-full bg-wiz-bg border border-wiz-border rounded-md
+           px-3 py-2 text-base text-wiz-cream placeholder-wiz-muted
+           font-mono
+           transition-all duration-150
+           focus:outline-none focus:border-wiz-gold focus:ring-1 focus:ring-wiz-gold/20;
+  }
+
+  .wiz-input:disabled {
+    @apply opacity-40 cursor-not-allowed;
+  }
+
+  .wiz-input-error {
+    @apply border-sig-red focus:border-sig-red focus:ring-sig-red/20;
+  }
+
+  /* ── Select Base ── */
+  .wiz-select {
+    @apply wiz-input appearance-none cursor-pointer;
+    /* Chevron uses wiz-muted (#9E9893) — matches the updated global token */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239E9893' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+  }
+
+  /* ── Button Variants ── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-wiz-gold text-wiz-bg
+           font-semibold text-sm
+           px-5 py-2.5 rounded-md
+           transition-all duration-150
+           hover:bg-wiz-gold-light hover:shadow-gold-sm
+           active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-wiz-gold disabled:hover:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-wiz-raised border border-wiz-border text-wiz-gray
+           font-medium text-sm
+           px-5 py-2.5 rounded-md
+           transition-all duration-150
+           hover:border-wiz-border-mid hover:text-wiz-cream
+           active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-sig-red-dim border border-sig-red/30 text-sig-red
+           font-semibold text-sm
+           px-5 py-2.5 rounded-md
+           transition-all duration-150
+           hover:bg-sig-red/20 hover:border-sig-red/50
+           active:scale-[0.98]
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-wiz-muted
+           font-medium text-sm
+           px-3 py-2 rounded-md
+           transition-all duration-150
+           hover:bg-wiz-raised hover:text-wiz-gray
+           active:scale-[0.98];
+  }
+
+  .btn-icon {
+    @apply inline-flex items-center justify-center
+           w-8 h-8 rounded-md
+           text-wiz-muted
+           transition-all duration-150
+           hover:bg-wiz-raised hover:text-wiz-gray
+           active:scale-[0.95];
+  }
+
+  /* ── Card ── */
+  .wiz-card {
+    @apply bg-card-gradient border border-wiz-border rounded-xl
+           shadow-card shadow-inset-top
+           transition-all duration-200;
+  }
+
+  .wiz-card:hover {
+    @apply border-wiz-border-mid;
+  }
+
+  /* ── Divider ── */
+  .wiz-divider {
+    @apply border-t border-wiz-border/60;
+  }
+
+  /* ── Badge base ── */
+  .badge {
+    @apply inline-flex items-center gap-1.5
+           font-mono text-xs font-semibold
+           px-2.5 py-1 rounded-md;
+  }
+
+  /* ── Page fade-in animation ── */
+  .page-enter {
+    @apply animate-fade-in;
+  }
+
+  /* ── Log console ── */
+  .log-console {
+    @apply bg-wiz-bg border border-wiz-border rounded-lg
+           font-mono text-xs
+           overflow-y-auto;
+  }
+
+  .log-line {
+    @apply px-4 py-0.5 leading-5 text-wiz-gray
+           hover:bg-wiz-surface/50 transition-colors duration-100;
+  }
+
+  .log-line-error {
+    @apply text-sig-red;
+  }
+
+  .log-line-warn {
+    @apply text-sig-yellow;
+  }
+
+  .log-line-info {
+    @apply text-sig-blue;
+  }
+
+  .log-line-success {
+    @apply text-sig-green;
+  }
+
+  /* ── Metric card accent borders ── */
+  .metric-total   { @apply border-t-2 border-t-sig-blue; }
+  .metric-running { @apply border-t-2 border-t-sig-yellow; }
+  .metric-success { @apply border-t-2 border-t-sig-green; }
+  .metric-failed  { @apply border-t-2 border-t-sig-red; }
+  .metric-aborted { @apply border-t-2 border-t-wiz-muted; }
+}
+
+/* ── Utility Layer ──────────────────────────────────────────────── */
+@layer utilities {
+  .text-gold {
+    color: #C9A84C;
+  }
+
+  .border-gold {
+    border-color: rgba(201, 168, 76, 0.30);
+  }
+
+  .ring-gold {
+    --tw-ring-color: rgba(201, 168, 76, 0.20);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #243452;
+    border-radius: 2px;
+  }
+
+  /* Gold shimmer for loading skeleton */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #111827 25%,
+      #1B2840 50%,
+      #111827 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+}
+
+/* ================================================================
+   LIGHT MODE OVERRIDES
+   Applied when ThemeContext toggles the .light class on <html>.
+   Using a CSS class (not [data-theme] attribute) as the hook gives
+   more reliable cascade behaviour across all browsers.
+   The sidebar uses bg-wiz-surface and therefore follows the theme.
+   Only the logo banner keeps its own always-dark inline style so the
+   dark-background PNG always looks sharp in both modes.
+   ================================================================ */
+
+/* ── Body & Root ────────────────────────────────────────────────── */
+.light body {
+  background-color: #F0F2F7;
+  color: #1A1C23;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+.light ::-webkit-scrollbar-track {
+  background: #F0F2F7;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: #C0C5D8;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #A0A8C0;
+}
+
+/* ── Selection ──────────────────────────────────────────────────── */
+.light ::selection {
+  background: rgba(201, 168, 76, 0.25);
+  color: #1A1C23;
+}
+
+/* ── Background Utilities ───────────────────────────────────────── */
+.light .bg-wiz-bg      { background-color: #F0F2F7 !important; }
+.light .bg-wiz-surface { background-color: #FFFFFF !important; }
+.light .bg-wiz-raised  { background-color: #F7F8FC !important; }
+.light .bg-wiz-panel   { background-color: #ECEEF5 !important; }
+/* bg-wiz-border used as a visual separator bar (e.g. <div class="w-px bg-wiz-border">) */
+.light .bg-wiz-border  { background-color: #D4D8E5 !important; }
+/* Gold dim — used for gold-tinted hover / focus backgrounds */
+.light .bg-wiz-gold-dim { background-color: #FEF9EE !important; }
+
+/* ── Signal Dim Backgrounds (pastel in light mode) ──────────────── */
+.light .bg-sig-green-dim  { background-color: #E8FAF0 !important; }
+.light .bg-sig-red-dim    { background-color: #FDEAEA !important; }
+.light .bg-sig-yellow-dim { background-color: #FEF6E4 !important; }
+.light .bg-sig-blue-dim   { background-color: #E8F2FF !important; }
+.light .bg-sig-orange-dim { background-color: #FEF0E8 !important; }
+.light .bg-sig-purple-dim { background-color: #F5EEFF !important; }
+
+/* ── Text Utilities ─────────────────────────────────────────────── */
+.light .text-wiz-cream { color: #1A1C23 !important; }
+.light .text-wiz-gray  { color: #3D4256 !important; }
+.light .text-wiz-muted { color: #6E7491 !important; }
+.light .text-wiz-dim   { color: #8E94B0 !important; }
+
+/* ── Border Utilities ───────────────────────────────────────────── */
+.light .border-wiz-border        { border-color: #D4D8E5 !important; }
+.light .border-wiz-border-mid    { border-color: #B8BDD0 !important; }
+.light .border-wiz-border-strong { border-color: #9BA3BC !important; }
+
+/* ── Component Class Overrides ──────────────────────────────────── */
+
+/* Card */
+.light .wiz-card {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8F9FC 100%) !important;
+  border-color: #D4D8E5 !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.90) !important;
+}
+.light .wiz-card:hover {
+  border-color: #B8BDD0 !important;
+}
+
+/* Input */
+.light .wiz-input {
+  background-color: #FFFFFF !important;
+  border-color: #D4D8E5 !important;
+  color: #1A1C23 !important;
+}
+.light .wiz-input::placeholder {
+  color: #8E94B0 !important;
+}
+.light .wiz-input:focus {
+  border-color: #C9A84C !important;
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.15) !important;
+  background-color: #FFFDF7 !important;
+}
+
+/* Select — use a dark chevron (#3D4256) on light backgrounds for better contrast */
+.light .wiz-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233D4256' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+}
+
+/* Secondary Button */
+.light .btn-secondary {
+  background-color: #FFFFFF !important;
+  border-color: #D4D8E5 !important;
+  color: #3D4256 !important;
+}
+.light .btn-secondary:hover:not(:disabled) {
+  background-color: #F7F8FC !important;
+  border-color: #B8BDD0 !important;
+  color: #1A1C23 !important;
+}
+
+/* Ghost Button */
+.light .btn-ghost {
+  color: #6E7491 !important;
+}
+.light .btn-ghost:hover {
+  background-color: #ECEEF5 !important;
+  color: #3D4256 !important;
+}
+
+/* Icon Button */
+.light .btn-icon {
+  color: #6E7491 !important;
+}
+.light .btn-icon:hover {
+  background-color: #ECEEF5 !important;
+  color: #3D4256 !important;
+}
+
+/* Section Label */
+.light .section-label {
+  color: #6E7491 !important;
+}
+
+/* Divider */
+.light .wiz-divider {
+  border-color: #D4D8E5 !important;
+}
+
+/* Log Console */
+.light .log-console {
+  background-color: #F8F9FC !important;
+  border-color: #D4D8E5 !important;
+}
+.light .log-line {
+  color: #3D4256 !important;
+}
+.light .log-line:hover {
+  background-color: rgba(212, 216, 229, 0.40) !important;
+}
+
+/* Skeleton Shimmer */
+.light .skeleton {
+  background: linear-gradient(
+    90deg,
+    #E4E7F0 25%,
+    #F0F2F7 50%,
+    #E4E7F0 75%
+  ) !important;
+  background-size: 200% 100% !important;
+}

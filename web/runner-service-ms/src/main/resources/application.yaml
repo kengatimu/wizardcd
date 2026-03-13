@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: runner-service-ms
+  profiles:
+    active: uat

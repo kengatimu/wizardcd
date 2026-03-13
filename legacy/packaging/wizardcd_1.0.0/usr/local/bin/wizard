@@ -1,0 +1,21 @@
+#!/bin/bash
+set -e
+
+# WizardCD launcher (works for Brew + Linux)
+BREW_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
+
+if [[ -f "${BREW_DIR}/wizardcd/bin/wizard.sh" ]]; then
+  exec bash "${BREW_DIR}/wizardcd/bin/wizard.sh" "$@"
+fi
+
+for path in \
+  "/usr/local/share/wizardcd/bin/wizard.sh" \
+  "/usr/share/wizardcd/bin/wizard.sh" \
+  "/opt/homebrew/share/wizardcd/bin/wizard.sh"; do
+  if [[ -f "$path" ]]; then
+    exec bash "$path" "$@"
+  fi
+done
+
+echo "WizardCD launcher error: wizard.sh not found."
+exit 1

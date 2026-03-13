@@ -1,0 +1,196 @@
+# --------------------------------------------------
+# Workflow: Deploy WizardCD Homebrew (Fully Automated)
+# --------------------------------------------------
+# Description:
+#   - Builds and uploads macOS tarballs (arm64 + amd64)
+#   - Auto-updates Homebrew tap formula in engineeredbybytes/homebrew-wizardcd
+#   - Uses PUBLIC_REPO_TOKEN for cross-repo operations
+#   - Tarballs now include bin/ and share/ structure for Homebrew compatibility
+# --------------------------------------------------
+
+name: Deploy WizardCD Homebrew Formula
+
+on:
+  workflow_call:        # Triggered by release.yml
+  workflow_dispatch:    # Manual trigger if needed
+
+jobs:
+  build-and-publish:
+    name: Build, Upload, and Update Formula
+    runs-on: ubuntu-latest
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout source repository
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Extract version from tag (v*)
+      # --------------------------------------------------
+      - name: Extract version
+        id: vars
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      # --------------------------------------------------
+      # 3. Prepare packaging contents
+      # --------------------------------------------------
+      - name: Prepare build artifacts
+        run: |
+          mkdir -p dist
+          echo "[Prepare] Copying wizard launcher and shared files..."
+          cp packaging/wizardcd_1.0.0/usr/local/bin/wizard dist/
+          cp -r packaging/wizardcd_1.0.0/usr/share/wizardcd dist/
+          chmod +x dist/wizard
+
+      # --------------------------------------------------
+      # 4. Create macOS tarballs (arm64 + amd64)
+      # --------------------------------------------------
+      - name: Create tarballs (bin + share structure)
+        run: |
+          cd dist
+          for ARCH in arm64 amd64; do
+            TARFILE="wizardcd-darwin-${ARCH}.tar.gz"
+            echo "[Package] Creating $TARFILE"
+
+            # Create proper Homebrew-style directory structure
+            mkdir -p package_root/bin package_root/share
+
+            # Copy binary and shared content
+            cp wizard package_root/bin/
+            cp -r wizardcd package_root/share/
+
+            # Compress into tarball
+            cd package_root
+            tar -czf "../$TARFILE" *
+            cd ..
+
+            # Generate checksum
+            sha256sum "$TARFILE" | awk '{print $1}' > "$TARFILE.sha256"
+          done
+
+          echo
+          echo "[Verify] Generated files:"
+          ls -lh
+
+      # --------------------------------------------------
+      # 5. Upload release assets to wizardcd-releases
+      # --------------------------------------------------
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: engineeredbybytes/wizardcd-releases
+          files: |
+            dist/wizardcd-darwin-arm64.tar.gz
+            dist/wizardcd-darwin-arm64.tar.gz.sha256
+            dist/wizardcd-darwin-amd64.tar.gz
+            dist/wizardcd-darwin-amd64.tar.gz.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+
+      # --------------------------------------------------
+      # 6. Checkout the Homebrew tap repo
+      # --------------------------------------------------
+      - name: Checkout Homebrew tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: engineeredbybytes/homebrew-wizardcd
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          path: tap
+
+      # --------------------------------------------------
+      # 7. Auto-update Formula/wizardcd.rb
+      # --------------------------------------------------
+      - name: Update formula
+        run: |
+          VERSION=${{ steps.vars.outputs.version }}
+          ARM_SHA=$(cat dist/wizardcd-darwin-arm64.tar.gz.sha256)
+          AMD_SHA=$(cat dist/wizardcd-darwin-amd64.tar.gz.sha256)
+
+          echo "[Update] Version $VERSION"
+          echo "[Update] arm64 sha: $ARM_SHA"
+          echo "[Update] amd64 sha: $AMD_SHA"
+
+          FORMULA_PATH="tap/Formula/wizardcd.rb"
+
+          cat > "$FORMULA_PATH" <<EOF
+          class Wizardcd < Formula
+          desc "WizardCD – One Config. One Command. Continuous Magic."
+          homepage "https://wizardcd.com"
+          version "$VERSION"
+          license "MIT"
+
+          on_macos do
+          if Hardware::CPU.arm?
+          url "https://github.com/engineeredbybytes/wizardcd-releases/releases/download/v#{version}/wizardcd-darwin-arm64.tar.gz"
+          sha256 "$ARM_SHA"
+          else
+          url "https://github.com/engineeredbybytes/wizardcd-releases/releases/download/v#{version}/wizardcd-darwin-amd64.tar.gz"
+          sha256 "$AMD_SHA"
+          end
+          end
+
+          def install
+          bin.install "bin/wizard"
+          prefix.install "share/wizardcd"
+          chmod "+x", Dir["#{prefix}/wizardcd/bin/**/*.sh"]
+
+          # Create VERSION file for runtime banner
+          (File.write("#{prefix}/wizardcd/VERSION", version) rescue nil)
+          end
+
+          def post_install
+          logdir = HOMEBREW_PREFIX/"var/log/wizardcd"
+          logdir.mkpath unless logdir.directory?
+          logdir.chmod 0o777
+
+          ohai "--------------------------------------------------"
+          ohai "WizardCD installed successfully (v" + version + ")"
+          ohai "Executable: " + (bin/"wizard").to_s
+          ohai "Logs: " + logdir.to_s
+          ohai "You can now run: wizard --help"
+          ohai "--------------------------------------------------"
+          puts ""
+          puts "Installation complete! Enjoy continuous magic with WizardCD"
+          puts ""
+
+          # Display ASCII banner directly to stdout (bypasses Homebrew logger)
+          puts \`#{bin}/wizard --banner 2>&1\`
+          rescue => e
+          opoo "Post-install notice: " + e.message
+          end
+
+          test do
+          assert_match "WizardCD version", shell_output("\#{bin}/wizard --version")
+          end
+          end
+          EOF
+
+      # --------------------------------------------------
+      # 8. Commit and push formula update
+      # --------------------------------------------------
+      - name: Commit and push changes
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "actions@github.com"
+          git add Formula/wizardcd.rb
+          git commit -m "brew: Auto-update WizardCD formula to v${{ steps.vars.outputs.version }}" || echo "No changes to commit"
+          git push origin main
+
+      # --------------------------------------------------
+      # 9. Print summary
+      # --------------------------------------------------
+      - name: Print summary
+        run: |
+          echo "--------------------------------------------------"
+          echo "[Summary]"
+          echo "Version: ${{ steps.vars.outputs.version }}"
+          echo "arm64 SHA: $(cat dist/wizardcd-darwin-arm64.tar.gz.sha256)"
+          echo "amd64 SHA: $(cat dist/wizardcd-darwin-amd64.tar.gz.sha256)"
+          echo "Formula updated in: engineeredbybytes/homebrew-wizardcd"
+          echo "--------------------------------------------------"

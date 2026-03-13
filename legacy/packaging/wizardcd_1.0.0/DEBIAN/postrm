@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+# ==================================================
+# WizardCD - Post-removal Script
+# Purpose:
+#   1. Remove residual log directories or runtime data.
+#   2. Ensure complete cleanup after package removal.
+#
+# This script is executed by dpkg/apt after
+# WizardCD is fully removed or purged.
+# ==================================================
+
+# --------------------------------------------------
+# Define key paths
+# --------------------------------------------------
+LOG_DIR="/var/log/wizardcd"
+
+# --------------------------------------------------
+# Main post-removal handler
+# --------------------------------------------------
+if [[ "$1" == "remove" || "$1" == "purge" ]]; then
+    # 1. Remove residual log directory (if it exists)
+    if [[ -d "$LOG_DIR" ]]; then
+        echo "Cleaning up residual log directory: ${LOG_DIR}"
+        rm -rf "$LOG_DIR"
+    fi
+
+elif [[ "$1" == "upgrade" || "$1" == "failed-upgrade" ]]; then
+    # 2. Skip cleanup during upgrades
+    :
+
+else
+    echo "postrm called with unknown argument '$1'" >&2
+    exit 1
+fi
+
+exit 0

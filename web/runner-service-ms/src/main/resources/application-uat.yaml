@@ -1,0 +1,31 @@
+logging:
+  file:
+    path: /opt/wizardcd/logs
+  level:
+    ROOT: INFO
+    com.ebb.wizardcd.runner: INFO
+
+server:
+  port: 8081
+
+runner:
+  scriptsDir: /opt/wizardcd/runner
+  workspaceRoot: /opt/wizardcd/workspace/jobs
+  executionTimeoutMinutes: 30
+  maxConcurrentJobs: 1
+  # public-ip: <override>   # Optional. Set only if auto-detection fails (e.g. runner behind NAT).
+  #                          # Normally the runner detects its own public IP at startup via checkip.amazonaws.com.
+
+wizardcd:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+#      - https://wizardcd.uat.yourdomain.com
+
+
+#actuator configs
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'

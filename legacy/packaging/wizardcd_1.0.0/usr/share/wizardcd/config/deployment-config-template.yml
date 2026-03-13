@@ -1,0 +1,116 @@
+# ===============================================================
+# WizardCD Deployment Configuration
+# ===============================================================
+apps:
+  papss-outbound-technical-service-ms:                                            # Application name (used in --app flag)
+    uat:                                                   						  # Environment name (used in --env flag)
+      # ===============================================================
+      # COMMON SETTINGS
+      # Shared by all deployment modes (VM, Azure, AWS, GCP)
+      # ===============================================================
+      app_jar: papss-outbound-technical-service-ms-0.0.1-SNAPSHOT.jar
+      main_class: com.equitybank.gag.papss.ots.PapssOutboundTechnicalServiceMsApplication
+      java_version: 24
+      java_cmd: /usr/lib/jvm/temurin-24-jdk-amd64/bin/java
+      run_as_user: deployuser
+      server_port: 10443
+
+      # [WARNING] Advanced : JVM Parameters. Change only if you understand JVM tuning 
+      jvm:
+        xms: -Xms512m
+        xmx: -Xmx2048m
+        new_ratio: -XX:NewRatio=3
+
+      # Logging Configuration: Defines log rotation policy for deployments and runtime logs.
+      logging:
+        max_size: 100m
+        max_files: 10
+
+      # The base directory for build outputs. In Azure CI/CD, 'project_base_path' is auto-updated by pipeline to point to $(System.DefaultWorkingDirectory).
+      project_base_path: /Users/bishop/Programming/projects/work/WorkSpace/NetBeans/GAG/GAGApplications/PAPSS/papss-outbound-technical-service-ms
+
+      # Location of java application jar file and libraries from the project_base_path
+      build_paths:
+        jar: target/papss-outbound-technical-service-ms-0.0.1-SNAPSHOT.jar
+        lib: target/lib
+
+      # Include any additional files or directories, that are not part of the main application to package with the build. (absolute paths recommended)	
+      optional_paths:
+        - /Users/bishop/Programming/projects/work/WorkSpace/NetBeans/GAG/GAGApplications/PAPSS/certs/uat/server-certs
+        - /Users/bishop/Programming/projects/work/WorkSpace/NetBeans/GAG/GAGApplications/PAPSS/papss-outbound-technical-service-ms/pipelines/deploy
+
+      # ===============================================================
+      # DEPLOYMENT MODE
+      # Determines whether WizardCD deploys directly to a VM,
+      # or delegates the build + packaging to a CI/CD system.
+      # ===============================================================
+      deployment_mode:
+
+        # ---------------------------------------------------------------
+        # Option 1: Direct VM deployment (default)
+        # ---------------------------------------------------------------
+        direct_vm:
+          enabled: false
+          vm_host: 192.168.1.10
+          vm_path: /u01/uat/my-service-1-ms
+          ssh_port: 22
+        
+        # ---------------------------------------------------------------
+        # Option 2: Azure Pipeline deployment (via CI/CD) https://dev.azure.com/ICT-DevOps/Transaction-Processors-GAG/_git/papss-outbound-technical-service-ms
+        # ---------------------------------------------------------------
+        azure:
+          enabled: true
+          organization_url: https://dev.azure.com/ICT-DevOps/   					# Base organization URL
+          project: Transaction-Processors-GAG                                      	# Azure DevOps project name
+          repo_name: papss-outbound-technical-service-ms                            # Repository slug (used in REST URL)
+          pipeline_name: my-service-1-ms-CI            		     					# Azure pipeline name
+          branch: release                                        					# Target branch for CI/CD trigger
+          artifact_name: uat_drop                                					# Artifact container name
+
+          # Azure Personal Access Token - PAT (from WizardCD vault)
+		  # Add once using: wizard auth add <PAT>
+          # WizardCD will decrypt and use this PAT securely when triggering Azure pipelines
+          azure_pat_ref: azure-global
+
+          # Optional: Azure KeyVault configuration
+          keyvault:
+            name: kv-uat-omnichannel
+            subscription: Enterprise Core
+            secrets_filter: "*"
+
+          # Artifact handling
+          download_artifacts: true
+          auto_open_report: true
+          cleanup_old_runs: true
+          retention_days: 7
+
+          # Build configuration
+          build:
+            type: maven
+            pom_file: pom.xml
+            goals: clean install -DskipTests
+            use_azure_java: true
+            sync_to_wizardcd: true
+            update_config_path: true
+
+        # ---------------------------------------------------------------
+        # Option 2: AWS Pipeline deployment (via CI/CD) 
+        # ---------------------------------------------------------------
+        aws:
+          enabled: false
+          region: eu-west-1
+          pipeline_name: my-service-1-ms-deploy-pipeline
+          role_arn: arn:aws:iam::123456789012:role/CodePipelineRole
+          s3_bucket: wizardcd-artifacts
+          artifact_name: uat_drop
+          trigger_branch: main
+
+        # ---------------------------------------------------------------
+        # Option 2: Google Cloud Pipeline deployment (via CI/CD)
+        # ---------------------------------------------------------------
+        gcp:
+          enabled: false
+          project_id: ebb-systems
+          trigger_name: deploy-my-service-1-ms-uat
+          region: europe-west1
+          artifact_bucket: wizardcd-artifacts

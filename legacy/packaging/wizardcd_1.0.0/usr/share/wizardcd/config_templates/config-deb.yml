@@ -1,0 +1,62 @@
+# ===============================================================
+# WizardCD Deployment Configuration Template
+# ===============================================================
+# Each top-level key under "apps:" defines one application service.
+# The name (e.g. "my-service-1") is used when running deployments:
+#   wizard --app my-service-1 --env uat
+#
+# You can define multiple services and multiple environments (uat, prod, etc.)
+# within the same YAML file.
+# ===============================================================
+
+apps:
+  my-service-1:                                            # Application name (used in --app flag)
+    uat:                                                   # Environment name (used in --env flag)
+      # ===============================================================
+      # Base connection and runtime parameters
+      # ===============================================================
+      vm_host: 192.168.1.10                                # Target VM hostname or IP address
+      vm_path: /u01/uat/my-service-1                       # Target directory on the VM where the app will be installed
+      server_port: 8081                                    # Application server port (used for stop/start checks)
+      run_as_user: deployuser                              # OS user that owns and runs the app
+      java_version: 24                                     # Java version to be used
+      java_cmd: /usr/lib/jvm/temurin-24-jdk-amd64/bin/java # Target VM full path to the java binary
+      app_jar: my-service-1-1.0.0.jar                      # Name of the executable JAR file
+      main_class: com.example.myservice1.MainApplication   # Fully qualified main class name
+
+      # ===============================================================
+      # JVM Parameters.
+      # [WARN]: Advanced — Change only if you understand JVM tuning
+      # These options control Java heap size and garbage collection.
+      # Incorrect settings can cause memory or performance issues.
+      # ===============================================================
+      jvm:
+        xms: -Xms512m            # Initial heap size (in MB)
+        xmx: -Xmx2048m           # Maximum heap size (in MB)
+        new_ratio: -XX:NewRatio=3 # Ratio of new to old generation memory pools
+
+      # ===============================================================
+      # Logging Configuration
+      # Defines log rotation policy for deployments and runtime logs.
+      # ===============================================================
+      logging:
+        max_size: 100m           # Maximum single log file size before rotation
+        max_files: 10            # Number of rotated log files to retain
+
+      # ===============================================================
+      # Build Output Paths
+      # These paths refer to artifacts on the build machine.
+      # Ensure the jar and lib paths are correct before deploying.
+      # ===============================================================
+      build_paths:
+        jar: target/my-service-1.0.0.jar  # Relative path to the built JAR file
+        lib: target/lib                   # Directory containing dependency libraries
+
+      # ===============================================================
+      # Optional Paths
+      # Include any additional files or directories to package with the build.
+      # Useful for certs, configs, or monitoring (APM) agents.
+      # ===============================================================
+      optional_paths:
+        - pipelines/certs
+        - pipelines/apm

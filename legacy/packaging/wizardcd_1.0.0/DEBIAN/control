@@ -1,0 +1,17 @@
+Source: wizardcd
+Section: utils
+Priority: optional
+Maintainer: Engineered By Bytes Ltd <info@wizardcd.com>
+Package: wizardcd
+Architecture: all
+Version: 1.0.0-1
+Homepage: https://www.wizardcd.com
+Standards-Version: 4.6.2
+License: MIT
+Description: WizardCD - One Config. One Command. Continuous Magic.
+ WizardCD is a next-generation deployment framework that simplifies
+ Continuous Delivery across on-prem, hybrid, and cloud environments.
+ .
+ It installs the 'wizard' command-line utility, allowing developers and
+ DevOps engineers to manage Java application deployments using a single
+ project-local YAML configuration file.

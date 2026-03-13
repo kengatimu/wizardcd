@@ -1,0 +1,47 @@
+# ==================================================
+# Tanuki Wrapper Config Template
+# Values substituted by generate-wrapper-conf.sh
+# ==================================================
+
+wrapper.java.command={{JAVA_CMD}}
+set.MYAPP_NAME={{APP_NAME}}
+set.MYAPP_HOME={{APP_HOME}}/{{APP_NAME}}
+wrapper.working.dir=%MYAPP_HOME%
+
+# Classpath
+wrapper.java.classpath.1=%MYAPP_HOME%/lib/wrapper.jar
+wrapper.java.classpath.2=%MYAPP_HOME%/bin/{{APP_JAR}}
+wrapper.java.classpath.3=%MYAPP_HOME%/bin/lib/*.jar
+
+# Main class
+wrapper.java.mainclass=org.tanukisoftware.wrapper.WrapperSimpleApp
+wrapper.app.parameter.1={{MAIN_CLASS}}
+
+# JVM settings
+wrapper.java.additional.auto_bits=TRUE
+wrapper.java.additional.1={{JVM_XMS}}
+wrapper.java.additional.2={{JVM_XMX}}
+wrapper.java.additional.3={{JVM_NEW_RATIO}}
+
+# Native library path (ensure Tanuki can load libwrapper.so)
+wrapper.java.library.path.1=%MYAPP_HOME%/lib
+
+# Logging
+wrapper.console.format=PM
+wrapper.console.loglevel=INFO
+wrapper.logfile=%MYAPP_HOME%/logs/%MYAPP_NAME%.log
+wrapper.logfile.format=LPTM
+wrapper.logfile.loglevel=INFO
+wrapper.logfile.maxsize={{LOGFILE_MAXSIZE}}
+wrapper.logfile.maxfiles={{LOGFILE_MAXFILES}}
+wrapper.syslog.loglevel=NONE
+
+# Wrapper behavior
+wrapper.ignore_sequence_gaps=TRUE
+wrapper.single_invocation=TRUE
+wrapper.console.title=%MYAPP_NAME%
+wrapper.name=%MYAPP_NAME%
+wrapper.displayname=%MYAPP_NAME%
+wrapper.description=%MYAPP_NAME%
+wrapper.ntservice.starttype=AUTO_START
+wrapper.ntservice.interactive=false

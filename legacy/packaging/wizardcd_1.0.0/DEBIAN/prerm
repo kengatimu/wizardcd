@@ -1,0 +1,71 @@
+#!/bin/bash
+set -e
+
+# ==================================================
+# WizardCD - Pre-removal Script
+# Purpose:
+#   1. Remove the global 'wizard' CLI symlink or directory.
+#   2. Ensure clean uninstall or upgrade transition.
+#   3. Provide user feedback during package removal.
+#
+# This script is executed by dpkg/apt before
+# WizardCD is removed or upgraded.
+# ==================================================
+
+# --------------------------------------------------
+# Define key installation paths
+# --------------------------------------------------
+INSTALL_DIR="/usr/share/wizardcd"
+PUBLIC_BIN="/usr/local/bin/wizard"
+LEGACY_BIN="/usr/local/bin/wizard.sh"
+
+# --------------------------------------------------
+# Helper Function: Display uninstall banner
+# --------------------------------------------------
+show_uninstall_banner() {
+    echo
+    echo "=================================================="
+    echo "Removing WizardCD CLI integration..."
+    echo "Thank you for using WizardCD!"
+    echo "You can reinstall anytime using:"
+    echo "  sudo apt install wizardcd"
+    echo "=================================================="
+    echo
+}
+
+# --------------------------------------------------
+# Main pre-removal handler using IF/ELIF/ELSE
+# --------------------------------------------------
+if [[ "$1" == "remove" || "$1" == "upgrade" || "$1" == "deconfigure" ]]; then
+    echo "Starting WizardCD pre-removal steps..."
+
+    # 1. Remove CLI symlink or directory
+    if [[ -L "$PUBLIC_BIN" || -f "$PUBLIC_BIN" ]]; then
+        echo "Removing CLI symlink at ${PUBLIC_BIN}..."
+        rm -f "$PUBLIC_BIN"
+    elif [[ -d "$PUBLIC_BIN" ]]; then
+        echo "Removing directory at ${PUBLIC_BIN} (contains old symlink)..."
+        rm -rf "$PUBLIC_BIN"
+    elif [[ -L "$LEGACY_BIN" || -f "$LEGACY_BIN" ]]; then
+        echo "Removing legacy symlink at ${LEGACY_BIN}..."
+        rm -f "$LEGACY_BIN"
+    else
+        echo "No existing 'wizard' command or directory found at ${PUBLIC_BIN}."
+    fi
+
+    # 2. Leave /usr/share/wizardcd cleanup to dpkg
+    # The directory is auto-removed after uninstall.
+
+    # 3. Display farewell banner
+    show_uninstall_banner
+
+elif [[ "$1" == "abort-install" || "$1" == "abort-upgrade" ]]; then
+    echo "WizardCD removal aborted."
+    :
+
+else
+    echo "prerm called with unknown argument '$1'" >&2
+    exit 1
+fi
+
+exit 0

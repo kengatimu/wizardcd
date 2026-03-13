@@ -1,0 +1,78 @@
+# ===============================================================
+# WizardCD Deployment Configuration (Phase 1)
+# Mode: Direct VM / SSH
+# ===============================================================
+
+apps:
+  papss-outbound-technical-service-ms:
+
+    uat:
+
+      # -----------------------------------------------------------
+      # Application Identity
+      # -----------------------------------------------------------
+      app:
+        name: papss-outbound-technical-service-ms
+        jar_name: papss-outbound-technical-service-ms-0.0.1-SNAPSHOT.jar
+        main_class: com.equitybank.gag.papss.ots.PapssOutboundTechnicalServiceMsApplication
+
+      # -----------------------------------------------------------
+      # Java Runtime
+      # -----------------------------------------------------------
+      java:
+        command: /usr/lib/jvm/temurin-25-jdk-amd64/bin/java
+        version: 25
+
+      # -----------------------------------------------------------
+      # JVM Configuration
+      # -----------------------------------------------------------
+      jvm:
+        xms: -Xms512m
+        xmx: -Xmx2048m
+        new_ratio: -XX:NewRatio=3
+        extra_opts: []
+
+      # -----------------------------------------------------------
+      # Runtime Configuration
+      # -----------------------------------------------------------
+      runtime:
+        run_as_user: vagrant
+        server_port: 10443
+
+      # -----------------------------------------------------------
+      # Logging Configuration
+      # -----------------------------------------------------------
+      logging:
+        max_size: 100m
+        max_files: 10
+
+      # -----------------------------------------------------------
+      # Build Inputs (Local Filesystem)
+      # -----------------------------------------------------------
+      build:
+        project_base_path: /opt/wizardcd/workspace/jobs/<jobId>/input
+        jar_path: papss-outbound-technical-service-ms-0.0.1-SNAPSHOT.jar
+        lib_path: "" # if thin jar, give the lib directory eg lib_path: lib
+        optional_paths: #if empty, use - optional_paths: []
+			- server-certs
+			- deploy
+
+      # -----------------------------------------------------------
+      # Deployment Target (Direct VM / SSH)
+      # -----------------------------------------------------------
+      deployment:
+        type: direct_vm #can also be cloud - azure, aws, etc
+        ssh:
+          user: vagrant
+          host: 192.168.56.10
+          port: 22
+          privateKeyPath: /home/vagrant/.ssh/id_ed25519_wizardcd_runner_vm 
+        target:
+          base_path: /home/vagrant/apps/papss # give the destination path where the app will be deployed
+
+      # -----------------------------------------------------------
+      # Backup Flags
+      # -----------------------------------------------------------
+      backup:
+        perform_backup: true
+        max_backups: 3

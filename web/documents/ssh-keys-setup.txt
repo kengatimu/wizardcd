@@ -1,0 +1,16 @@
+Runner VM SSH Keys setup:
+
+1. Generate the 3 per-environment ED25519 keys:
+	ssh-keygen -t ed25519 -f ~/.ssh/wizardcd_sit_ed25519 -N "" -C "wizardcd-sit@runner"
+	ssh-keygen -t ed25519 -f ~/.ssh/wizardcd_uat_ed25519 -N "" -C "wizardcd-uat@runner"
+	ssh-keygen -t ed25519 -f ~/.ssh/wizardcd_prod_ed25519 -N "" -C "wizardcd-prod@runner"
+
+2. Set correct permissions on private keys:
+	chmod 600 ~/.ssh/wizardcd_sit_ed25519
+	chmod 600 ~/.ssh/wizardcd_uat_ed25519
+	chmod 600 ~/.ssh/wizardcd_prod_ed25519
+
+3. Set correct permissions on public keys:
+	chmod 644 ~/.ssh/wizardcd_sit_ed25519.pub
+	chmod 644 ~/.ssh/wizardcd_uat_ed25519.pub
+	chmod 644 ~/.ssh/wizardcd_prod_ed25519.pub

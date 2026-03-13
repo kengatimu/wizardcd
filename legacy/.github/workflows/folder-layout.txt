@@ -1,0 +1,10 @@
+.github/workflows/
+│
+├── release.yml                 ← master trigger, runs on tag push
+│
+├── build-core.yml              ← optional prebuild step (shared artifacts)
+│
+├── deploy-deb.yml              ← Debian/Ubuntu (APT repo)
+├── deploy-rpm.yml              ← RedHat/Fedora (.rpm)
+├── deploy-brew.yml             ← macOS / Homebrew
+└── deploy-choco.yml            ← Windows / Chocolatey

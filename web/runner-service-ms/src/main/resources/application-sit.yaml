@@ -1,0 +1,20 @@
+logging:
+  file:
+    path: ../logs
+  level:
+    ROOT: INFO
+    com.ebb.wizardcd.runner: INFO
+
+server:
+  port: 8081
+
+runner:
+  scriptsDir: ../runner
+  workspaceRoot: ../workspace/jobs
+  executionTimeoutMinutes: 30
+  maxConcurrentJobs: 1
+
+wizardcd:
+  cors:
+    allowed-origins:
+      - http://localhost:5173

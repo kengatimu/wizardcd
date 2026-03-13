@@ -1,0 +1,73 @@
+# ===============================================================
+# WizardCD Deployment Configuration (Phase 1)
+# Mode: Direct VM / SSH
+# ===============================================================
+
+apps:
+  papss-outbound-technical-service-ms:
+
+    uat:
+
+      # -----------------------------------------------------------
+      # Application Identity
+      # -----------------------------------------------------------
+      app:
+        name: papss-outbound-technical-service-ms
+        jar_name: papss-outbound-technical-service-ms.jar
+        main_class: com.equitybank.gag.papss.ots.PapssOutboundTechnicalServiceMsApplication
+
+      # -----------------------------------------------------------
+      # Java Runtime
+      # -----------------------------------------------------------
+      java:
+        command: /usr/lib/jvm/temurin-25-jdk-amd64/bin/java
+        version: 25
+
+      # -----------------------------------------------------------
+      # JVM Configuration
+      # -----------------------------------------------------------
+      jvm:
+        xms: -Xms512m
+        xmx: -Xmx2048m
+        new_ratio: -XX:NewRatio=3
+        extra_opts: []
+
+      # -----------------------------------------------------------
+      # Runtime Configuration
+      # -----------------------------------------------------------
+      runtime:
+        run_as_user: vagrant
+        server_port: 10443
+
+      # -----------------------------------------------------------
+      # Logging Configuration
+      # -----------------------------------------------------------
+      logging:
+        max_size: 100m
+        max_files: 10
+
+      # -----------------------------------------------------------
+      # Build Inputs (Local Filesystem)
+      # -----------------------------------------------------------
+      build:
+        project_base_path: /Users/bishop/Programming/projects/work/WorkSpace/NetBeans/GAG/GAGApplications/PAPSS/papss-outbound-technical-service-ms
+        jar_path: target/papss-outbound-technical-service-ms-0.0.1-SNAPSHOT.jar
+        lib_path: target/lib
+        optional_paths:
+          - /Users/bishop/Programming/projects/work/WorkSpace/NetBeans/GAG/GAGApplications/PAPSS/certs/uat/server-certs
+          - /Users/bishop/Programming/projects/work/WorkSpace/NetBeans/GAG/GAGApplications/PAPSS/pipelines/deploy
+
+      # -----------------------------------------------------------
+      # Deployment Target (Direct VM / SSH)
+      # -----------------------------------------------------------
+      deployment:
+        type: direct_vm
+
+        ssh:
+          user: vagrant
+          host: 192.168.56.10
+          port: 22
+          privateKeyPath: /Users/bishop/.ssh/id_ed25519_wizardcd_runner_vm
+
+        target:
+          base_path: /opt/wizardcd/apps

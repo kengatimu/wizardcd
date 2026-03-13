@@ -1,0 +1,266 @@
+# --------------------------------------------------
+# Workflow: Deploy WizardCD RPM Repository
+# --------------------------------------------------
+# Description:
+#   - Builds .rpm package for RHEL/Fedora/CentOS
+#   - Signs package using GPG key
+#   - Generates YUM repository metadata
+#   - Uploads to wizardcd.com via FTP
+#   - Publishes to engineeredbybytes/wizardcd-releases
+#   - Verifies installation from the live hosted repo
+# --------------------------------------------------
+
+name: Deploy WizardCD RPM Repository
+
+on:
+  workflow_call:      # Triggered by release.yml
+  workflow_dispatch:  # Allow manual run if needed
+
+jobs:
+  build-and-deploy-rpm:
+    name: Build .rpm and publish to wizardcd.com + GitHub Releases
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:39
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout project source
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Install RPM packaging dependencies
+      # rpm, rpmbuild, gnupg, createrepo_c
+      # --------------------------------------------------
+      - name: Install packaging dependencies
+        run: |
+          echo "[Step 2] Installing RPM build dependencies..."
+          dnf install -y rpm-build rpm-sign gnupg2 createrepo_c
+          rpm --version
+          gpg --version
+          echo "Dependencies installed successfully."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 3. Prepare RPM build structure
+      # --------------------------------------------------
+      - name: Prepare RPM build structure
+        run: |
+          echo "[Step 3] Preparing RPM build directories..."
+          mkdir -p packaging/rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          
+          echo "[Step 3.1] Generating executable launcher..."
+          cat <<'LAUNCHER' > packaging/rpm/SOURCES/wizard
+          #!/bin/bash
+          # WizardCD CLI launcher
+          SCRIPT_DIR="/usr/share/wizardcd/bin"
+          exec "$SCRIPT_DIR/wizard.sh" "$@"
+          LAUNCHER
+          chmod +x packaging/rpm/SOURCES/wizard
+          echo "Launcher created at packaging/rpm/SOURCES/wizard"
+
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          echo "Creating wizardcd.spec file..."
+          cat <<EOF > packaging/rpm/SPECS/wizardcd.spec
+          Name:           wizardcd
+          Version:        ${VERSION}
+          Release:        1%{?dist}
+          Summary:        One config. One command. Continuous magic.
+          License:        MIT
+          URL:            https://wizardcd.com
+          Source0:        wizard
+          BuildArch:      x86_64
+
+          %description
+          WizardCD - Continuous deployment made magical. 🪄
+
+          %install
+          mkdir -p %{buildroot}/usr/local/bin
+          install -m 0755 %{_sourcedir}/wizard %{buildroot}/usr/local/bin/wizard
+          mkdir -p %{buildroot}/usr/share/wizardcd
+          # Copy shared wizardcd files from correct source directory if available
+          if [ -d "../../wizardcd_1.0.0/usr/share/wizardcd" ]; then
+            cp -r ../../wizardcd_1.0.0/usr/share/wizardcd/* %{buildroot}/usr/share/wizardcd/ || true
+          else
+            echo "No shared wizardcd files found; skipping copy."
+          fi
+
+          %files
+          /usr/local/bin/wizard
+          /usr/share/wizardcd
+
+          %changelog
+          * $(date +"%a %b %d %Y") Engineered By Bytes Ltd <info@engineeredbybytes.com> - ${VERSION}-1
+          - Automated release build ${VERSION}
+          EOF
+
+          echo "RPM spec file created successfully:"
+          cat packaging/rpm/SPECS/wizardcd.spec
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 4. Build the RPM package
+      # --------------------------------------------------
+      - name: Build RPM package
+        run: |
+          echo "[Step 4] Building WizardCD .rpm package..."
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd packaging/rpm
+          rpmbuild -bb SPECS/wizardcd.spec \
+            --define "_topdir $(pwd)" \
+            --define "_signature none" \
+            --define "_source_filedigest_algorithm 10" \
+            --define "_binary_filedigest_algorithm 10" \
+            --define "_binary_payload w9.xzdio"
+          echo "Build complete. Generated RPM files:"
+          find RPMS -type f -name "*.rpm" -exec ls -lh {} \;
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 4.5 Generate YUM repository metadata (for wizardcd.com hosting)
+      # --------------------------------------------------
+      - name: Generate YUM repository metadata
+        run: |
+          echo "[Step 4.5] Generating YUM repository metadata..."
+          cd packaging/rpm
+          mkdir -p repo/x86_64
+          cp RPMS/x86_64/*.rpm repo/x86_64/
+          createrepo_c repo
+          echo "Metadata generated. Signing repomd.xml..."
+
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          KEY_ID=$(gpg --list-secret-keys --with-colons | grep '^sec' | cut -d: -f5 | head -n1)
+          export GPG_TTY=$(tty)
+          export GPG_KEY=$KEY_ID
+          export GPG_BATCH=1
+          export GPG_PASSPHRASE=${{ secrets.GPG_PASSPHRASE }}
+
+          echo "Signing repomd.xml using key: $KEY_ID"
+          gpg --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+              --default-key "$KEY_ID" \
+              --batch --yes --armor --detach-sign repo/repodata/repomd.xml
+
+          echo "repomd.xml signed successfully."
+          echo "--------------------------------------------------"
+
+            # --------------------------------------------------
+      # 5. Sign the RPM package with GPG (Fedora 39+ using gpgme)
+      # --------------------------------------------------
+      - name: Sign RPM package
+        run: |
+          echo "[Step 5] Signing RPM packages with GPG..."
+          cd packaging/rpm
+
+          echo "[Init] Importing private key..."
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+          # Extract fingerprint and key ID
+          FINGERPRINT=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
+          KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+
+          export GNUPGHOME="${HOME}/.gnupg"
+          export GPG_TTY=$(tty)
+
+          echo "Using fingerprint: $FINGERPRINT"
+          echo "Using Key ID: $KEY_ID"
+          echo "--------------------------------------------------"
+
+          echo "[Clean] Removing any previous signatures..."
+          find RPMS -name "*.rpm" -exec rpm --delsign {} \; || true
+
+          echo "[Sign] Embedding GPG signature via rpmsign (gpgme backend)..."
+          for rpmfile in $(find RPMS -name "*.rpm"); do
+            echo "Signing: $rpmfile"
+            rpmsign --define "_gpg_name ${KEY_ID}" --addsign "$rpmfile"
+          done
+
+          echo "[Verify] Importing public key for local validation..."
+          gpg --export -a "$KEY_ID" > wizardcd_pubkey.asc
+          rpm --import wizardcd_pubkey.asc
+
+          echo "[Verify] Checking RPM signatures..."
+          rpm -Kv RPMS/x86_64/*.rpm
+
+          echo "RPM package signing completed successfully with key ID: $KEY_ID"
+          echo "--------------------------------------------------"
+
+
+      # --------------------------------------------------
+      # 6. Deploy to wizardcd.com (via FTP)
+      # --------------------------------------------------
+      - name: Deploy to wizardcd.com via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          local-dir: packaging/rpm/repo/
+          server-dir: public_html/install/linux/rpm/
+          log-level: verbose
+
+      # --------------------------------------------------
+      # 7. Upload signed RPM and metadata to GitHub Releases
+      # --------------------------------------------------
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          repository: engineeredbybytes/wizardcd-releases
+          tag_name: ${{ github.ref_name }}
+          name: "WizardCD ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          overwrite_files: true
+          body: |
+            **WizardCD** ${{ github.ref_name }}
+
+            One Config. One Command. Continuous Magic.
+
+            This release includes:
+            - RPM package for Fedora/RHEL/CentOS
+            - Signed repository metadata (repodata/)
+            - Signed using GPG for authenticity
+          files: |
+            packaging/rpm/repo/repodata/*
+            packaging/rpm/repo/x86_64/*.rpm
+
+      # --------------------------------------------------
+      # 8. Print summary
+      # --------------------------------------------------
+      - name: Summary
+        run: |
+          echo "[Step 8] WizardCD .rpm built and deployed successfully!"
+          echo "Version tag: ${{ github.ref_name }}"
+          echo "Deployed to: https://wizardcd.com/install/linux/rpm/"
+          echo "Mirrored on: https://github.com/engineeredbybytes/wizardcd-releases/releases/tag/${{ github.ref_name }}"
+          echo "--------------------------------------------------"
+
+            # --------------------------------------------------
+      # 9. Test installation directly within the container
+      # --------------------------------------------------
+      - name: Test installation directly
+        run: |
+          echo "[Step 9] Testing installation from live WizardCD.com repository..."
+          set -ex
+          dnf install -y curl gnupg yum-utils
+          curl -fsSL https://wizardcd.com/install/linux/rpm/gpg.key -o /etc/pki/rpm-gpg/RPM-GPG-KEY-wizardcd
+          rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-wizardcd
+
+          cat <<EOF > /etc/yum.repos.d/wizardcd.repo
+          [wizardcd]
+          name=WizardCD Repository
+          baseurl=https://wizardcd.com/install/linux/rpm/
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://wizardcd.com/install/linux/rpm/gpg.key
+          EOF
+
+          dnf clean all && dnf makecache && dnf install -y wizardcd
+          echo
+          echo "[Verify] Checking installed version and banner..."
+          wizard --version || (echo "wizard command not found"; exit 1)
+          echo "--------------------------------------------"
+          echo "Repository installation test passed successfully."

@@ -1,0 +1,126 @@
+#!/bin/bash
+set -e
+
+# ==================================================
+# WizardCD - Post-installation Script
+# Purpose:
+#   1. Create CLI symlink to make 'wizard' globally available.
+#   2. Display installation success banner.
+#   3. Ensure clean exit on upgrades and reinstalls.
+#
+# This script is automatically executed by dpkg/apt
+# after the WizardCD package is installed or upgraded.
+# ==================================================
+
+# --------------------------------------------------
+# Define key installation paths
+# --------------------------------------------------
+INSTALL_DIR="/usr/share/wizardcd"
+CORE_RUNNER="${INSTALL_DIR}/bin/wizard.sh"
+PUBLIC_BIN="/usr/local/bin/wizard"
+VERSION_FILE="${INSTALL_DIR}/VERSION"
+
+# --------------------------------------------------
+# Helper Function: Display success banner
+# --------------------------------------------------
+show_banner() {
+cat <<EOF
+
+                                                                                                                                                                       
+                                                                                                                    dddddddd                                          
+                                           iiii                                                                     d::::::d        CCCCCCCCCCCCCDDDDDDDDDDDDD        
+                                          i::::i                                                                    d::::::d     CCC::::::::::::CD::::::::::::DDD     
+                                           iiii                                                                     d::::::d   CC:::::::::::::::CD:::::::::::::::DD   
+                                                                                                                    d:::::d   C:::::CCCCCCCC::::CDDD:::::DDDDD:::::D  
+wwwwwww           wwwww           wwwwwwwiiiiiii zzzzzzzzzzzzzzzzz  aaaaaaaaaaaaa   rrrrr   rrrrrrrrr       ddddddddd:::::d  C:::::C       CCCCCC  D:::::D    D:::::D 
+ w:::::w         w:::::w         w:::::w i:::::i z:::::::::::::::z  a::::::::::::a  r::::rrr:::::::::r    dd::::::::::::::d C:::::C                D:::::D     D:::::D
+  w:::::w       w:::::::w       w:::::w   i::::i z::::::::::::::z   aaaaaaaaa:::::a r:::::::::::::::::r  d::::::::::::::::d C:::::C                D:::::D     D:::::D
+   w:::::w     w:::::::::w     w:::::w    i::::i zzzzzzzz::::::z             a::::a rr::::::rrrrr::::::rd:::::::ddddd:::::d C:::::C                D:::::D     D:::::D
+    w:::::w   w:::::w:::::w   w:::::w     i::::i       z::::::z       aaaaaaa:::::a  r:::::r     r:::::rd::::::d    d:::::d C:::::C                D:::::D     D:::::D
+     w:::::w w:::::w w:::::w w:::::w      i::::i      z::::::z      aa::::::::::::a  r:::::r     rrrrrrrd:::::d     d:::::d C:::::C                D:::::D     D:::::D
+      w:::::w:::::w   w:::::w:::::w       i::::i     z::::::z      a::::aaaa::::::a  r:::::r            d:::::d     d:::::d C:::::C                D:::::D     D:::::D
+       w:::::::::w     w:::::::::w        i::::i    z::::::z      a::::a    a:::::a  r:::::r            d:::::d     d:::::d  C:::::C       CCCCCC  D:::::D    D:::::D 
+        w:::::::w       w:::::::w        i::::::i  z::::::zzzzzzzza::::a    a:::::a  r:::::r            d::::::ddddd::::::dd  C:::::CCCCCCCC::::CDDD:::::DDDDD:::::D  
+         w:::::w         w:::::w         i::::::i z::::::::::::::za:::::aaaa::::::a  r:::::r             d:::::::::::::::::d   CC:::::::::::::::CD:::::::::::::::DD   
+          w:::w           w:::w          i::::::iz:::::::::::::::z a::::::::::aa:::a r:::::r              d:::::::::ddd::::d     CCC::::::::::::CD::::::::::::DDD     
+           www             www           iiiiiiiizzzzzzzzzzzzzzzzz  aaaaaaaaaa  aaaa rrrrrrr               ddddddddd   ddddd        CCCCCCCCCCCCCDDDDDDDDDDDDD        
+                                                                                                                                                                      
+
+
+==============================================
+WizardCD ::  (v$(cat "$VERSION_FILE" 2>/dev/null || echo 'v1.0.0'))
+One config. One command. Continuous magic.
+https://wizardcd.com
+==============================================
+
+EOF
+}
+
+# --------------------------------------------------
+# Main post-install handler
+# --------------------------------------------------
+if [[ "$1" == "configure" ]]; then
+    echo "Configuring WizardCD post-install..."
+
+    # 1. Ensure all internal scripts are executable
+    if [[ -d "${INSTALL_DIR}/bin/core" ]]; then
+        echo "Ensuring core scripts are executable..."
+        find "${INSTALL_DIR}/bin/core/" -type f -name "*.sh" -exec chmod +x {} \;
+    fi
+
+    # 2. Ensure main wizard.sh is executable
+    if [[ -f "$CORE_RUNNER" ]]; then
+        chmod +x "$CORE_RUNNER"
+    fi
+
+    # 3. Sanity cleanup: if /usr/local/bin/wizard is a directory, remove it
+    if [[ -d "$PUBLIC_BIN" ]]; then
+        echo "Detected directory at ${PUBLIC_BIN}, cleaning up..."
+        rm -rf "$PUBLIC_BIN"
+    fi
+
+    # 4. Create or refresh the global CLI symlink
+    if [[ -f "$CORE_RUNNER" ]]; then
+        echo "Linking CLI: ${PUBLIC_BIN} -> ${CORE_RUNNER}"
+        ln -sf "$CORE_RUNNER" "$PUBLIC_BIN"
+        chmod +x "$PUBLIC_BIN"
+    else
+        echo "Warning: Core runner not found at ${CORE_RUNNER}"
+        echo "Installation may be incomplete."
+    fi
+
+    # 5. Ensure log directory exists
+    LOG_DIR="/var/log/wizardcd"
+    if [[ ! -d "$LOG_DIR" ]]; then
+        echo "Creating log directory: $LOG_DIR"
+        mkdir -p "$LOG_DIR"
+    fi
+    chmod 777 "$LOG_DIR"
+
+    # 6. Verify command availability (adjust PATH for dpkg environment)
+    export PATH="/usr/local/bin:/usr/bin:/bin"
+    if command -v wizard >/dev/null 2>&1; then
+		echo
+        echo "wizard CLI command successfully installed: $(command -v wizard)"
+		echo
+		echo "--------------------------------------------------"
+		echo "Installation complete! You can now run:"
+    	echo "  wizard --help"
+		echo "--------------------------------------------------"
+    else
+        echo "Warning: 'wizard' not found in PATH. Ensure /usr/local/bin is in PATH."
+        echo
+    fi
+
+    # 7. Final banner + message
+    show_banner
+    echo
+
+elif [[ "$1" =~ ^(abort-upgrade|abort-remove|abort-deconfigure)$ ]]; then
+    :
+else
+    echo "postinst called with unknown argument '$1'" >&2
+    exit 1
+fi
+
+exit 0

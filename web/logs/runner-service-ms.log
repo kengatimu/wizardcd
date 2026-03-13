@@ -1,0 +1,76 @@
+[2026-03-11T08:28:59.083] [INFO ] [com.ebb.wizardcd.runner.RunnerServiceApplication] Starting RunnerServiceApplication using Java 21.0.6 with PID 95695 (/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms/target/classes started by bishop in /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms)
+[2026-03-11T08:28:59.087] [INFO ] [com.ebb.wizardcd.runner.RunnerServiceApplication] The following 1 profile is active: "sit"
+[2026-03-11T08:29:00.678] [INFO ] [o.s.boot.web.embedded.tomcat.TomcatWebServer] Tomcat initialized with port 8081 (http)
+[2026-03-11T08:29:00.692] [INFO ] [org.apache.coyote.http11.Http11NioProtocol] Initializing ProtocolHandler ["http-nio-8081"]
+[2026-03-11T08:29:00.694] [INFO ] [org.apache.catalina.core.StandardService] Starting service [Tomcat]
+[2026-03-11T08:29:00.694] [INFO ] [org.apache.catalina.core.StandardEngine] Starting Servlet engine: [Apache Tomcat/10.1.50]
+[2026-03-11T08:29:00.744] [INFO ] [o.a.c.core.ContainerBase.[Tomcat].[localhost].[/]] Initializing Spring embedded WebApplicationContext
+[2026-03-11T08:29:00.745] [INFO ] [o.s.b.w.s.c.ServletWebServerApplicationContext] Root WebApplicationContext: initialization completed in 1594 ms
+[2026-03-11T08:29:01.130] [WARN ] [o.s.b.a.s.s.UserDetailsServiceAutoConfiguration] 
+
+Using generated security password: 1409091b-8501-46ce-b83e-764b524abb02
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+[2026-03-11T08:29:01.138] [INFO ] [o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer] Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+[2026-03-11T08:29:01.752] [INFO ] [o.s.b.actuate.endpoint.web.EndpointLinksResolver] Exposing 1 endpoint beneath base path '/actuator'
+[2026-03-11T08:29:01.849] [INFO ] [org.apache.coyote.http11.Http11NioProtocol] Starting ProtocolHandler ["http-nio-8081"]
+[2026-03-11T08:29:01.873] [INFO ] [o.s.boot.web.embedded.tomcat.TomcatWebServer] Tomcat started on port 8081 (http) with context path '/'
+[2026-03-11T08:29:01.893] [INFO ] [com.ebb.wizardcd.runner.RunnerServiceApplication] Started RunnerServiceApplication in 3.66 seconds (process running for 4.09)
+[2026-03-11T08:29:01.988] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] ==================================================
+[2026-03-11T08:29:01.988] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] Validating runner environment
+[2026-03-11T08:29:01.988] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] ==================================================
+[2026-03-11T08:29:01.988] [WARN ] [c.e.w.runner.config.RunnerEnvironmentValidator] scriptsDir is not absolute (dev mode?): ../runner
+[2026-03-11T08:29:01.989] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] scriptsDir validated: ../runner
+[2026-03-11T08:29:01.989] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] deploy.sh found and executable
+[2026-03-11T08:29:01.999] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] ssh binary found
+[2026-03-11T08:29:02.007] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] scp binary found
+[2026-03-11T08:29:02.022] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] yq binary found
+[2026-03-11T08:29:02.022] [WARN ] [c.e.w.runner.config.RunnerEnvironmentValidator] workspaceRoot is not absolute (dev mode?): ../workspace/jobs
+[2026-03-11T08:29:02.022] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] workspaceRoot validated and writable: ../workspace/jobs
+[2026-03-11T08:29:02.022] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] Runner environment validation successful
+[2026-03-11T08:29:02.022] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] Runner is READY to accept jobs
+[2026-03-11T08:29:02.023] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] ==================================================
+[2026-03-11T08:29:02.023] [INFO ] [c.e.w.runner.config.RunnerEnvironmentValidator] ==================================================
+[2026-03-11T08:29:02.024] [INFO ] [c.ebb.wizardcd.runner.config.RunnerStartupListener] Runner application ready — initiating crash recovery phase
+[2026-03-11T08:29:02.024] [INFO ] [c.e.w.r.service.impl.RunnerRecoveryServiceImpl] Runner recovery started — scanning workspace for incomplete jobs
+[2026-03-11T08:29:02.025] [INFO ] [c.e.w.r.service.impl.RunnerRecoveryServiceImpl] workspace/jobs directory not found — recovery skipped
+[2026-03-11T08:29:02.025] [INFO ] [c.ebb.wizardcd.runner.config.RunnerStartupListener] Runner crash recovery phase completed
+[2026-03-11T08:29:02.036] [INFO ] [com.ebb.wizardcd.runner.RunnerServiceApplication] 
+----------------------------------------------------------
+	Application 'runner-service-ms' is running! Access URLs:
+	Local: 		http://localhost:8081/
+	External: 	http://127.0.0.1:8081/
+	Profile(s): 	[sit]
+----------------------------------------------------------
+[2026-03-11T08:29:02.037] [INFO ] [com.ebb.wizardcd.runner.RunnerServiceApplication] 
+----------------------------------------------------------
+	Config Server: 	Not found or not setup for this application
+----------------------------------------------------------
+[2026-03-11T08:31:38.434] [INFO ] [o.a.c.core.ContainerBase.[Tomcat].[localhost].[/]] Initializing Spring DispatcherServlet 'dispatcherServlet'
+[2026-03-11T08:31:38.437] [INFO ] [org.springframework.web.servlet.DispatcherServlet] Initializing Servlet 'dispatcherServlet'
+[2026-03-11T08:31:38.446] [INFO ] [org.springframework.web.servlet.DispatcherServlet] Completed initialization in 9 ms
+[2026-03-11T08:31:38.550] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard summary requested
+[2026-03-11T08:31:38.551] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard metrics calculated — total: 0, running: 0, success: 0, failed: 0, aborted: 0
+[2026-03-11T08:31:38.553] [INFO ] [c.e.w.runner.web.controller.RunnerController] Returning dashboard summary response
+[2026-03-11T08:31:38.586] [INFO ] [c.e.w.runner.web.controller.RunnerController] Listing jobs with status filter: null
+[2026-03-11T08:31:50.423] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard summary requested
+[2026-03-11T08:31:50.423] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard metrics calculated — total: 0, running: 0, success: 0, failed: 0, aborted: 0
+[2026-03-11T08:31:50.424] [INFO ] [c.e.w.runner.web.controller.RunnerController] Returning dashboard summary response
+[2026-03-11T08:35:50.505] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard summary requested
+[2026-03-11T08:35:50.508] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard metrics calculated — total: 0, running: 0, success: 0, failed: 0, aborted: 0
+[2026-03-11T08:35:50.509] [INFO ] [c.e.w.runner.web.controller.RunnerController] Returning dashboard summary response
+[2026-03-11T08:35:50.518] [INFO ] [c.e.w.runner.web.controller.RunnerController] Listing jobs with status filter: null
+[2026-03-11T08:35:50.532] [INFO ] [c.e.w.runner.web.controller.RunnerController] Listing jobs with status filter: null
+[2026-03-11T08:35:55.538] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard summary requested
+[2026-03-11T08:35:55.540] [INFO ] [c.e.w.runner.web.controller.RunnerController] Dashboard metrics calculated — total: 0, running: 0, success: 0, failed: 0, aborted: 0
+[2026-03-11T08:35:55.541] [INFO ] [c.e.w.runner.web.controller.RunnerController] Returning dashboard summary response
+[2026-03-11T08:35:55.581] [INFO ] [c.e.w.runner.web.controller.RunnerController] Listing jobs with status filter: null
+[2026-03-11T08:35:56.635] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T08:35:56.670] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T08:36:03.899] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T08:36:03.925] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T10:35:48.758] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T10:35:48.823] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T11:02:23.695] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received
+[2026-03-11T11:02:23.764] [INFO ] [c.ebb.wizardcd.runner.web.controller.SshController] Public key request received

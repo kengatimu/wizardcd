@@ -1,0 +1,222 @@
+# --------------------------------------------------
+# Workflow: Build & Deploy WizardCD Debian Repository
+# --------------------------------------------------
+# Description:
+#   - Builds .deb package
+#   - Generates APT repo metadata
+#   - Signs Release files using GPG
+#   - Uploads to wizardcd.com and GitHub releases
+#   - Test installs from the live repo
+# --------------------------------------------------
+
+name: Build & Deploy WizardCD Debian Repository
+
+on:
+  workflow_call:  # Triggered by release.yml
+  workflow_dispatch:  # Allow manual trigger if needed
+
+jobs:
+  build-and-deploy:
+    name: Build .deb and publish to wizardcd.com + GitHub Releases
+    runs-on: ubuntu-latest
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout project source
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Install required packaging tools
+      # dpkg-dev: for dpkg-scanpackages
+      # gnupg: for signing Release files
+      # gzip: for compressing Packages.gz
+      # --------------------------------------------------
+      - name: Install packaging dependencies
+        run: |
+          echo "[Step 2] Installing required packaging dependencies..."
+          sudo apt-get update -y
+          sudo apt-get install -y dpkg-dev gnupg gzip apt-utils
+          echo "Packaging dependencies installed successfully."
+          dpkg --version
+          gpg --version
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 2b. Auto-update DEBIAN/control version from Git tag
+      # --------------------------------------------------
+      - name: Auto update control file version
+        run: |
+          echo "[Step 2b] Updating control file version based on tag..."
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^Version:.*/Version: ${VERSION}-1/" packaging/wizardcd_1.0.0/DEBIAN/control
+          echo "Control file version updated to: ${VERSION}-1"
+          cat packaging/wizardcd_1.0.0/DEBIAN/control
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 2c. Generate simple changelog for this version
+      # --------------------------------------------------
+      - name: Generate changelog file
+        run: |
+          echo "[Step 2c] Generating Debian changelog..."
+          VERSION="${GITHUB_REF_NAME#v}"
+          DATE=$(date -R)
+
+          cat <<EOF > packaging/wizardcd_1.0.0/DEBIAN/changelog
+          wizardcd (${VERSION}-1) stable; urgency=medium
+
+          * Automated release build ${VERSION}
+
+          -- Engineered By Bytes Ltd <info@engineeredbybytes.com>  ${DATE}
+          EOF
+
+          cat packaging/wizardcd_1.0.0/DEBIAN/changelog
+          echo "--------------------------------------------------"
+      
+      # --------------------------------------------------
+      # 2d. Update internal VERSION file for CLI banner
+      # Ensures wizard CLI shows the same version as tag
+      # --------------------------------------------------
+      - name: Update internal VERSION file
+        run: |
+          echo "[Step 2d] Updating internal VERSION file..."
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "${VERSION}" > packaging/wizardcd_1.0.0/usr/share/wizardcd/VERSION
+          cat packaging/wizardcd_1.0.0/usr/share/wizardcd/VERSION
+          echo "Internal VERSION file updated to ${VERSION}"
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 3. Build the .deb package
+      # --------------------------------------------------
+      - name: Build .deb package
+        run: |
+          echo "[Step 3] Building WizardCD .deb package..."
+          cd packaging
+          ls -R wizardcd_1.0.0
+          dpkg-deb --build --root-owner-group wizardcd_1.0.0
+          echo "Build complete. Generated files:"
+          ls -lh wizardcd_*.deb
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 4. Generate APT repository structure and metadata
+      # --------------------------------------------------
+      - name: Generate APT metadata
+        run: |
+          echo "[Step 4] Generating APT repository metadata..."
+          cd packaging
+          mkdir -p repo/dists/stable/main/binary-amd64 repo/pool/main/w
+          cp wizardcd_*.deb repo/pool/main/w/
+          cd repo
+          echo "Creating Packages and Packages.gz..."
+          dpkg-scanpackages pool/main /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+          echo "Creating Release file..."
+          apt-ftparchive release dists/stable > dists/stable/Release
+          sed -i '1iSuite: stable\nCodename: stable' dists/stable/Release
+          head -n 20 dists/stable/Release
+          echo "APT metadata generated successfully."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 5. Import GPG private key and sign the Release file
+      # --------------------------------------------------
+      - name: Sign Release file
+        run: |
+          echo "[Step 5] Importing GPG key and signing Release..."
+          cd packaging/repo
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+              --default-key "Engineered By Bytes Ltd" \
+              -abs -o dists/stable/Release.gpg dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+              --default-key "Engineered By Bytes Ltd" \
+              --clearsign -o dists/stable/InRelease dists/stable/Release
+          echo "Release signed successfully."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 5b. Verify GPG signature locally
+      # --------------------------------------------------
+      - name: Verify GPG signature
+        run: |
+          echo "[Step 5b] Verifying signed Release file..."
+          cd packaging/repo
+          gpg --verify dists/stable/Release.gpg dists/stable/Release
+          echo "Signature verification successful."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 6. Deploy to wizardcd.com (via FTP)
+      # --------------------------------------------------
+      - name: Deploy to wizardcd.com via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          local-dir: packaging/repo/
+          server-dir: public_html/install/linux/deb/
+          log-level: verbose
+
+      # --------------------------------------------------
+      # 7. Upload release assets to GitHub public repo
+      # --------------------------------------------------
+      - name: Upload to public GitHub releases repository
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          repository: engineeredbybytes/wizardcd-releases
+          tag_name: ${{ github.ref_name }}
+          name: "WizardCD ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          body: |
+            **WizardCD** ${{ github.ref_name }}
+
+            One Config. One Command. Continuous Magic.
+
+            This release includes:
+            - Updated `.deb` package
+            - Signed APT metadata (`Release`, `Release.gpg`, `InRelease`)
+            - GPG key and fingerprint for repository verification
+          files: |
+            packaging/repo/pool/main/w/*.deb
+            packaging/repo/dists/stable/Release*
+            packaging/repo/dists/stable/InRelease
+            packaging/repo/dists/stable/main/binary-amd64/Packages*
+            packaging/keys/gpg.key
+            packaging/keys/FINGERPRINT.txt
+
+      # --------------------------------------------------
+      # 8. Print confirmation summary
+      # --------------------------------------------------
+      - name: Summary
+        run: |
+          echo "[Step 8] WizardCD .deb built and deployed successfully!"
+          echo "Version tag: ${{ github.ref_name }}"
+          echo "Deployed to: https://wizardcd.com/install/linux/deb/"
+          echo "Mirrored on: https://github.com/engineeredbybytes/wizardcd-releases/releases/tag/${{ github.ref_name }}"
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 9. Test install the package from the live repository
+      # --------------------------------------------------
+      - name: Test installation from live APT repo
+        run: |
+          echo "[Step 9] Testing installation from the live repository..."
+          docker run --rm ubuntu:22.04 bash -c "
+            set -e
+            apt-get update -y && apt-get install -y curl gnupg
+            curl -fsSL https://wizardcd.com/install/linux/deb/gpg.key | tee /etc/apt/trusted.gpg.d/wizardcd.asc
+            echo 'deb [arch=amd64] https://wizardcd.com/install/linux/deb stable main' | tee /etc/apt/sources.list.d/wizardcd.list
+            apt-get update -y
+            apt-get install -y wizardcd
+          "
+          echo "Repository installation test passed successfully."
+          echo "--------------------------------------------------"

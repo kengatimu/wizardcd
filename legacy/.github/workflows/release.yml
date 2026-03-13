@@ -1,0 +1,80 @@
+# --------------------------------------------------
+# Workflow: WizardCD Unified Multi-Platform Release
+# --------------------------------------------------
+# Description:
+#   - Central orchestrator for all packaging workflows
+#   - Triggered automatically on new version tag (v*)
+#   - Runs all platform-specific deploy workflows in parallel:
+#       • Debian (.deb)
+#       • RPM (.rpm)
+#       • Homebrew (macOS)
+#       • Chocolatey (Windows)
+# --------------------------------------------------
+
+name: WizardCD Multi-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*'   # Trigger workflow only when a version tag (e.g., v1.0.9) is pushed
+  workflow_dispatch:  # Allow manual re-run if needed
+
+jobs:
+  # --------------------------------------------------
+  # 1. Debian (APT repository build & deploy)
+  # --------------------------------------------------
+  deploy-deb:
+    name: Build & Deploy Debian Package
+    uses: ./.github/workflows/deploy-deb.yml
+    secrets: inherit
+
+  # --------------------------------------------------
+  # 2. RPM (RHEL / Fedora / CentOS)
+  # --------------------------------------------------
+#  deploy-rpm:
+#    name: Build & Deploy RPM Package
+#    uses: ./.github/workflows/deploy-rpm.yml
+#    secrets: inherit
+
+  # --------------------------------------------------
+  # 3. Homebrew (macOS formula)
+  # --------------------------------------------------
+  deploy-brew:
+    name: Build & Deploy Homebrew Formula
+    uses: ./.github/workflows/deploy-brew.yml
+    secrets: inherit
+
+  # --------------------------------------------------
+  # 4. Chocolatey (Windows)
+  # --------------------------------------------------
+#  deploy-choco:
+#    name: Build & Deploy Chocolatey Package
+#    uses: ./.github/workflows/deploy-choco.yml
+#    secrets: inherit
+
+  # --------------------------------------------------
+  # 5. Final summary after all jobs complete
+  # --------------------------------------------------
+  summary:
+    name: Print Final Release Summary
+    runs-on: ubuntu-latest
+    # Wait for all build jobs to finish
+    # needs: [deploy-deb, deploy-rpm, deploy-brew, deploy-choco]
+    # needs: [deploy-deb, deploy-brew, deploy-choco]
+    needs: [deploy-deb, deploy-brew]
+    if: always()   # Ensures this runs even if one job fails
+    steps:
+      - name: Summary
+        run: |
+          echo "--------------------------------------------------"
+          echo "[Final Summary] WizardCD Multi-Platform Release completed!"
+          echo "Version tag: ${{ github.ref_name }}"
+          echo
+          echo "Completed platforms:"
+          [[ '${{ needs.deploy-deb.result }}' == 'success' ]] && echo "  • Debian (.deb)" || echo "  • Debian (.deb) — Failed"
+          [[ '${{ needs.deploy-rpm.result }}' == 'success' ]] && echo "  • RPM (.rpm)" || echo "  • RPM (.rpm) — Failed"
+          [[ '${{ needs.deploy-brew.result }}' == 'success' ]] && echo "  • Homebrew (macOS)" || echo "  • Homebrew (macOS) — Failed"
+          [[ '${{ needs.deploy-choco.result }}' == 'success' ]] && echo "  • Chocolatey (Windows)" || echo "  • Chocolatey (Windows) — Failed"
+          echo
+          echo "Release page: https://github.com/engineeredbybytes/wizardcd-releases/releases/tag/${{ github.ref_name }}"
+          echo "--------------------------------------------------"

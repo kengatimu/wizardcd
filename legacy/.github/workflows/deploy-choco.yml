@@ -1,0 +1,154 @@
+# --------------------------------------------------
+# Workflow: Deploy WizardCD Chocolatey Package
+# --------------------------------------------------
+# Description:
+#   - Builds .nupkg for Windows (Chocolatey)
+#   - Signs package using GPG
+#   - Publishes to engineeredbybytes/wizardcd-releases
+#   - Verifies installation via choco install
+# --------------------------------------------------
+
+name: Deploy WizardCD Chocolatey Package
+
+on:
+  workflow_call:      # Triggered by release.yml
+  workflow_dispatch:  # Allow manual run if needed
+
+jobs:
+  build-and-deploy-choco:
+    name: Build .nupkg and publish to GitHub Releases
+    runs-on: windows-latest
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout project source
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Install Chocolatey packaging tools
+      # --------------------------------------------------
+      - name: Install Chocolatey CLI
+        run: |
+          echo "[Step 2] Installing Chocolatey CLI..."
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+          choco --version
+          echo "Chocolatey installed successfully."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 3. Prepare Chocolatey packaging structure
+      # --------------------------------------------------
+      - name: Prepare Chocolatey package
+        shell: pwsh
+        run: |
+          echo "[Step 3] Preparing Chocolatey packaging structure..."
+          $Version = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          New-Item -ItemType Directory -Force -Path packaging\choco
+          Copy-Item packaging\scripts\wizard packaging\choco\wizard.exe
+
+          $nuspec = @"
+          <?xml version="1.0"?>
+          <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+          <metadata>
+          <id>wizardcd</id>
+          <version>$Version</version>
+          <title>WizardCD</title>
+          <authors>Engineered By Bytes Ltd</authors>
+          <owners>Engineered By Bytes Ltd</owners>
+          <licenseUrl>https://wizardcd.com/license</licenseUrl>
+          <projectUrl>https://wizardcd.com</projectUrl>
+          <iconUrl>https://wizardcd.com/assets/icon.png</iconUrl>
+          <requireLicenseAcceptance>false</requireLicenseAcceptance>
+          <description>WizardCD — One config. One command. Continuous magic.</description>
+          <summary>Cross-platform deployment automation CLI.</summary>
+          <tags>devops deployment wizardcd ebb-systems</tags>
+          </metadata>
+          <files>
+          <file src="wizard.exe" target="tools" />
+          </files>
+          </package>
+          "@
+          $nuspec | Out-File -FilePath packaging\choco\wizardcd.nuspec -Encoding UTF8
+          echo "Chocolatey .nuspec file created successfully."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 4. Build the Chocolatey package (.nupkg)
+      # --------------------------------------------------
+      - name: Build .nupkg
+        shell: pwsh
+        run: |
+          echo "[Step 4] Building WizardCD .nupkg..."
+          cd packaging\choco
+          choco pack wizardcd.nuspec
+          echo "Build complete. Generated files:"
+          Get-ChildItem *.nupkg | ForEach-Object { $_.FullName }
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 5. Sign the package using GPG
+      # --------------------------------------------------
+      - name: Sign package with GPG
+        shell: pwsh
+        run: |
+          echo "[Step 5] Signing .nupkg with GPG..."
+          cd packaging\choco
+          $env:GPG_TTY = (tty)
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | Out-File gpg.key -Encoding ascii
+          gpg --batch --import gpg.key
+          $package = Get-ChildItem *.nupkg | Select-Object -First 1
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${{ secrets.GPG_PASSPHRASE }}" -ab $package
+          echo "Package signed successfully."
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 6. Upload .nupkg and .asc to GitHub Releases
+      # --------------------------------------------------
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          repository: engineeredbybytes/wizardcd-releases
+          tag_name: ${{ github.ref_name }}
+          name: "WizardCD ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          body: |
+            **WizardCD** ${{ github.ref_name }}
+
+            One Config. One Command. Continuous Magic.
+
+            This release includes:
+            - Chocolatey .nupkg for Windows
+            - GPG detached signature (.asc)
+          files: |
+            packaging/choco/*.nupkg
+            packaging/choco/*.asc
+
+      # --------------------------------------------------
+      # 7. Print confirmation summary
+      # --------------------------------------------------
+      - name: Summary
+        shell: pwsh
+        run: |
+          echo "[Step 7] WizardCD .nupkg built and deployed successfully!"
+          echo "Version tag: $env:GITHUB_REF_NAME"
+          echo "Published to: https://github.com/engineeredbybytes/wizardcd-releases/releases/tag/$env:GITHUB_REF_NAME"
+          echo "--------------------------------------------------"
+
+      # --------------------------------------------------
+      # 8. Test installation using Chocolatey
+      # --------------------------------------------------
+      - name: Test Chocolatey install
+        shell: pwsh
+        run: |
+          echo "[Step 8] Testing Chocolatey installation..."
+          $Version = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          choco install wizardcd --source="'https://github.com/engineeredbybytes/wizardcd-releases/releases/download/v$Version'" -y
+          echo "Checking installed version..."
+          wizard --version
+          echo "Chocolatey installation test passed successfully."
+          echo "--------------------------------------------------"

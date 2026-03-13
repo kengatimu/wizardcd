@@ -1,0 +1,52 @@
+
+==================================================
+2026-01-08 16:00:41.3N [INFO ] [job=test-job-001] Deployment job initialized
+==================================================
+2026-01-08 16:00:41.3N [INFO ] [job=test-job-001] Job ID: test-job-001
+2026-01-08 16:00:42.3N [INFO ] [job=test-job-001] Configuration loaded for papss-outbound-technical-service-ms (uat)
+2026-01-08 16:00:42.3N [INFO ] [job=test-job-001] Local build artifacts validated
+
+==================================================
+2026-01-08 16:00:42.3N [INFO ] [job=test-job-001] Generating Tanuki wrapper configuration
+==================================================
+/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner/helpers.sh: line 20: JOB_ID: JOB_ID not set
+2026-01-08 16:00:42.3N [ERROR] [job=test-job-001 line=158] Wrapper generation failed
+
+==================================================
+2026-01-08 16:08:01.3N [INFO ] [job=test-job-001] Deployment job initialized
+==================================================
+2026-01-08 16:08:01.3N [INFO ] [job=test-job-001] Job ID: test-job-001
+2026-01-08 16:08:01.3N [INFO ] [job=test-job-001] Configuration loaded for papss-outbound-technical-service-ms (uat)
+2026-01-08 16:08:01.3N [INFO ] [job=test-job-001] Local build artifacts validated
+
+==================================================
+2026-01-08 16:08:01.3N [INFO ] [job=test-job-001] Generating Tanuki wrapper configuration
+==================================================
+/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner/helpers.sh: line 20: JOB_ID: JOB_ID not set
+2026-01-08 16:08:01.3N [ERROR] [job=test-job-001 line=158] Wrapper generation failed
+
+==================================================
+2026-01-08 16:09:24.3N [INFO ] [job=test-job-001] Deployment job initialized
+==================================================
+2026-01-08 16:09:24.3N [INFO ] [job=test-job-001] Job ID: test-job-001
+2026-01-08 16:09:24.3N [INFO ] [job=test-job-001] Configuration loaded for papss-outbound-technical-service-ms (uat)
+2026-01-08 16:09:24.3N [INFO ] [job=test-job-001] Local build artifacts validated
+
+==================================================
+2026-01-08 16:09:24.3N [INFO ] [job=test-job-001] Generating Tanuki wrapper configuration
+==================================================
+/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner/helpers.sh: line 20: JOB_ID: JOB_ID not set
+2026-01-08 16:09:24.3N [ERROR] [job=test-job-001 line=158] Wrapper generation failed
+
+==================================================
+2026-01-08 16:13:33 [INFO ] [job=test-job-001] Deployment job initialized
+==================================================
+2026-01-08 16:13:33 [INFO ] [job=test-job-001] Job ID: test-job-001
+2026-01-08 16:13:33 [INFO ] [job=test-job-001] Configuration loaded for papss-outbound-technical-service-ms (uat)
+2026-01-08 16:13:33 [INFO ] [job=test-job-001] Local build artifacts validated
+
+==================================================
+2026-01-08 16:13:33 [INFO ] [job=test-job-001] Generating Tanuki wrapper configuration
+==================================================
+/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner/helpers.sh: line 20: JOB_ID: JOB_ID not set
+2026-01-08 16:13:33 [ERROR] [job=test-job-001 line=158] Wrapper generation failed
