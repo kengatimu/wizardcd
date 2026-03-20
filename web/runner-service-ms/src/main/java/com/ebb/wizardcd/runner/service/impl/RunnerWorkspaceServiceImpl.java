@@ -162,6 +162,15 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataFile.toFile(), metadata);
             log.info("Metadata snapshot written for job {}", jobId);
 
+            // --------------------------------------------------
+            // Persist original DeploymentRequest as request.json
+            // Enables re-deploy flow (Phase 3) — the full config
+            // can be loaded without re-entering the wizard.
+            // --------------------------------------------------
+            Path requestFile = inputDir.resolve("request.json");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(requestFile.toFile(), request);
+            log.info("Deployment request persisted at {}", requestFile);
+
             // Return absolute config path for controlled execution
             return yamlPath;
 
@@ -169,6 +178,16 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
             log.error("Workspace preparation failed for job {}", jobId, e);
             throw new IllegalStateException("Workspace preparation failed for jobId=" + jobId, e);
         }
+    }
+
+    @Override
+    public String getWorkspaceRoot() {
+        return workspaceRoot;
+    }
+
+    @Override
+    public Path generateYamlOnly(String jobId, DeploymentRequest request, String artifactFileName, Path inputDir) {
+        return yamlGenerationService.generateYaml(jobId, request, artifactFileName, inputDir);
     }
 
     // ------------------------------------------------------------------

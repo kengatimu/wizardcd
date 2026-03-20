@@ -96,7 +96,10 @@ public class RunnerController {
     @GetMapping
     public ResponseEntity<List<JobSummary>> listJobs(@RequestParam(required = false) JobStatus status) {
 
-        log.info("Listing jobs with status filter: {}", status);
+        if (status != null) {
+            log.info("Listing jobs with status filter: {}", status);
+        }
+        // Omit log for unfiltered polls — these fire every 5s from dashboard/notifications
 
         List<JobSummary> jobs = (status == null)
                 ? jobQueryService.findAll()
@@ -107,8 +110,6 @@ public class RunnerController {
 
     @GetMapping("/summary")
     public ResponseEntity<DashboardSummary> getDashboardSummary() {
-
-        log.info("Dashboard summary requested");
 
         List<JobSummary> jobs = jobQueryService.findAll();
 
@@ -124,19 +125,12 @@ public class RunnerController {
         int aborted = 0;
 
         for (JobSummary job : jobs) {
-
-            if (job == null || job.getLifecycleStatus() == null) {
-                continue;
-            }
-
+            if (job == null || job.getLifecycleStatus() == null) continue;
             if (job.getLifecycleStatus() == JobStatus.RUNNING) running++;
             if (job.getLifecycleStatus() == JobStatus.SUCCESS) successful++;
             if (job.getLifecycleStatus() == JobStatus.FAILED) failed++;
             if (job.getLifecycleStatus() == JobStatus.ABORTED) aborted++;
         }
-
-        log.info("Dashboard metrics calculated — total: {}, running: {}, success: {}, failed: {}, aborted: {}",
-                total, running, successful, failed, aborted);
 
         DashboardSummary.Trends trends =
                 new DashboardSummary.Trends(0, 0, 0, 0); // placeholder for now
@@ -144,7 +138,8 @@ public class RunnerController {
         DashboardSummary summary =
                 new DashboardSummary(total, running, successful, failed, aborted, trends);
 
-        log.info("Returning dashboard summary response");
+        log.info("Dashboard — total: {}, running: {}, success: {}, failed: {}, aborted: {}",
+                total, running, successful, failed, aborted);
 
         return ResponseEntity.ok(summary);
     }
@@ -187,6 +182,133 @@ public class RunnerController {
         }
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Re-deploy: loads the saved config from a previous job, accepts a new JAR,
+     * creates a brand-new job and returns its ID.
+     * Optional: libZip, certZips, extraZips — if omitted, the deployment proceeds
+     * without them (most re-deploys only need a new JAR).
+     */
+    @PostMapping(value = "/{jobId}/redeploy", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<JobResponse> redeploy(
+            @PathVariable String jobId,
+            @RequestPart("jarArtifact") MultipartFile jarArtifact,
+            @RequestPart(value = "libZip",    required = false) MultipartFile libZip,
+            @RequestPart(value = "certZips",  required = false) List<MultipartFile> certZips,
+            @RequestPart(value = "extraZips", required = false) List<MultipartFile> extraZips) throws IOException {
+
+        log.info("Re-deploy requested based on job {}", jobId);
+
+        // Path traversal guard
+        if (jobId == null || jobId.isBlank()
+                || jobId.contains("..") || jobId.contains("/") || jobId.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Load the original deployment config
+        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
+        if (Files.notExists(requestFile)) {
+            log.warn("No request.json found for job {} — cannot re-deploy", jobId);
+            return ResponseEntity.notFound().build();
+        }
+
+        DeploymentRequest originalConfig;
+        try {
+            originalConfig = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
+        } catch (Exception e) {
+            log.error("Failed to read request.json for job {}: {}", jobId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+
+        // Update the JAR name to match the new upload (user may have bumped version)
+        String newJarName = jarArtifact.getOriginalFilename();
+        if (newJarName != null && !newJarName.isBlank()) {
+            originalConfig.setJarName(newJarName);
+        }
+
+        // Generate a new job ID for this re-deployment
+        String newJobId = UUID.randomUUID().toString();
+        log.info("Re-deploy: new job {} created from original job {}", newJobId, jobId);
+
+        // Eagerly materialise uploads (same pattern as submit)
+        MultipartFile stableJar  = new EagerMultipartFile(jarArtifact);
+        MultipartFile stableLib  = (libZip != null && !libZip.isEmpty()) ? new EagerMultipartFile(libZip) : null;
+        List<MultipartFile> stableCerts  = eagerList(certZips);
+        List<MultipartFile> stableExtras = eagerList(extraZips);
+
+        // Delegate to RunnerService (same as a normal deploy)
+        runnerService.runDeploy(newJobId, originalConfig, stableJar, stableLib, stableCerts, stableExtras);
+
+        JobResponse response = new JobResponse(newJobId, jobStateService.getStatus(newJobId), jobStateService.readCurrentState(newJobId));
+        return ResponseEntity.accepted().body(response);
+    }
+
+    /**
+     * Rollback: restores the last-successful backup on the target server.
+     * Loads the deployment config from the original job to know where to SSH.
+     */
+    @PostMapping("/{jobId}/rollback")
+    public ResponseEntity<JobResponse> rollback(@PathVariable String jobId) throws IOException {
+
+        log.info("Rollback requested based on job {}", jobId);
+
+        // Path traversal guard
+        if (jobId == null || jobId.isBlank()
+                || jobId.contains("..") || jobId.contains("/") || jobId.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Load the original deployment config
+        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
+        if (Files.notExists(requestFile)) {
+            log.warn("No request.json found for job {} — cannot rollback", jobId);
+            return ResponseEntity.notFound().build();
+        }
+
+        DeploymentRequest originalConfig;
+        try {
+            originalConfig = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
+        } catch (Exception e) {
+            log.error("Failed to read request.json for job {}: {}", jobId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+
+        // Generate a new job ID for the rollback
+        String rollbackJobId = UUID.randomUUID().toString();
+        log.info("Rollback: new job {} created from original job {}", rollbackJobId, jobId);
+
+        // Delegate to RunnerService rollback method
+        runnerService.runRollback(rollbackJobId, originalConfig);
+
+        JobResponse response = new JobResponse(rollbackJobId, jobStateService.getStatus(rollbackJobId), jobStateService.readCurrentState(rollbackJobId));
+        return ResponseEntity.accepted().body(response);
+    }
+
+    // Return the original DeploymentRequest config used for a specific job
+    @GetMapping("/{jobId}/config")
+    public ResponseEntity<DeploymentRequest> getConfig(@PathVariable String jobId) {
+        log.info("Getting deployment config for job {}", jobId);
+
+        // Path traversal guard
+        if (jobId == null || jobId.isBlank()
+                || jobId.contains("..") || jobId.contains("/") || jobId.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
+        if (Files.notExists(requestFile)) {
+            log.warn("No request.json found for job {}", jobId);
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            DeploymentRequest config = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
+            return ResponseEntity.ok(config);
+        } catch (Exception e) {
+            log.error("Failed to read request.json for job {}: {}", jobId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
     // Return last N lines of runner log without loading entire file into memory

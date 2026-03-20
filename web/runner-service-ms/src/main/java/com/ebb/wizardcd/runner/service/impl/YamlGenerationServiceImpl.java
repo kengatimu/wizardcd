@@ -48,12 +48,14 @@ public class YamlGenerationServiceImpl implements YamlGenerationService {
             ));
 
             // JVM memory and tuning configuration
-            appSection.put("jvm", Map.of(
-                    "xms", request.getXms(),
-                    "xmx", request.getXmx(),
-                    "new_ratio", request.getNewRatio(),
-                    "extra_opts", request.getExtraOpts() == null ? List.of() : request.getExtraOpts()
-            ));
+            // new_ratio defaults to empty string when not set — write it only when explicitly provided
+            Map<String, Object> jvmSection = new HashMap<>();
+            jvmSection.put("xms", request.getXms() != null ? request.getXms() : "");
+            jvmSection.put("xmx", request.getXmx() != null ? request.getXmx() : "");
+            String newRatio = request.getNewRatio();
+            jvmSection.put("new_ratio", (newRatio != null && !newRatio.isBlank()) ? newRatio : "");
+            jvmSection.put("extra_opts", request.getExtraOpts() == null ? List.of() : request.getExtraOpts());
+            appSection.put("jvm", jvmSection);
 
             // Runtime execution properties
             appSection.put("runtime", Map.of(

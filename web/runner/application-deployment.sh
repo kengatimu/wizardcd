@@ -350,6 +350,33 @@ shopt -u nullglob
 
 start_app
 
+# --------------------------------------------------
+# Create last-successful backup
+#
+# This is a PROTECTED backup created ONLY after a deploy
+# succeeds and the app stabilises. Unlike release backups
+# (which rotate and may contain broken state), this backup
+# is guaranteed to be a working state.
+#
+# Used by the rollback feature to restore the last known
+# working version — survives any number of failed deploys.
+# --------------------------------------------------
+LAST_SUCCESSFUL_DIR="${BACKUP_DIR}/last-successful"
+create_dir "$LAST_SUCCESSFUL_DIR"
+
+log_info "Creating last-successful backup (verified working state)..."
+local_items=()
+[[ -d "$BIN_DIR" ]] && local_items+=("bin")
+[[ -d "$CONF_DIR" ]] && local_items+=("conf")
+[[ -d "$LIB_DIR" ]] && local_items+=("lib")
+
+if (( ${#local_items[@]} > 0 )); then
+  tar -czf "${LAST_SUCCESSFUL_DIR}/latest.tar.gz" -C "$APP_PATH" "${local_items[@]}"
+  log_info "Last-successful backup saved: ${LAST_SUCCESSFUL_DIR}/latest.tar.gz"
+else
+  log_warn "No directories to back up for last-successful snapshot"
+fi
+
 rm -rf "$DROP_DIR"
 
 # Cleanup stale tarballs older than 2 hours

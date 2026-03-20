@@ -17,4 +17,11 @@ public interface RunnerWorkspaceService {
                           MultipartFile jarArtifact, MultipartFile libZip,
                           List<MultipartFile> certZips, List<MultipartFile> extraZips,
                           JobMetadata metadata);
+
+    // Returns the workspace root directory path
+    String getWorkspaceRoot();
+
+    // Generates only the deployment-config.yml without full workspace preparation.
+    // Used by rollback jobs that don't need JAR artifacts.
+    Path generateYamlOnly(String jobId, DeploymentRequest request, String artifactFileName, Path inputDir);
 }

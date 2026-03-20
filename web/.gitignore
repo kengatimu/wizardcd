@@ -1,0 +1,73 @@
+# =========================
+# OS / SYSTEM FILES
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# macOS folders
+__MACOSX/
+
+# =========================
+# EDITOR / IDE
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# Claude / local AI tooling (optional)
+.claude/
+.claire/
+
+# =========================
+# LOGS
+# =========================
+logs/
+*.log
+
+# =========================
+# ENV / SECRETS
+# =========================
+.env
+.env.*
+*.env
+
+# =========================
+# ARCHIVES / BACKUPS
+# =========================
+*.tar
+*.tar.gz
+*.zip
+*.bak
+*_backup_*
+
+# =========================
+# NODE (UI likely uses this)
+# =========================
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# =========================
+# JAVA / SPRING (runner-service-ms)
+# =========================
+target/
+*.class
+*.jar
+*.war
+
+# =========================
+# TEMP FILES
+# =========================
+tmp/
+temp/
+*.tmp
+*.swp
+
+# =========================
+# MISC
+# =========================
+coverage/
+.cache/

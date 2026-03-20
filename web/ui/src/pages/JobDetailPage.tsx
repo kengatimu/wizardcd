@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle, StopCircle, ArrowLeft, RefreshCw,
+  AlertTriangle, StopCircle, ArrowLeft, RefreshCw, Wand2, RotateCcw,
   Server, Hash, Globe,
   CheckCircle2, XCircle, Loader2, AlertCircle, ShieldAlert,
   Layers, Calendar, Upload, Package, Send, Play, FlagTriangleRight,
@@ -11,6 +11,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { abortJob } from '../api/jobs'
+import RedeployModal from '../components/RedeployModal'
+import RollbackModal from '../components/RollbackModal'
 import { useJobStatus } from '../hooks/useJobStatus'
 import { useJobLogs } from '../hooks/useJobLogs'
 import StatusBadge from '../components/StatusBadge'
@@ -394,8 +396,11 @@ export default function JobDetailPage() {
   const { jobId }   = useParams<{ jobId: string }>()
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
-  const [showAbortModal,  setShowAbortModal]  = useState(false)
-  const [selectedPhase,   setSelectedPhase]   = useState(-1)  // -1 = show all logs
+  const [showAbortModal,     setShowAbortModal]     = useState(false)
+  const [showRedeployModal,  setShowRedeployModal]  = useState(false)
+  const [showRollbackModal,  setShowRollbackModal]  = useState(false)
+  const [selectedPhase,      setSelectedPhase]      = useState(-1)  // -1 = show all logs
+  const [refreshing,         setRefreshing]         = useState(false)
 
   // Sub-panel open state
   const [metaOpen,   setMetaOpen]   = useState(true)
@@ -403,12 +408,14 @@ export default function JobDetailPage() {
 
   const { data: status, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } =
     useJobStatus(jobId)
-  const { data: logs, isLoading: logsLoading } =
+  const { data: logs, isLoading: logsLoading, refetch: refetchLogs } =
     useJobLogs(jobId, status?.jobStatus)
 
   const isLive      = status?.jobStatus === 'RUNNING' || status?.jobStatus === 'PREPARING_WORKSPACE'
-  const isAbortable = status?.jobStatus ? ABORTABLE.includes(status.jobStatus) : false
-  const activeEnv   = status?.environment ?? ''
+  const isAbortable   = status?.jobStatus ? ABORTABLE.includes(status.jobStatus) : false
+  const isTerminal    = status?.jobStatus === 'SUCCESS' || status?.jobStatus === 'FAILED' || status?.jobStatus === 'ABORTED'
+  const isRedeployable = isTerminal && status?.application && status?.environment
+  const activeEnv     = status?.environment ?? ''
 
   const rawLines = logs ? logs.split('\n') : []
   const { sections } = rawLines.length > 0
@@ -534,6 +541,24 @@ export default function JobDetailPage() {
         />
       )}
 
+      {showRedeployModal && status && (
+        <RedeployModal
+          jobId={jobId!}
+          appName={status.application ?? ''}
+          environment={status.environment ?? ''}
+          onClose={() => setShowRedeployModal(false)}
+        />
+      )}
+
+      {showRollbackModal && status && (
+        <RollbackModal
+          jobId={jobId!}
+          appName={status.application ?? ''}
+          environment={status.environment ?? ''}
+          onClose={() => setShowRollbackModal(false)}
+        />
+      )}
+
       <div className="flex flex-col gap-6 pt-6 animate-fade-in">
 
         {/* ── Page Header ── */}
@@ -559,8 +584,36 @@ export default function JobDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void refetchStatus()} className="btn-secondary gap-1.5">
-              <RefreshCw size={12} /> Refresh
+            {isRedeployable && (
+              <>
+                <button type="button" onClick={() => setShowRedeployModal(true)} className="btn-primary gap-1.5">
+                  <Wand2 size={12} /> Re-deploy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRollbackModal(true)}
+                  className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md
+                             transition-all duration-150 border border-sig-yellow/25 bg-sig-yellow/10 text-sig-yellow
+                             hover:bg-sig-yellow/15 hover:border-sig-yellow/40"
+                >
+                  <RotateCcw size={12} /> Rollback
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={async () => {
+                setRefreshing(true)
+                await Promise.all([refetchStatus(), refetchLogs()])
+                setRefreshing(false)
+                toast.success('Refreshed')
+              }}
+              className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md
+                         transition-all duration-150 border border-wiz-cream/25 bg-wiz-cream/10 text-wiz-cream
+                         hover:bg-wiz-cream/15 hover:border-wiz-cream/40"
+            >
+              <RefreshCw size={12} className={clsx(refreshing && 'animate-spin')} /> Refresh
             </button>
             {isAbortable && (
               <button type="button" onClick={() => setShowAbortModal(true)} className="btn-danger gap-1.5">

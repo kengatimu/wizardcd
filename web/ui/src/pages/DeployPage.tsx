@@ -1291,6 +1291,17 @@ export default function DeployPage() {
         }
         computedFlags = derived.flags
       }
+
+      // Validate user-entered extra JVM opts — each must start with '-'
+      const invalidOpts = form.extraOpts
+        .filter(Boolean)
+        .filter((opt) => !opt.trimStart().startsWith('-'))
+      if (invalidOpts.length > 0) {
+        toast.error(`Invalid JVM flag: "${invalidOpts[0]}" — flags must start with '-' (e.g. -Dproperty=value, -XX:+Flag)`)
+        setSubmitting(false)
+        return
+      }
+
       const req = buildRequest(form, computedFlags)
       // Use the same filter as buildRequest so certFiles[i] ↔ certPaths[i] exactly
       const activeCerts  = form.certUploads.filter((c) => c.source.trim() && c.targetPath.trim() && c.file)

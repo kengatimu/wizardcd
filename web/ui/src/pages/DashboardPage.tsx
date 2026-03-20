@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, RefreshCw, StopCircle, Activity, Search, X } from 'lucide-react'
+import { AlertCircle, RefreshCw, StopCircle, Activity, Search, X, Wand2, RotateCcw } from 'lucide-react'
 import { fetchDashboardSummary, fetchJobs, abortJob } from '../api/jobs'
+import RedeployModal from '../components/RedeployModal'
+import RollbackModal from '../components/RollbackModal'
 import type { DashboardSummary } from '../types/DashboardSummary'
 import type { JobSummary } from '../types/JobSummary'
 import StatusBadge from '../components/StatusBadge'
@@ -136,6 +138,10 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [searchQuery, setSearchQuery]   = useState('')
   const [refreshing, setRefreshing]     = useState(false)
+
+  // Re-deploy / Rollback modal state
+  const [redeployTarget, setRedeployTarget] = useState<{ jobId: string; appName: string; environment: string } | null>(null)
+  const [rollbackTarget, setRollbackTarget] = useState<{ jobId: string; appName: string; environment: string } | null>(null)
 
   const {
     data: summary,
@@ -450,6 +456,26 @@ export default function DashboardPage() {
                             <StopCircle size={12} />
                           </button>
                         )}
+                        {(job.lifecycleStatus === 'SUCCESS' || job.lifecycleStatus === 'FAILED' || job.lifecycleStatus === 'ABORTED') && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setRedeployTarget({ jobId: job.jobId, appName: job.application, environment: job.environment }) }}
+                              className="btn-icon h-6 w-6 text-wiz-gold/70 hover:text-wiz-gold hover:bg-wiz-gold/10 flex-shrink-0"
+                              title="Re-deploy"
+                            >
+                              <Wand2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setRollbackTarget({ jobId: job.jobId, appName: job.application, environment: job.environment }) }}
+                              className="btn-icon h-6 w-6 text-sig-yellow/70 hover:text-sig-yellow hover:bg-sig-yellow/10 flex-shrink-0"
+                              title="Rollback"
+                            >
+                              <RotateCcw size={12} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -490,6 +516,24 @@ export default function DashboardPage() {
           </table>
         </div>
       </div>
+
+      {redeployTarget && (
+        <RedeployModal
+          jobId={redeployTarget.jobId}
+          appName={redeployTarget.appName}
+          environment={redeployTarget.environment}
+          onClose={() => setRedeployTarget(null)}
+        />
+      )}
+
+      {rollbackTarget && (
+        <RollbackModal
+          jobId={rollbackTarget.jobId}
+          appName={rollbackTarget.appName}
+          environment={rollbackTarget.environment}
+          onClose={() => setRollbackTarget(null)}
+        />
+      )}
 
     </div>
   )

@@ -197,6 +197,92 @@ public class RunnerServiceImpl implements RunnerService {
         jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED, "deploy.sh exited with code " + exitCode);
     }
 
+    // Executes a rollback: restores the last-successful backup on the target VM
+    @Override
+    public JobStatus runRollback(String jobId, DeploymentRequest request) {
+
+        if (jobId == null || jobId.isBlank()) {
+            throw new IllegalArgumentException("jobId must not be empty");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("Deployment request must not be null");
+        }
+
+        // Initialize lifecycle
+        transitionState(jobId, JobStatus.CREATED);
+        transitionState(jobId, JobStatus.VALIDATING);
+        jobStateService.updateState(jobId, JobExecutionStateStatus.RECEIVED, "Rollback job accepted by runner");
+
+        // Capacity guard
+        if (runningJobs.size() >= maxConcurrentJobs) {
+            transitionState(jobId, JobStatus.FAILED);
+            return JobStatus.FAILED;
+        }
+
+        // Submit rollback execution
+        executor.submit(() -> executeRollback(jobId, request));
+        return JobStatus.RUNNING;
+    }
+
+    // Performs rollback lifecycle inside executor thread
+    private void executeRollback(String jobId, DeploymentRequest request) {
+        try {
+            transitionState(jobId, JobStatus.PREPARING_WORKSPACE);
+
+            // Create minimal workspace: just config YAML + logs dir
+            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now());
+            Path jobRoot = Path.of(workspaceService.getWorkspaceRoot(), jobId);
+            Path inputDir = jobRoot.resolve("input");
+            Path logDir = jobRoot.resolve("logs");
+            java.nio.file.Files.createDirectories(inputDir);
+            java.nio.file.Files.createDirectories(logDir);
+
+            // Write metadata
+            new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writerWithDefaultPrettyPrinter()
+                    .writeValue(jobRoot.resolve("metadata.json").toFile(), metadata);
+
+            // Generate YAML config (reuse existing service)
+            String effectiveJarName = request.getJarName() != null ? request.getJarName() : "rollback.jar";
+            Path configPath = workspaceService.generateYamlOnly(jobId, request, effectiveJarName, inputDir);
+
+            jobStateService.updateState(jobId, JobExecutionStateStatus.WORKSPACE_READY, "Rollback workspace prepared");
+            transitionState(jobId, JobStatus.RUNNING);
+
+            // Execute rollback-deploy.sh
+            ProcessBuilder pb = new ProcessBuilder(
+                    "./rollback-deploy.sh",
+                    "--job-id", jobId,
+                    "--config", configPath.toString());
+            pb.directory(new File(scriptsDir));
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            runningJobs.put(jobId, process);
+            jobStateService.updateState(jobId, JobExecutionStateStatus.RUNNING, "rollback-deploy.sh execution started");
+
+            streamProcessLogs(process);
+
+            int exitCode = processExecutorService.execute(jobId, process, executionTimeoutMinutes);
+            interpretExitCode(jobId, exitCode);
+
+        } catch (Exception e) {
+            JobStatus currentStatus = jobStateService.getStatus(jobId);
+            if (currentStatus != JobStatus.ABORT_REQUESTED && currentStatus != JobStatus.ABORTED) {
+                try {
+                    transitionState(jobId, JobStatus.FAILED);
+                    jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED,
+                            "Rollback exception: " + e.getMessage());
+                } catch (Exception inner) {
+                    log.error("Failed to transition rollback job {} to FAILED", jobId, inner);
+                }
+            }
+            log.error("Rollback job {} failed with exception", jobId, e);
+        } finally {
+            runningJobs.remove(jobId);
+        }
+    }
+
     // Handles abort request coming from web/controller layer
     @Override
     public void abort(String jobId) {

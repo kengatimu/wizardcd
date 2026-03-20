@@ -123,6 +123,52 @@ export async function fetchRunnerPublicKeys(): Promise<Record<string, string>> {
   return data
 }
 
+/**
+ * Fetch the original DeploymentRequest config used for a specific job.
+ * Returns the full config that was submitted at deployment time.
+ * Used by the re-deploy flow to pre-populate the wizard.
+ */
+export async function fetchJobConfig(jobId: string): Promise<DeploymentRequest> {
+  const { data } = await apiClient.get<DeploymentRequest>(`/jobs/${jobId}/config`)
+  return data
+}
+
+/**
+ * Re-deploy: submits a new deployment using a previous job's saved config
+ * with a new JAR file. Returns the new job response.
+ */
+export async function redeployJob(
+  originalJobId: string,
+  jarArtifact: File,
+  libZip?: File,
+  certZips?: File[],
+  extraZips?: File[],
+  onUploadProgress?: (loaded: number, total: number) => void,
+): Promise<JobResponse> {
+  const formData = new FormData()
+  formData.append('jarArtifact', jarArtifact, jarArtifact.name)
+  if (libZip) formData.append('libZip', libZip, libZip.name)
+  certZips?.forEach((f) => formData.append('certZips', f, f.name))
+  extraZips?.forEach((f) => formData.append('extraZips', f, f.name))
+
+  const { data } = await apiClient.post<JobResponse>(`/jobs/${originalJobId}/redeploy`, formData, {
+    timeout: 0,
+    onUploadProgress: (e) => {
+      if (onUploadProgress && e.total) onUploadProgress(e.loaded, e.total)
+    },
+  })
+  return data
+}
+
+/**
+ * Rollback: restores the last-successful backup on the target server
+ * using a previous job's saved config for SSH details.
+ */
+export async function rollbackJob(originalJobId: string): Promise<JobResponse> {
+  const { data } = await apiClient.post<JobResponse>(`/jobs/${originalJobId}/rollback`)
+  return data
+}
+
 export interface SshTestResult {
   success:            boolean
   message:            string

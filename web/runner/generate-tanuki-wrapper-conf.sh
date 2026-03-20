@@ -124,40 +124,57 @@ sed \
 # --------------------------------------------------
 ADDITIONAL_IDX=1
 
+# Helper: append a JVM arg to the conf and log it
+append_jvm_arg() {
+  local flag="$1"
+  local source="$2"
+  echo "wrapper.java.additional.${ADDITIONAL_IDX}=${flag}" >> "$CONF_FILE"
+  log_info "  [jvm.${ADDITIONAL_IDX}] ${flag}  (${source})"
+  ((ADDITIONAL_IDX++))
+}
+
 # Heap sizing — optional; omit to let JVM auto-size
 if [[ -n "${JVM_XMS}" && "${JVM_XMS}" != "null" ]]; then
-  echo "wrapper.java.additional.${ADDITIONAL_IDX}=-Xms${JVM_XMS}" >> "$CONF_FILE"
-  ((ADDITIONAL_IDX++))
+  append_jvm_arg "-Xms${JVM_XMS}" "heap-min"
 fi
 if [[ -n "${JVM_XMX}" && "${JVM_XMX}" != "null" ]]; then
-  echo "wrapper.java.additional.${ADDITIONAL_IDX}=-Xmx${JVM_XMX}" >> "$CONF_FILE"
-  ((ADDITIONAL_IDX++))
+  append_jvm_arg "-Xmx${JVM_XMX}" "heap-max"
 fi
 
-# NewRatio — only include when explicitly set
+# NewRatio — only include when explicitly set (not exposed in UI by default)
 if [[ -n "${JVM_NEW_RATIO}" && "${JVM_NEW_RATIO}" != "null" && "${JVM_NEW_RATIO}" != "0" ]]; then
-  echo "wrapper.java.additional.${ADDITIONAL_IDX}=-XX:NewRatio=${JVM_NEW_RATIO}" >> "$CONF_FILE"
-  ((ADDITIONAL_IDX++))
+  append_jvm_arg "-XX:NewRatio=${JVM_NEW_RATIO}" "new-ratio"
 fi
 
 # Extra JVM opts from deployment config (GC flags, workload flags, user-defined opts).
-# These were previously written to extra_opts[] in the YAML but never applied to the
-# Tanuki conf — this loop wires them through correctly.
 EXTRA_OPTS_COUNT=$(yq -r ".apps.${APP}.${ENV}.jvm.extra_opts | length" "$CONFIG_FILE" 2>/dev/null || echo "0")
+SKIPPED_COUNT=0
 if [[ "$EXTRA_OPTS_COUNT" =~ ^[0-9]+$ && "$EXTRA_OPTS_COUNT" -gt 0 ]]; then
   for ((i=0; i<EXTRA_OPTS_COUNT; i++)); do
     OPT=$(yq -r ".apps.${APP}.${ENV}.jvm.extra_opts[${i}]" "$CONFIG_FILE")
-    if [[ -n "$OPT" && "$OPT" != "null" ]]; then
-      echo "wrapper.java.additional.${ADDITIONAL_IDX}=${OPT}" >> "$CONF_FILE"
-      ((ADDITIONAL_IDX++))
+    if [[ -z "$OPT" || "$OPT" == "null" ]]; then
+      log_warn "  Skipping empty/null extra_opts[${i}]"
+      ((SKIPPED_COUNT++))
+      continue
     fi
+    # Validate: must start with - (JVM flags always start with a dash)
+    if [[ "$OPT" != -* ]]; then
+      log_warn "  Skipping invalid extra_opts[${i}]: '${OPT}' — JVM flags must start with '-'"
+      ((SKIPPED_COUNT++))
+      continue
+    fi
+    append_jvm_arg "$OPT" "extra_opts[${i}]"
   done
 fi
 
-if [[ $ADDITIONAL_IDX -gt 1 ]]; then
-  log_info "  Added $((ADDITIONAL_IDX - 1)) additional JVM arg(s) to wrapper conf"
+TOTAL_ARGS=$((ADDITIONAL_IDX - 1))
+if [[ $TOTAL_ARGS -gt 0 ]]; then
+  log_info "  Total: ${TOTAL_ARGS} JVM arg(s) written to wrapper conf"
+  if [[ $SKIPPED_COUNT -gt 0 ]]; then
+    log_warn "  ${SKIPPED_COUNT} extra_opts entry/entries skipped (empty or invalid)"
+  fi
 else
-  log_info "  No heap constraints — JVM will use ergonomic defaults"
+  log_info "  No JVM args configured — JVM will use ergonomic defaults"
 fi
 
 # --------------------------------------------------

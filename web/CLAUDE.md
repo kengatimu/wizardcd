@@ -10,11 +10,14 @@ It contains the full project context needed to resume any work without re-readin
 
 | Layer | Absolute path |
 |-------|--------------|
+| **Project root** | `/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web` |
 | **UI (React/Vite)** | `/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/ui` |
 | **Backend (Spring Boot)** | `/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms` |
 | **Runner scripts** | `/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner` |
+| **Backups** | `/Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/backup` |
 
 > ⚠️ All frontend edits MUST target files inside `.../web/ui/`. Never write to a worktree copy.
+> ⚠️ The project root is `web/` — always use absolute paths from this directory.
 
 ---
 
@@ -890,6 +893,58 @@ zip -r lib-deps.zip lib/    # creates lib/lib/*.jar in workspace, but find still
 | SSH fail — unknown | ✓ green | ✓ green | ✗ red | ✗ red |
 | Success | ✓ green | ✓ green | ✓ green | ✓ green |
 
+### Session — UI Polish & UX Hardening (2026-03-20)
+
+#### Dashboard Improvements
+- [x] `DashboardPage.tsx` — **Table column widths rebalanced**: Job ID 14%, App 20%, Env 8% — `table-fixed` layout with percentage widths
+- [x] `DashboardPage.tsx` — **Eye/view icon removed**: rows are already clickable, redundant icon removed; Actions column removed
+- [x] `DashboardPage.tsx` — **Hover tooltips**: `title` attributes on all table cells for full content on hover
+- [x] `DashboardPage.tsx` — **Filter dropdowns**: replaced horizontal ENV/STATUS pill groups with dropdown `<select>` elements for cleaner UX
+- [x] `DashboardPage.tsx` — **Search bar visibility**: lighter background and stronger border for better contrast
+- [x] `DashboardPage.tsx` — **Abort button inline**: shown next to Duration for active jobs (no separate Actions column)
+
+#### Settings Page Redesign
+- [x] `SettingsPage.tsx` — **Active Environment panel removed** (redundant — env is set during deployment)
+- [x] `SettingsPage.tsx` — **Save Settings button removed** — all preferences auto-persist via `useEffect`
+- [x] `SettingsPage.tsx` — **Inner panels for Preferences**: Dashboard (sig-green), Log Viewer (sig-blue), Notifications (wiz-gold) — each with distinct left border color
+- [x] `SettingsPage.tsx` — **PrefRow component**: consistent row layout for preference items (label+hint left, control right)
+- [x] `SettingsPage.tsx` — **API Connection hint**: changed from "Proxied via Vite…" to "All API requests are sent to this endpoint."
+- [x] `SettingsPage.tsx` — **Hint text styling**: unified to `text-xs text-wiz-muted/50`
+
+#### Notification System (New)
+- [x] `hooks/useNotifications.ts` — **New hook**: polls `fetchJobs()` every 5s, detects terminal state transitions (SUCCESS/FAILED/ABORTED), persists to localStorage (`wiz-notifications`), max 30 notifications, skips first poll to avoid flood
+- [x] `components/NotificationDropdown.tsx` — **New component**: dropdown panel with unread count badge, status icons, app name + env, relative time, click-to-navigate to job detail, mark read/all read/clear all, close on click-outside/Escape
+- [x] `layouts/Header.tsx` — **Bell icon**: unread badge (red, caps at "9+"), gold highlight when open, toggles NotificationDropdown
+
+#### Wizard Branding
+- [x] `DeployPage.tsx` — **Wand2 icon**: replaced Rocket with Wand2 from lucide-react for deploy button
+- [x] `DeployPage.tsx` — **"Deploy" button label**: renamed from "Submit Deployment" / "Cast Deployment" to just "Deploy →"
+- [x] `layouts/Sidebar.tsx` — **Wand2 icon**: replaced Rocket with Wand2 for "New Deploy" nav item
+
+#### Step 4 — Review & Deploy (New Wizard Step)
+- [x] `DeployPage.tsx` — **4th wizard step added**: STEPS array extended; tab grid changed to `grid-cols-4`
+- [x] `DeployPage.tsx` — **ReviewRow component**: uniform dark-block values (`rounded-md bg-wiz-bg/60 border border-wiz-border/15 px-2.5 py-1`), optional `badge` prop for env badges, optional `mono` prop for code-style values
+- [x] `DeployPage.tsx` — **3 review panels**: Target Server (sig-green), Application (sig-blue), Deployment Options (wiz-gold) — each with inner panel styling
+- [x] `DeployPage.tsx` — **Certs & Extra Dirs in Target Server panel**: shown as sub-sections when configured (not separate panels)
+- [x] `DeployPage.tsx` — **Info banner**: non-PROD shows gold "Ready to deploy" banner; PROD shows purple "You are deploying to PRODUCTION" warning
+- [x] `DeployPage.tsx` — **Edit buttons per panel**: each review panel header has "Edit" link that jumps to the relevant step (`setStep(N)` + `goToAndScroll(panelId)`)
+- [x] `DeployPage.tsx` — **Certs/Extra Dirs sub-section Edit links**: point to Step 3 Server Files panel (certs → `#panel-certs`, extra dirs → `#panel-extra-dirs`)
+- [x] `DeployPage.tsx` — **Full install path shown**: new "Install Path" row in review showing `{targetBasePath}/{appName}`
+- [x] `DeployPage.tsx` — **Uniform review fonts**: all values use consistent `text-xs text-wiz-cream/80` styling
+
+#### Deploy Path Hint (Dynamic)
+- [x] `DeployPage.tsx` — **Deploy Path hint**: changed from hardcoded `<path>/<appName>/` to dynamic `{form.targetBasePath}/{form.appName}/` showing actual values
+- [x] `DeployPage.tsx` — **Process summary**: replaced `→` arrow with `at` preposition ("Process will run as deploy on port 8081 at /u01/gag/runner/runner-service-ms")
+
+#### Java Installation Panel Polish
+- [x] `DeployPage.tsx` — **Scan button gold-themed**: changed from blue to wiz-gold to match Application step context
+- [x] `DeployPage.tsx` — **Info icon gold-themed**: pre-scan info circle uses wiz-gold instead of sig-blue
+
+#### Header Environment Badge
+- [x] `Header.tsx` — **UAT badge links to /deploy**: changed from `/settings` to `/deploy` (Step 1 where environment is configured)
+- [x] `Header.tsx` — **Settings2 gear icon removed**: badge is cleaner without the gear since it no longer goes to Settings
+- [x] TypeScript: `tsc --noEmit` exits 0
+
 ---
 
 ## Pending / Known Issues
@@ -911,4 +966,4 @@ None currently.
 
 ---
 
-*Last updated: 2026-03-19 — run `/update-memory` after each session*
+*Last updated: 2026-03-20 — run `/update-memory` after each session*

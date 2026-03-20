@@ -13,6 +13,9 @@ public interface RunnerService {
                         MultipartFile jarArtifact, MultipartFile libZip,
                         List<MultipartFile> certZips, List<MultipartFile> extraZips);
 
+    // Executes a rollback using rollback-deploy.sh — restores last-successful backup on target
+    JobStatus runRollback(String jobId, DeploymentRequest request);
+
     // Requests termination of a currently running deployment job
     void abort(String jobId);
 }
