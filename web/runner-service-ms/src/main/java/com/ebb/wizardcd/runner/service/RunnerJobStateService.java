@@ -1,5 +1,6 @@
 package com.ebb.wizardcd.runner.service;
 
+import com.ebb.wizardcd.runner.dto.JobExecutionStatus;
 import com.ebb.wizardcd.runner.enums.JobExecutionStateStatus;
 import com.ebb.wizardcd.runner.enums.JobStatus;
 
@@ -29,4 +30,7 @@ public interface RunnerJobStateService {
 
     // Reads the current lifecycle state for a job (null if none exists)
     JobStatus getStatus(String jobId);
+
+    // Returns the full persisted snapshot for a job (null if status.json does not exist)
+    JobExecutionStatus readSnapshot(String jobId);
 }

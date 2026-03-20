@@ -1,6 +1,6 @@
 logging:
   file:
-    path: ../logs
+    path: /opt/wizardcd/logs
   level:
     ROOT: INFO
     com.ebb.wizardcd.runner: INFO
@@ -9,8 +9,8 @@ server:
   port: 8081
 
 runner:
-  scriptsDir: ../runner
-  workspaceRoot: ../workspace/jobs
+  scriptsDir: /opt/wizardcd/runner
+  workspaceRoot: /opt/wizardcd/workspace/jobs
   executionTimeoutMinutes: 30
   maxConcurrentJobs: 1
 

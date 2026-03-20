@@ -29,6 +29,9 @@ public class JobSummary {
     // Execution snapshot state (RUNNING, SUCCEEDED, TIMEOUT, etc.)
     private JobExecutionStateStatus executionStatus;
 
+    // Timestamp when the job reached a terminal state (null for in-flight jobs)
+    private Instant completedAt;
+
     public JobSummary() {
     }
 
@@ -38,12 +41,23 @@ public class JobSummary {
                       Instant createdAt,
                       JobStatus lifecycleStatus,
                       JobExecutionStateStatus executionStatus) {
+        this(jobId, appName, environment, createdAt, lifecycleStatus, executionStatus, null);
+    }
+
+    public JobSummary(String jobId,
+                      String appName,
+                      String environment,
+                      Instant createdAt,
+                      JobStatus lifecycleStatus,
+                      JobExecutionStateStatus executionStatus,
+                      Instant completedAt) {
         this.jobId = jobId;
         this.appName = appName;
         this.environment = environment;
         this.createdAt = createdAt;
         this.lifecycleStatus = lifecycleStatus;
         this.executionStatus = executionStatus;
+        this.completedAt = completedAt;
     }
 
     public String getJobId() {
@@ -93,4 +107,8 @@ public class JobSummary {
     public void setExecutionStatus(JobExecutionStateStatus executionStatus) {
         this.executionStatus = executionStatus;
     }
+
+    public Instant getCompletedAt() { return completedAt; }
+
+    public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
 }

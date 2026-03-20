@@ -77,7 +77,13 @@ export DEPLOY_LOG
 export PACKAGE_LOG
 export SSH_LOG
 
-cp "$CONFIG_FILE" "${INPUT_DIR}/deployment-config.yml"
+# Copy config into INPUT_DIR only when it is not already there.
+# The Java runner writes deployment-config.yml directly into INPUT_DIR and then
+# passes that same path as --config, so source == destination.  Skipping the cp
+# in that case avoids the "same file" error without changing behaviour.
+if [[ "$CONFIG_FILE" != "${INPUT_DIR}/deployment-config.yml" ]]; then
+  cp "$CONFIG_FILE" "${INPUT_DIR}/deployment-config.yml"
+fi
 export WIZARDCONFIG="${INPUT_DIR}/deployment-config.yml"
 
 # ---------------------------------------------------------------
@@ -85,14 +91,8 @@ export WIZARDCONFIG="${INPUT_DIR}/deployment-config.yml"
 # ---------------------------------------------------------------
 source "${SCRIPT_DIR}/helpers.sh"
 
-log_section "Deployment Job Initialized"
-log_info "Job ID: ${JOB_ID}"
-
 # -----------------------------------------------------------
 # Ensure yq v4.44.3 is installed (strict enforcement)
-#
-# WizardCD is pinned to yq v4.44.3 for deterministic parsing.
-# Any other version will be replaced.
 # -----------------------------------------------------------
 ensure_yq_installed() {
   local required_version="v4.44.3"
@@ -105,27 +105,17 @@ ensure_yq_installed() {
     current_version="$(yq --version 2>/dev/null | awk '{print $NF}' || true)"
   fi
 
-  # -------------------------------------------------------
-  # If exact required version is already installed → exit
-  # -------------------------------------------------------
   if [[ "$current_version" == "$required_version" ]]; then
-    log_info "yq ${required_version} already installed."
     return 0
   fi
 
-  log_warn "Forcing yq ${required_version} installation (detected: ${current_version:-none})"
+  log_warn "yq ${required_version} required — detected: ${current_version:-none}. Installing..."
 
-  # -------------------------------------------------------
-  # Validate curl dependency
-  # -------------------------------------------------------
   if ! command -v curl >/dev/null 2>&1; then
     log_error "curl is required to install yq automatically."
     exit $EXIT_INVALID_ARGS
   fi
 
-  # -------------------------------------------------------
-  # Download pinned binary
-  # -------------------------------------------------------
   local yq_url="https://github.com/mikefarah/yq/releases/download/${required_version}/yq_linux_amd64"
 
   curl -L "$yq_url" -o "$tmp_binary" || {
@@ -135,9 +125,6 @@ ensure_yq_installed() {
 
   chmod +x "$tmp_binary"
 
-  # -------------------------------------------------------
-  # Overwrite existing yq binary
-  # -------------------------------------------------------
   if [[ "$EUID" -ne 0 ]]; then
     if command -v sudo >/dev/null 2>&1; then
       sudo mv "$tmp_binary" "$install_path"
@@ -152,11 +139,13 @@ ensure_yq_installed() {
   log_info "yq ${required_version} installed successfully."
 }
 
+# ---------------------------------------------------------------
 # Validate/install yq BEFORE YAML parsing
+# ---------------------------------------------------------------
 ensure_yq_installed
 
 # ---------------------------------------------------------------
-# Read YAML
+# Read YAML (all values needed before first log_section)
 # ---------------------------------------------------------------
 APP_NAME="$(yq -r '.apps | keys[0]' "${INPUT_DIR}/deployment-config.yml")"
 ENV_NAME="$(yq -r ".apps.${APP_NAME} | keys[0]" "${INPUT_DIR}/deployment-config.yml")"
@@ -179,25 +168,10 @@ JAR_NAME="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.app.jar_name" "${INPUT_DIR}/dep
 LOG_MAX_SIZE="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.logging.max_size" "${INPUT_DIR}/deployment-config.yml")"
 LOG_MAX_FILES="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.logging.max_files" "${INPUT_DIR}/deployment-config.yml")"
 
-# ---------------------------------------------------------------
-# Backup configuration
-# ---------------------------------------------------------------
 BACKUP_ENABLED="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.backup.perform_backup // \"true\"" "${INPUT_DIR}/deployment-config.yml")"
 MAX_BACKUPS="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.backup.max_backups // 5" "${INPUT_DIR}/deployment-config.yml")"
 
-# ---------------------------------------------------------------
-# Extra directories (name → absolute target path on server)
-# Each entry has {dir_name, target_path}.  After the main tarball
-# transfer, deploy.sh scps each dir to its absolute targetPath —
-# identical in mechanism to cert_paths but for general-purpose dirs.
-# ---------------------------------------------------------------
 EXTRA_DIRS_COUNT="$(yq -r "(.apps.${APP_NAME}.${ENV_NAME}.build.extra_dirs // []) | length" "${INPUT_DIR}/deployment-config.yml" 2>/dev/null || echo 0)"
-
-# ---------------------------------------------------------------
-# Certificate / keystore path count
-# Each entry has {source, targetPath}. After the main tarball
-# transfer, deploy.sh scps each source dir to its targetPath.
-# ---------------------------------------------------------------
 CERT_PATHS_COUNT="$(yq -r "(.apps.${APP_NAME}.${ENV_NAME}.build.cert_paths // []) | length" "${INPUT_DIR}/deployment-config.yml")"
 
 if [[ "$BACKUP_ENABLED" != "true" && "$BACKUP_ENABLED" != "false" ]]; then
@@ -210,9 +184,35 @@ fi
 
 export LOG_MAX_SIZE LOG_MAX_FILES
 
-log_info "Configuration loaded for ${APP_NAME} (${ENV_NAME})"
-log_info "Backup enabled: ${BACKUP_ENABLED}"
-log_info "Max backups: ${MAX_BACKUPS}"
+# ---------------------------------------------------------------
+# Phase 1: Deployment Job Initialized
+# Now that YAML is read, log full job context upfront.
+# ---------------------------------------------------------------
+log_section "Deployment Job Initialized"
+
+log_info "Job ID:         ${JOB_ID}"
+log_info "Application:    ${APP_NAME}"
+log_info "Environment:    ${ENV_NAME}"
+log_info "Target:         ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
+log_info "Deploy path:    ${TARGET_BASE}/${APP_NAME}"
+log_info "JAR artifact:   ${JAR_NAME}"
+log_info "Java version:   ${JAVA_VERSION}"
+
+if [[ "$BACKUP_ENABLED" == "true" ]]; then
+  log_info "Backup:         enabled (retain last ${MAX_BACKUPS} releases)"
+else
+  log_info "Backup:         disabled"
+fi
+
+if [[ "$CERT_PATHS_COUNT" -gt 0 ]]; then
+  log_info "Cert paths:     ${CERT_PATHS_COUNT} configured"
+fi
+
+if [[ "$EXTRA_DIRS_COUNT" -gt 0 ]]; then
+  log_info "Extra dirs:     ${EXTRA_DIRS_COUNT} configured"
+fi
+
+log_info "yq:             $(yq --version 2>/dev/null | awk '{print $NF}')"
 
 # ---------------------------------------------------------------
 # Validate local build artifacts
@@ -221,7 +221,7 @@ FULL_JAR="${INPUT_DIR}/${JAR_NAME}"
 FULL_LIB="${INPUT_DIR}/lib"
 
 [[ -f "$FULL_JAR" ]] || {
-  log_error "Missing application JAR in job input: ${FULL_JAR}"
+  log_error "Missing application JAR in job workspace: ${JAR_NAME}"
   exit $EXIT_ARTIFACT_MISSING
 }
 
@@ -230,18 +230,29 @@ FULL_LIB="${INPUT_DIR}/lib"
   exit $EXIT_ARTIFACT_MISSING
 }
 
-log_info "Local build artifacts validated"
+JAR_SIZE="$(du -sh "$FULL_JAR" 2>/dev/null | cut -f1)"
+log_info "JAR verified:   ${JAR_NAME} (${JAR_SIZE})"
+
+if [[ -d "$FULL_LIB" ]]; then
+  LIB_COUNT="$(ls "$FULL_LIB" | wc -l | tr -d ' ')"
+  log_info "Lib verified:   ${LIB_COUNT} dependency JAR(s)"
+fi
+
+log_info "Deployment configuration verified"
 
 # ---------------------------------------------------------------
 # Generate Tanuki wrapper configuration
 # ---------------------------------------------------------------
 log_section "Generating Tanuki wrapper configuration"
 
+# The child script sources helpers.sh and logs directly to DEPLOY_LOG via tee.
+# Stdout is suppressed here to prevent duplicate log lines (helpers.sh tee writes
+# to DEPLOY_LOG, and the >> redirect would write the same line a second time).
 bash "${SCRIPT_DIR}/generate-tanuki-wrapper-conf.sh" \
   --app "$APP_NAME" \
   --env "$ENV_NAME" \
-  >> "$DEPLOY_LOG" 2>&1 || {
-    log_error "Wrapper generation failed"
+  > /dev/null || {
+    log_error "Tanuki wrapper generation failed for ${APP_NAME} (${ENV_NAME})"
     exit $EXIT_WRAPPER_FAILED
   }
 
@@ -252,21 +263,35 @@ mkdir -p "${WRAPPER_DIR}/tanuki"
 cp -r "${SCRIPT_DIR}/wrappers/tanuki/"* "${WRAPPER_DIR}/tanuki/"
 
 # ---------------------------------------------------------------
-# Package deployment artifacts (CORRECT STRUCTURE)
+# Package deployment artifacts
 # ---------------------------------------------------------------
 log_section "Packaging deployment artifacts"
 
 TARBALL="${BUILD_DIR}/${APP_NAME}-${ENV_NAME}.tar.gz"
-
 STAGE_DIR="${BUILD_DIR}/stage"
+
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/bin" "$STAGE_DIR/conf" "$STAGE_DIR/lib"
+
+log_info "Staging artifacts:"
+log_info "  Application JAR: ${JAR_NAME} (${JAR_SIZE})"
+
+if [[ -d "$FULL_LIB" ]]; then
+  log_info "  Library dependencies: ${LIB_COUNT} JAR(s)"
+fi
+
+log_info "  Tanuki config:  ${APP_NAME}-${ENV_NAME}.conf"
+log_info "  Tanuki wrapper: ${APP_NAME}-wrapper.sh"
 
 cp "$FULL_JAR" "$STAGE_DIR/bin/$JAR_NAME"
 
 if [[ -d "$FULL_LIB" ]]; then
   mkdir -p "$STAGE_DIR/bin/lib"
-  cp -r "$FULL_LIB/"* "$STAGE_DIR/bin/lib/" 2>/dev/null || true
+  # Use find to flatten any nested directory structure in the lib ZIP.
+  # If the user packaged with 'zip -r lib.zip lib/' the ZIP contains a
+  # 'lib/' subdirectory inside INPUT_DIR/lib/, which would otherwise
+  # produce bin/lib/lib/*.jar instead of bin/lib/*.jar.
+  find "$FULL_LIB" -name "*.jar" -exec cp {} "$STAGE_DIR/bin/lib/" \; 2>/dev/null || true
 fi
 
 cp "${WRAPPER_DIR}/tanuki/configs/${APP_NAME}-wrapper.sh" \
@@ -282,90 +307,96 @@ cp "${WRAPPER_DIR}/tanuki/lib/libwrapper.so" "$STAGE_DIR/lib/libwrapper.so"
 
 tar -czf "$TARBALL" -C "$STAGE_DIR" . \
   >> "$PACKAGE_LOG" 2>&1 || {
-    log_error "Artifact packaging failed"
+    log_error "Artifact packaging failed — check package.log for details"
     exit $EXIT_PACKAGE_FAILED
   }
 
+TARBALL_SIZE="$(du -sh "$TARBALL" 2>/dev/null | cut -f1)"
+log_info "Package ready:  ${APP_NAME}-${ENV_NAME}.tar.gz (${TARBALL_SIZE})"
+
 # ---------------------------------------------------------------
-# Copy artifacts to target VM
+# Transfer deployment package to target VM
 # ---------------------------------------------------------------
 log_section "Transferring artifacts to target VM"
-log_info "Target: ${SSH_HOST}:${SSH_PORT}"
 
-scp -i "$SSH_KEY" -P "$SSH_PORT" "$TARBALL" "${SSH_USER}@${SSH_HOST}:/tmp/${APP_NAME}-${ENV_NAME}.tar.gz" \
-  >> "$SSH_LOG" 2>&1 || {
-    log_error "SCP transfer failed"
-    exit $EXIT_SCP_FAILED
-  }
+log_info "Package:     ${APP_NAME}-${ENV_NAME}.tar.gz (${TARBALL_SIZE})"
+log_info "Destination: ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
+log_info "Remote path: /tmp/${APP_NAME}-${ENV_NAME}.tar.gz"
+
+SCP_ERR=$(scp -i "$SSH_KEY" -P "$SSH_PORT" \
+    -o StrictHostKeyChecking=no \
+    "$TARBALL" "${SSH_USER}@${SSH_HOST}:/tmp/${APP_NAME}-${ENV_NAME}.tar.gz" \
+    2>&1 | tee -a "$SSH_LOG") || {
+      log_error "Package transfer failed — ${SCP_ERR:-verify SSH connectivity and disk space on target}"
+      exit $EXIT_SCP_FAILED
+    }
+
+log_info "Package transferred successfully"
 
 # ---------------------------------------------------------------
-# Transfer certificate / keystore paths to custom server locations.
-# Each cert_paths entry specifies a source directory (relative to
-# INPUT_DIR) and an absolute targetPath on the server.
-# The directories are transferred independently of the main tarball
-# so they can land anywhere on the filesystem (e.g. /opt/certs).
+# Transfer certificate / keystore paths
 # ---------------------------------------------------------------
 if [[ "$CERT_PATHS_COUNT" -gt 0 ]]; then
   log_section "Transferring certificate paths"
+
   for (( ci=0; ci<CERT_PATHS_COUNT; ci++ )); do
     CERT_SRC="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.build.cert_paths[${ci}].source" "${INPUT_DIR}/deployment-config.yml")"
     CERT_TARGET="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.build.cert_paths[${ci}].targetPath" "${INPUT_DIR}/deployment-config.yml")"
     CERT_LOCAL="${INPUT_DIR}/${CERT_SRC}"
 
     if [[ -d "$CERT_LOCAL" ]]; then
-      log_info "Transferring certs: ${CERT_SRC} → ${CERT_TARGET}"
-      # Ensure target directory exists on server
-      ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no \
-        "${SSH_USER}@${SSH_HOST}" \
-        "mkdir -p '${CERT_TARGET}'" \
-        >> "$SSH_LOG" 2>&1 \
-        || log_warn "Could not create ${CERT_TARGET} on server (may already exist)"
+      log_info "Transferring certs [${ci}]: ${CERT_SRC} → ${CERT_TARGET}"
 
-      # Transfer contents of the source dir into targetPath
-      scp -i "$SSH_KEY" -P "$SSH_PORT" -r "${CERT_LOCAL}/." \
-        "${SSH_USER}@${SSH_HOST}:${CERT_TARGET}/" \
-        >> "$SSH_LOG" 2>&1 \
-        || log_warn "Failed to transfer cert path ${CERT_SRC} → ${CERT_TARGET}"
+      tar -czf - -C "${CERT_LOCAL}" . 2>>"$SSH_LOG" \
+        | ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no \
+            "${SSH_USER}@${SSH_HOST}" \
+            "mkdir -p '${CERT_TARGET}' && tar -xzf - -C '${CERT_TARGET}'" \
+            >> "$SSH_LOG" 2>&1 || {
+          log_error "Certificate transfer failed: ${CERT_SRC} → ${CERT_TARGET}"
+          log_error "  → Verify SSH connectivity, disk space, and permissions on target"
+          exit $EXIT_SCP_FAILED
+        }
 
-      log_info "Cert transfer complete: ${CERT_SRC} → ${CERT_TARGET}"
+      log_info "Cert transfer complete [${ci}]: ${CERT_SRC} → ${CERT_TARGET}"
     else
-      log_warn "Cert source directory not found, skipping: ${CERT_LOCAL}"
+      log_error "Cert source not found in workspace: '${CERT_SRC}'"
+      log_error "  → The cert ZIP must be uploaded in Step 6 of the deployment wizard"
+      log_error "  → Aborting deployment — cert files are required but were not provided"
+      exit $EXIT_SCP_FAILED
     fi
   done
 fi
 
 # ---------------------------------------------------------------
-# Transfer extra directories to custom server locations.
-# Each extra_dirs entry specifies a dir_name (relative to INPUT_DIR)
-# and an absolute target_path on the server.
-# Transferred independently of the main tarball — identical in
-# mechanism to cert_paths but for general-purpose directories.
+# Transfer extra directories
 # ---------------------------------------------------------------
 if [[ "$EXTRA_DIRS_COUNT" -gt 0 ]]; then
   log_section "Transferring extra directories"
+
   for (( di=0; di<EXTRA_DIRS_COUNT; di++ )); do
     EXTRA_DIR_NAME="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.build.extra_dirs[${di}].dir_name" "${INPUT_DIR}/deployment-config.yml")"
     EXTRA_DIR_TARGET="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.build.extra_dirs[${di}].target_path" "${INPUT_DIR}/deployment-config.yml")"
     EXTRA_LOCAL="${INPUT_DIR}/${EXTRA_DIR_NAME}"
 
     if [[ -d "$EXTRA_LOCAL" ]]; then
-      log_info "Transferring extra dir: ${EXTRA_DIR_NAME} → ${EXTRA_DIR_TARGET}"
-      # Ensure target directory exists on server
-      ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no \
-        "${SSH_USER}@${SSH_HOST}" \
-        "mkdir -p '${EXTRA_DIR_TARGET}'" \
-        >> "$SSH_LOG" 2>&1 \
-        || log_warn "Could not create ${EXTRA_DIR_TARGET} on server (may already exist)"
+      log_info "Transferring extra dir [${di}]: ${EXTRA_DIR_NAME} → ${EXTRA_DIR_TARGET}"
 
-      # Transfer contents of the source dir into target_path
-      scp -i "$SSH_KEY" -P "$SSH_PORT" -r "${EXTRA_LOCAL}/." \
-        "${SSH_USER}@${SSH_HOST}:${EXTRA_DIR_TARGET}/" \
-        >> "$SSH_LOG" 2>&1 \
-        || log_warn "Failed to transfer extra dir ${EXTRA_DIR_NAME} → ${EXTRA_DIR_TARGET}"
+      tar -czf - -C "${EXTRA_LOCAL}" . 2>>"$SSH_LOG" \
+        | ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no \
+            "${SSH_USER}@${SSH_HOST}" \
+            "mkdir -p '${EXTRA_DIR_TARGET}' && tar -xzf - -C '${EXTRA_DIR_TARGET}'" \
+            >> "$SSH_LOG" 2>&1 || {
+          log_error "Extra directory transfer failed: ${EXTRA_DIR_NAME} → ${EXTRA_DIR_TARGET}"
+          log_error "  → Verify SSH connectivity, disk space, and permissions on target"
+          exit $EXIT_SCP_FAILED
+        }
 
-      log_info "Extra dir transfer complete: ${EXTRA_DIR_NAME} → ${EXTRA_DIR_TARGET}"
+      log_info "Extra dir transfer complete [${di}]: ${EXTRA_DIR_NAME} → ${EXTRA_DIR_TARGET}"
     else
-      log_warn "Extra directory not found in input, skipping: ${EXTRA_LOCAL}"
+      log_error "Extra directory not found in workspace: '${EXTRA_DIR_NAME}'"
+      log_error "  → The directory ZIP must be uploaded in Step 6 of the deployment wizard"
+      log_error "  → Aborting deployment — extra directory files are required but were not provided"
+      exit $EXIT_SCP_FAILED
     fi
   done
 fi
@@ -375,21 +406,47 @@ fi
 # ---------------------------------------------------------------
 log_section "Executing remote deployment"
 
-ssh -i "$SSH_KEY" -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" "bash -s" \
-  < "${SCRIPT_DIR}/application-deployment.sh" \
-  "$APP_NAME" \
-  "$ENV_NAME" \
-  "$SSH_HOST" \
-  "$TARGET_BASE" \
-  "$SERVER_PORT" \
-  "$JAVA_VERSION" \
-  "$RUN_AS_USER" \
-  "$BACKUP_ENABLED" \
-  "$MAX_BACKUPS" \
-  >> "$SSH_LOG" 2>&1 || {
-    log_error "Remote deployment failed"
-    exit $EXIT_REMOTE_FAILED
-  }
+log_info "Connecting to ${SSH_USER}@${SSH_HOST}:${SSH_PORT} ..."
+log_info "Deploying: ${APP_NAME} (${ENV_NAME}) → ${TARGET_BASE}/${APP_NAME}"
+
+SSH_REMOTE_LOG="${LOG_DIR}/ssh-remote.log"
+
+# Run remote deployment script and capture all output.
+# set +e temporarily since we need the exit code for reporting.
+set +e
+ssh -i "$SSH_KEY" -p "$SSH_PORT" \
+    -o StrictHostKeyChecking=no \
+    -o ConnectTimeout=30 \
+    "${SSH_USER}@${SSH_HOST}" "bash -s" \
+    < "${SCRIPT_DIR}/application-deployment.sh" \
+    "$APP_NAME" \
+    "$ENV_NAME" \
+    "$SSH_HOST" \
+    "$TARGET_BASE" \
+    "$SERVER_PORT" \
+    "$JAVA_VERSION" \
+    "$RUN_AS_USER" \
+    "$BACKUP_ENABLED" \
+    "$MAX_BACKUPS" \
+    > "$SSH_REMOTE_LOG" 2>&1
+SSH_EXIT=$?
+set -e
+
+# Always forward remote output into deploy.log so it appears in the UI.
+# Lines from application-deployment.sh are indented with "  " prefix.
+if [[ -s "$SSH_REMOTE_LOG" ]]; then
+  while IFS= read -r line; do
+    [[ -n "${line// }" ]] && log_info "  ${line}"
+  done < "$SSH_REMOTE_LOG"
+  # Also append to ssh.log for full audit trail
+  cat "$SSH_REMOTE_LOG" >> "$SSH_LOG" 2>/dev/null || true
+fi
+
+if [[ $SSH_EXIT -ne 0 ]]; then
+  log_error "Remote deployment failed (exit code: ${SSH_EXIT})"
+  exit $EXIT_REMOTE_FAILED
+fi
 
 log_section "Deployment completed successfully"
+log_info "${APP_NAME} (${ENV_NAME}) is running on ${SSH_HOST}:${SERVER_PORT}"
 exit 0

@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Rocket, Key, Upload, Check, X, Copy, Wifi, WifiOff, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Rocket, Key, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { submitJob, fetchRunnerPublicKeys, testSshConnection } from '../api/jobs'
+import { submitJob, fetchRunnerPublicKeys, fetchRunnerInfo, testSshConnection } from '../api/jobs'
 import type { DeploymentRequest } from '../types/DeploymentRequest'
 import FormField, { SelectField, FieldWrapper } from '../components/FormField'
 import ToggleSwitch from '../components/ToggleSwitch'
@@ -13,13 +13,27 @@ import { useTheme, type ActiveEnv } from '../context/ThemeContext'
 // ── Step metadata ─────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, num: '01', label: 'Identity'   },
-  { id: 2, num: '02', label: 'Java / JVM' },
-  { id: 3, num: '03', label: 'Runtime'    },
-  { id: 4, num: '04', label: 'SSH Target' },
-  { id: 5, num: '05', label: 'Backup'     },
-  { id: 6, num: '06', label: 'Artifact'   },
+  { id: 1, num: '01', label: 'Target Server' },
+  { id: 2, num: '02', label: 'Application' },
+  { id: 3, num: '03', label: 'Java'        },
+  { id: 4, num: '04', label: 'Process'     },
+  { id: 5, num: '05', label: 'Backup'      },
+  { id: 6, num: '06', label: 'File Uploads' },
 ] as const
+
+// ── File upload helper types ───────────────────────────────────────
+
+interface CertUpload {
+  source:     string       // directory name inside the ZIP / INPUT_DIR
+  targetPath: string       // absolute path on the target server
+  file:       File | null  // ZIP containing cert / keystore files
+}
+
+interface ExtraDirUpload {
+  dirName:    string       // directory name within INPUT_DIR
+  targetPath: string       // absolute path on the target server
+  file:       File | null  // ZIP containing the directory contents
+}
 
 // ── Per-environment SSH key panel style tokens ────────────────────
 
@@ -32,35 +46,37 @@ const ENV_KEY_STYLE = {
 // ── Form state ────────────────────────────────────────────────────
 
 interface FormState {
-  // Step 1 — Identity
+  // Step 1 — SSH Target
+  environment:    string
+  sshUser:        string
+  sshHost:        string
+  sshPort:        string
+  targetBasePath: string
+  // Step 2 — Identity
   appName:     string
-  environment: string
   mainClass:   string
-  // Step 2 — Java / JVM
+  // Step 3 — Java / JVM
   javaCommand: string
   javaVersion: string
   xms:         string
   xmx:         string
   newRatio:    string
   extraOpts:   string[]
-  // Step 3 — Runtime
+  // Step 4 — Runtime
   runAsUser:   string
   serverPort:  string
   maxLogSize:  string
   maxLogFiles: string
-  libPath:     string
-  optionalPaths: string[]
-  // Step 4 — SSH Target
-  sshUser:        string
-  sshHost:        string
-  sshPort:        string
-  targetBasePath: string
+  jarType:     'fat' | 'thin'  // fat = self-contained; thin = requires lib/ dir
   // Step 5 — Backup
   performBackup: boolean
   maxBackups:    string
-  // Step 6 — Artifact
-  artifact:  File | null
-  jarName:   string           // auto-filled from artifact filename
+  // Step 6 — File Uploads
+  jarArtifact: File | null      // the application JAR (always required)
+  libZip:      File | null      // lib/ dependencies ZIP (thin JAR mode only)
+  certUploads: CertUpload[]     // cert/keystore entries, each with its own ZIP
+  extraDirs:   ExtraDirUpload[] // extra directory entries, each with its own ZIP
+  jarName:     string           // auto-filled from jarArtifact filename
 }
 
 function getDefaultEnv(): string {
@@ -71,8 +87,12 @@ function getDefaultEnv(): string {
 }
 
 const INITIAL: FormState = {
-  appName:        '',
   environment:    getDefaultEnv(),
+  sshUser:        '',
+  sshHost:        '',
+  sshPort:        '22',
+  targetBasePath: '',
+  appName:        '',
   mainClass:      '',
   javaCommand:    '',
   javaVersion:    '',
@@ -84,15 +104,13 @@ const INITIAL: FormState = {
   serverPort:     '',
   maxLogSize:     '',
   maxLogFiles:    '',
-  libPath:        '',
-  optionalPaths:  [],
-  sshUser:        '',
-  sshHost:        '',
-  sshPort:        '22',
-  targetBasePath: '',
+  jarType:        'fat',
   performBackup:  true,
   maxBackups:     '5',
-  artifact:       null,
+  jarArtifact:    null,
+  libZip:         null,
+  certUploads:    [],
+  extraDirs:      [],
   jarName:        '',
 }
 
@@ -103,34 +121,65 @@ type FormErrors = Partial<Record<keyof FormState, string>>
 function validateStep(step: number, form: FormState): FormErrors {
   const e: FormErrors = {}
   switch (step) {
-    case 1:
-      if (!form.appName)   e.appName   = 'Required'
-      if (!form.mainClass) e.mainClass = 'Required'
-      break
-    case 2:
-      if (!form.javaCommand) e.javaCommand = 'Required'
-      if (!form.javaVersion) e.javaVersion = 'Required'
-      if (!form.xms)         e.xms         = 'Required'
-      if (!form.xmx)         e.xmx         = 'Required'
-      break
-    case 3:
-      if (!form.runAsUser)  e.runAsUser  = 'Required'
-      if (!form.serverPort) e.serverPort = 'Required'
-      break
-    case 4:
+    case 1:  // SSH Target
       if (!form.sshUser)        e.sshUser        = 'Required'
       if (!form.sshHost)        e.sshHost        = 'Required'
       if (!form.sshPort)        e.sshPort        = 'Required'
       if (!form.targetBasePath) e.targetBasePath = 'Required'
       break
+    case 2:  // Identity
+      if (!form.appName)   e.appName   = 'Required'
+      if (!form.mainClass) e.mainClass = 'Required'
+      break
+    case 3:  // Java / JVM
+      if (!form.javaCommand) e.javaCommand = 'Required'
+      if (!form.javaVersion) e.javaVersion = 'Required'
+      if (!form.xms)         e.xms         = 'Required'
+      if (!form.xmx)         e.xmx         = 'Required'
+      break
+    case 4:  // Runtime
+      if (!form.runAsUser)  e.runAsUser  = 'Required'
+      if (!form.serverPort) e.serverPort = 'Required'
+      break
     case 5:
       // no required fields
       break
     case 6:
-      if (!form.artifact) e.artifact = 'JAR artifact is required'
+      if (!form.jarArtifact) {
+        e.jarArtifact = 'Required'
+      } else if (!form.jarArtifact.name.toLowerCase().endsWith('.jar')) {
+        e.jarArtifact = 'Must be a .jar file'
+      }
+      if (!form.jarName.trim()) e.jarName = 'Required'
+      if (form.jarType === 'thin') {
+        if (!form.libZip) {
+          e.libZip = 'Required for Thin JAR — upload your lib/ directory as a .zip'
+        } else if (!form.libZip.name.toLowerCase().endsWith('.zip')) {
+          e.libZip = 'Must be a .zip file'
+        }
+      }
       break
   }
   return e
+}
+
+// ── Step status ───────────────────────────────────────────────────
+// 'active'     — currently displayed step (gold)
+// 'complete'   — visited and all required fields filled (green + check)
+// 'incomplete' — visited but has validation errors (yellow + warning triangle)
+// 'unvisited'  — never navigated to yet (gray, but still clickable)
+
+type StepStatus = 'active' | 'complete' | 'incomplete' | 'unvisited'
+
+function getStepStatus(
+  stepId: number,
+  activeStep: number,
+  visited: Set<number>,
+  form: FormState,
+): StepStatus {
+  if (stepId === activeStep) return 'active'
+  if (!visited.has(stepId))  return 'unvisited'
+  return Object.keys(validateStep(stepId, form)).length === 0 ? 'complete' : 'incomplete'
 }
 
 // ── Build DeploymentRequest ───────────────────────────────────────
@@ -140,7 +189,7 @@ function buildRequest(form: FormState): DeploymentRequest {
     appName:        form.appName,
     environment:    form.environment,
     mainClass:      form.mainClass,
-    jarName:        form.jarName || form.artifact?.name || '',
+    jarName:        form.jarName || form.jarArtifact?.name || '',
     javaCommand:    form.javaCommand,
     javaVersion:    parseInt(form.javaVersion,  10),
     xms:            form.xms,
@@ -151,8 +200,15 @@ function buildRequest(form: FormState): DeploymentRequest {
     serverPort:     parseInt(form.serverPort,   10),
     maxLogSize:     form.maxLogSize,
     maxLogFiles:    parseInt(form.maxLogFiles,  10),
-    libPath:        form.libPath,
-    optionalPaths:  form.optionalPaths.filter(Boolean),
+    // 'lib' triggers EXTERNAL_LIB mode in the Tanuki wrapper config generator;
+    // empty string triggers FAT_JAR mode (deploy.sh uses this to pick the classpath).
+    libPath:        form.jarType === 'thin' ? 'lib' : '',
+    extraDirs:      form.extraDirs
+      .filter((d) => d.dirName.trim() && d.targetPath.trim())
+      .map((d) => ({ dirName: d.dirName.trim(), targetPath: d.targetPath.trim() })),
+    certPaths:      form.certUploads
+      .filter((c) => c.source.trim() && c.targetPath.trim())
+      .map((c) => ({ source: c.source.trim(), targetPath: c.targetPath.trim() })),
     sshUser:        form.sshUser,
     sshHost:        form.sshHost,
     sshPort:        parseInt(form.sshPort,      10),
@@ -165,42 +221,42 @@ function buildRequest(form: FormState): DeploymentRequest {
 // ── Step tab ──────────────────────────────────────────────────────
 
 interface StepTabProps {
-  num:      string
-  label:    string
-  active:   boolean
-  visited:  boolean
-  onClick:  () => void
+  num:     string
+  label:   string
+  status:  StepStatus
+  onClick: () => void
 }
 
-function StepTab({ num, label, active, visited, onClick }: StepTabProps) {
-  // A tab is "completed" when the user has visited it but is now on a later step.
-  // Active always takes precedence — the current step is never "completed".
-  const completed = visited && !active
-
+function StepTab({ num, label, status, onClick }: StepTabProps) {
   return (
     <button
       type="button"
-      onClick={visited ? onClick : undefined}
-      disabled={!visited}
+      onClick={onClick}
       className={clsx(
-        'flex items-center gap-2 px-4 py-2 rounded-lg border font-mono text-sm',
-        'transition-all duration-150 whitespace-nowrap',
-        active
-          ? 'border-wiz-gold      text-wiz-gold  bg-wiz-gold/5       shadow-gold-sm'
-          : completed
-          ? 'border-sig-green/40  text-sig-green bg-sig-green-dim/60  hover:border-sig-green/60 hover:bg-sig-green-dim cursor-pointer'
-          : 'border-wiz-border/50 text-wiz-gray  cursor-not-allowed',
+        'flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border font-mono text-xs w-full',
+        'transition-all duration-150 whitespace-nowrap cursor-pointer',
+        status === 'active'
+          ? 'border-wiz-gold       text-wiz-gold    bg-wiz-gold/5          shadow-gold-sm'
+          : status === 'complete'
+          ? 'border-sig-green/40   text-sig-green   bg-sig-green-dim/60    hover:border-sig-green/60  hover:bg-sig-green-dim'
+          : status === 'incomplete'
+          ? 'border-sig-yellow/40  text-sig-yellow  bg-sig-yellow-dim/40   hover:border-sig-yellow/60 hover:bg-sig-yellow-dim'
+          : /* unvisited */
+            'border-wiz-border/50  text-wiz-muted   bg-wiz-bg              hover:border-wiz-border    hover:text-wiz-gray',
       )}
     >
-      {/* Number / checkmark badge */}
+      {/* Number / icon badge */}
       <span className={clsx(
         'flex-shrink-0 flex items-center justify-center',
-        active    ? 'text-wiz-gold'  :
-        completed ? 'text-sig-green' :
-                    'text-wiz-muted',
+        status === 'active'     ? 'text-wiz-gold'   :
+        status === 'complete'   ? 'text-sig-green'  :
+        status === 'incomplete' ? 'text-sig-yellow' :
+                                  'text-wiz-muted',
       )}>
-        {completed
-          ? <Check size={12} strokeWidth={2.5} />
+        {status === 'complete'
+          ? <Check         size={12} strokeWidth={2.5} />
+          : status === 'incomplete'
+          ? <AlertTriangle size={12} strokeWidth={2.5} />
           : <span className="font-bold text-xs">{num}</span>
         }
       </span>
@@ -226,9 +282,13 @@ interface UploadZoneProps {
   value:    File | null
   onChange: (file: File | null) => void
   error?:   string
+  /** Restrict the file picker. Defaults to '.jar,.zip'. */
+  accept?:  string
+  /** id for the hidden <input>. Must be unique per page when multiple zones are rendered. */
+  inputId?: string
 }
 
-function UploadZone({ value, onChange, error }: UploadZoneProps) {
+function UploadZone({ value, onChange, error, accept = '.jar,.zip', inputId = 'artifact-file' }: UploadZoneProps) {
   const [dragging, setDragging] = useState(false)
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -238,13 +298,19 @@ function UploadZone({ value, onChange, error }: UploadZoneProps) {
     if (f) onChange(f)
   }
 
+  // Human-readable label shown inside the empty drop zone
+  const fileLabel =
+    accept === '.zip' ? '.zip bundle' :
+    accept === '.jar' ? '.jar file'   :
+                        '.jar or .zip'
+
   return (
-    <FieldWrapper label="" name="artifact" error={error}>
+    <FieldWrapper label="" name={inputId} error={error}>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('artifact-file')?.click()}
+        onClick={() => document.getElementById(inputId)?.click()}
         className={clsx(
           'flex flex-col items-center justify-center gap-3',
           'min-h-[200px] rounded-xl cursor-pointer',
@@ -259,9 +325,9 @@ function UploadZone({ value, onChange, error }: UploadZoneProps) {
         )}
       >
         <input
-          id="artifact-file"
+          id={inputId}
           type="file"
-          accept=".jar"
+          accept={accept}
           className="sr-only"
           onChange={(e) => onChange(e.target.files?.[0] ?? null)}
         />
@@ -292,15 +358,120 @@ function UploadZone({ value, onChange, error }: UploadZoneProps) {
             </div>
             <div className="text-center">
               <p className="text-base font-medium text-wiz-gray">
-                Click to select JAR artifact
+                Click to select artifact
               </p>
-              <p className="text-sm text-wiz-muted mt-1">.jar files only</p>
+              <p className="text-sm text-wiz-muted mt-1 font-mono">{fileLabel}</p>
             </div>
           </>
         )}
       </div>
     </FieldWrapper>
   )
+}
+
+// ── Compact inline file upload (for per-row cert / extra-dir entries) ────
+
+interface MiniUploadProps {
+  value:    File | null
+  onChange: (file: File | null) => void
+  accept:   string
+  /** Unique id for the hidden <input> element — must be distinct per row. */
+  inputId:  string
+}
+
+function MiniUpload({ value, onChange, accept, inputId }: MiniUploadProps) {
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sig-green/40 bg-sig-green-dim text-xs">
+        <Check size={11} className="text-sig-green flex-shrink-0" />
+        <span className="font-mono text-wiz-cream truncate flex-1">{value.name}</span>
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="btn-icon h-5 w-5 text-wiz-muted hover:text-sig-red flex-shrink-0"
+          aria-label="Remove file"
+        >
+          <X size={11} />
+        </button>
+      </div>
+    )
+  }
+  return (
+    <>
+      <input
+        id={inputId}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+      />
+      <button
+        type="button"
+        onClick={() => document.getElementById(inputId)?.click()}
+        className={clsx(
+          'flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed',
+          'border-wiz-border bg-wiz-bg font-mono text-xs text-wiz-muted',
+          'hover:border-wiz-border-mid hover:text-wiz-gray hover:bg-wiz-surface',
+          'transition-all duration-150',
+        )}
+      >
+        <Upload size={11} />
+        Click to upload
+      </button>
+    </>
+  )
+}
+
+// ── localStorage pre-fill ─────────────────────────────────────────
+
+const LAST_DEPLOY_KEY = 'wizardcd-last-deployment'
+
+// File objects can't be serialised to JSON, so we persist every field
+// EXCEPT the actual File references (JAR, libZip, cert/extra ZIPs).
+interface SavedCertUpload {
+  source:     string
+  targetPath: string
+}
+interface SavedExtraDirUpload {
+  dirName:    string
+  targetPath: string
+}
+interface SavedDeployment {
+  savedAt:        string   // ISO timestamp used to display "X ago"
+  environment:    string
+  sshUser:        string
+  sshHost:        string
+  sshPort:        string
+  targetBasePath: string
+  appName:        string
+  mainClass:      string
+  javaCommand:    string
+  javaVersion:    string
+  xms:            string
+  xmx:            string
+  newRatio:       string
+  extraOpts:      string[]
+  runAsUser:      string
+  serverPort:     string
+  maxLogSize:     string
+  maxLogFiles:    string
+  jarType:        'fat' | 'thin'
+  performBackup:  boolean
+  maxBackups:     string
+  jarName:        string
+  certUploads:    SavedCertUpload[]
+  extraDirs:      SavedExtraDirUpload[]
+}
+
+function formatRelativeTime(isoString: string): string {
+  const diff  = Date.now() - new Date(isoString).getTime()
+  const mins  = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days  = Math.floor(diff / 86_400_000)
+  if (mins  < 1)  return 'just now'
+  if (mins  < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
 }
 
 // ── Main Page ─────────────────────────────────────────────────────
@@ -314,15 +485,41 @@ export default function DeployPage() {
   const [form,      setForm]      = useState<FormState>(INITIAL)
   const [errors,    setErrors]    = useState<FormErrors>({})
   const [submitting,setSubmitting]= useState(false)
+  // null = not uploading; 0–100 = upload in progress; 100 = upload done, awaiting server response
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  // Per-file upload info and individual progress percentages (parallel arrays)
+  interface UploadFileInfo { label: string; name: string; size: number }
+  const [uploadFiles, setUploadFiles] = useState<UploadFileInfo[]>([])
+  const [fileProgresses, setFileProgresses] = useState<number[]>([])
 
-  // ── Runner public keys & SSH test ──────────────────────────────
+  // ── Last-deployment pre-fill ────────────────────────────────────
+  const [savedDeployment,  setSavedDeployment]  = useState<SavedDeployment | null>(null)
+  const [showPrefillBanner, setShowPrefillBanner] = useState(false)
+
+  // ── Runner public keys, runner info & SSH test ──────────────────
   const [publicKeys,    setPublicKeys]    = useState<Record<string, string> | null>(null)
   const [keysLoading,   setKeysLoading]   = useState(false)
   const [keysError,     setKeysError]     = useState<string | null>(null)
   const [copiedKey,     setCopiedKey]     = useState(false)
   const [copiedScript,  setCopiedScript]  = useState(false)
+  const [runnerPublicIp, setRunnerPublicIp] = useState<string>('')
+  const [copiedIp,       setCopiedIp]      = useState(false)
   const [testConnState, setTestConnState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [testConnMsg,   setTestConnMsg]   = useState<string | null>(null)
+
+  // Check localStorage for a saved deployment on mount and offer to pre-fill
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LAST_DEPLOY_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as SavedDeployment
+        setSavedDeployment(parsed)
+        setShowPrefillBanner(true)
+      }
+    } catch {
+      // Corrupt or missing — ignore silently
+    }
+  }, [])
 
   // Keep the environment field in sync with whatever the user picks in Settings.
   // This runs whenever activeEnv changes so the form always reflects the
@@ -331,13 +528,17 @@ export default function DeployPage() {
     setForm((prev) => ({ ...prev, environment: activeEnv }))
   }, [activeEnv])
 
-  // Fetch runner SSH public keys once on mount
+  // Fetch runner SSH public keys and runner info once on mount
   useEffect(() => {
     setKeysLoading(true)
     fetchRunnerPublicKeys()
       .then((keys) => { setPublicKeys(keys); setKeysError(null) })
       .catch(() => setKeysError('Could not fetch runner public keys. Please contact your administrator.'))
       .finally(() => setKeysLoading(false))
+
+    fetchRunnerInfo()
+      .then((info) => setRunnerPublicIp(info.publicIp))
+      .catch(() => {})
   }, [])
 
   // Reset test-connection state whenever SSH connection fields change
@@ -351,21 +552,34 @@ export default function DeployPage() {
     setErrors((p) => { const n = { ...p }; delete n[key]; return n })
   }, [])
 
-  // Handle artifact upload and auto-fill jarName
-  const handleArtifact = (file: File | null) => {
-    set('artifact', file)
-    if (file) set('jarName', file.name)
+  // Handle JAR artifact upload.
+  // Auto-fills jarName from the filename when a .jar is selected.
+  const handleJarArtifact = (file: File | null) => {
+    set('jarArtifact', file)
+    if (file?.name.toLowerCase().endsWith('.jar')) {
+      set('jarName', file.name)
+    } else {
+      set('jarName', '')
+    }
   }
 
   const goTo = (n: number) => {
     setErrors({})
+    setVisited((prev) => new Set([...prev, n]))
     setStep(n)
   }
 
+  // Navigate to a step and then scroll smoothly to a specific panel within it.
+  // The timeout gives React time to render the new step before scrollIntoView runs.
+  const goToAndScroll = (n: number, panelId: string) => {
+    goTo(n)
+    setTimeout(() => {
+      document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
+  }
+
   const handleNext = () => {
-    const errs = validateStep(step, form)
-    setErrors(errs)
-    if (Object.keys(errs).length > 0) return
+    setErrors({})
     const next = step + 1
     setVisited((prev) => new Set([...prev, next]))
     setStep(next)
@@ -377,32 +591,111 @@ export default function DeployPage() {
   }
 
   const handleSubmit = async () => {
-    // Final validation of all steps
+    // Reveal all step statuses before validation so the user can see which tabs
+    // are highlighted as incomplete (yellow warning triangles).
+    setVisited(new Set([1, 2, 3, 4, 5, 6]))
+
+    // Final validation of all steps — collect errors and incomplete step names
     let allErrors: FormErrors = {}
+    const incompleteStepLabels: string[] = []
     for (let s = 1; s <= 6; s++) {
-      allErrors = { ...allErrors, ...validateStep(s, form) }
+      const stepErrors = validateStep(s, form)
+      if (Object.keys(stepErrors).length > 0) {
+        incompleteStepLabels.push(STEPS[s - 1].label)
+        allErrors = { ...allErrors, ...stepErrors }
+      }
     }
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors)
-      toast.error('Please complete all required fields.')
+      toast.error(`Incomplete: ${incompleteStepLabels.join(', ')}`)
       return
     }
 
     setSubmitting(true)
+    setUploadProgress(0)
     try {
-      const req = buildRequest(form)
-      const res = await submitJob(req, form.artifact!)
+      const req        = buildRequest(form)
+      const certFiles  = form.certUploads.filter((c) => c.file).map((c) => c.file!)
+      const extraFiles = form.extraDirs.filter((d) => d.file).map((d) => d.file!)
+
+      // Build ordered file list matching the FormData append order in submitJob
+      const fileList: { label: string; name: string; size: number }[] = [
+        { label: 'Application JAR', name: form.jarArtifact!.name, size: form.jarArtifact!.size },
+        ...(form.libZip ? [{ label: 'Library ZIP', name: form.libZip.name, size: form.libZip.size }] : []),
+        ...certFiles.map((f, i) => ({ label: `Cert: ${form.certUploads.filter((c) => c.file)[i]?.source || i + 1}`, name: f.name, size: f.size })),
+        ...extraFiles.map((f, i) => ({ label: `Dir: ${form.extraDirs.filter((d) => d.file)[i]?.dirName || i + 1}`, name: f.name, size: f.size })),
+      ]
+      const totalFileBytes = fileList.reduce((s, f) => s + f.size, 0)
+      setUploadFiles(fileList)
+      setFileProgresses(new Array(fileList.length).fill(0))
+
+      const res = await submitJob(
+        req,
+        form.jarArtifact!,
+        form.libZip ?? undefined,
+        certFiles.length  > 0 ? certFiles  : undefined,
+        extraFiles.length > 0 ? extraFiles : undefined,
+        (loaded, total) => {
+          setUploadProgress(Math.round((loaded * 100) / total))
+          if (totalFileBytes > 0) {
+            const scale = total / totalFileBytes
+            setFileProgresses(fileList.map((f, i) => {
+              const cumStart = fileList.slice(0, i).reduce((s, x) => s + x.size, 0) * scale
+              const scaledSize = f.size * scale
+              return Math.min(100, Math.max(0, Math.round((loaded - cumStart) / scaledSize * 100)))
+            }))
+          }
+        },
+      )
       toast.success(`Deployment started — Job ${res.jobId.slice(0, 8)}`)
+
+      // Persist a snapshot of this deployment (without File objects) so the
+      // user can pre-fill the form on their next visit.
+      try {
+        const saved: SavedDeployment = {
+          savedAt:        new Date().toISOString(),
+          environment:    form.environment,
+          sshUser:        form.sshUser,
+          sshHost:        form.sshHost,
+          sshPort:        form.sshPort,
+          targetBasePath: form.targetBasePath,
+          appName:        form.appName,
+          mainClass:      form.mainClass,
+          javaCommand:    form.javaCommand,
+          javaVersion:    form.javaVersion,
+          xms:            form.xms,
+          xmx:            form.xmx,
+          newRatio:       form.newRatio,
+          extraOpts:      form.extraOpts,
+          runAsUser:      form.runAsUser,
+          serverPort:     form.serverPort,
+          maxLogSize:     form.maxLogSize,
+          maxLogFiles:    form.maxLogFiles,
+          jarType:        form.jarType,
+          performBackup:  form.performBackup,
+          maxBackups:     form.maxBackups,
+          jarName:        form.jarName,
+          certUploads:    form.certUploads.map((c) => ({ source: c.source, targetPath: c.targetPath })),
+          extraDirs:      form.extraDirs.map((d)  => ({ dirName: d.dirName, targetPath: d.targetPath })),
+        }
+        localStorage.setItem(LAST_DEPLOY_KEY, JSON.stringify(saved))
+      } catch {
+        // localStorage quota exceeded or unavailable — not critical
+      }
+
       navigate(`/jobs/${res.jobId}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Deployment failed to start.'
       toast.error(msg)
+      setUploadProgress(null)
+      setUploadFiles([])
+      setFileProgresses([])
     } finally {
       setSubmitting(false)
     }
   }
 
-  // ── SSH key panel — derived values (Step 4) ──────────────────────
+  // ── SSH key panel — derived values (Step 1) ───────────────────────
   const envKeyStyle = ENV_KEY_STYLE[form.environment as keyof typeof ENV_KEY_STYLE] ?? ENV_KEY_STYLE.SIT
   const envKey      = publicKeys?.[form.environment] ?? ''
   const setupScript = [
@@ -411,6 +704,14 @@ export default function DeployPage() {
     `echo "${envKey}" >> ~/.ssh/authorized_keys && \\`,
     'chmod 600 ~/.ssh/authorized_keys',
   ].join('\n')
+
+  // Step 1 gate: all required SSH fields must be filled AND connection test must pass
+  // before the user can advance. Used to disable the Next button and show a hint.
+  const isStep1Valid =
+    form.sshUser.trim()        !== '' &&
+    form.sshHost.trim()        !== '' &&
+    form.sshPort.trim()        !== '' &&
+    form.targetBasePath.trim() !== ''
 
   const handleCopyKey = () => {
     if (!envKey) return
@@ -424,6 +725,13 @@ export default function DeployPage() {
     void navigator.clipboard.writeText(setupScript)
     setCopiedScript(true)
     setTimeout(() => setCopiedScript(false), 2000)
+  }
+
+  const handleCopyIp = () => {
+    if (!runnerPublicIp) return
+    void navigator.clipboard.writeText(runnerPublicIp)
+    setCopiedIp(true)
+    setTimeout(() => setCopiedIp(false), 2000)
   }
 
   const handleTestConnection = async () => {
@@ -444,6 +752,46 @@ export default function DeployPage() {
     }
   }
 
+  // Apply the saved deployment values to the live form.
+  // File references (JAR, ZIPs) are intentionally left as null —
+  // the user will need to re-upload their files each time.
+  const handlePrefill = () => {
+    if (!savedDeployment) return
+    setForm((prev) => ({
+      ...prev,
+      environment:    savedDeployment.environment,
+      sshUser:        savedDeployment.sshUser,
+      sshHost:        savedDeployment.sshHost,
+      sshPort:        savedDeployment.sshPort,
+      targetBasePath: savedDeployment.targetBasePath,
+      appName:        savedDeployment.appName,
+      mainClass:      savedDeployment.mainClass,
+      javaCommand:    savedDeployment.javaCommand,
+      javaVersion:    savedDeployment.javaVersion,
+      xms:            savedDeployment.xms,
+      xmx:            savedDeployment.xmx,
+      newRatio:       savedDeployment.newRatio,
+      extraOpts:      savedDeployment.extraOpts,
+      runAsUser:      savedDeployment.runAsUser,
+      serverPort:     savedDeployment.serverPort,
+      maxLogSize:     savedDeployment.maxLogSize,
+      maxLogFiles:    savedDeployment.maxLogFiles,
+      jarType:        savedDeployment.jarType,
+      performBackup:  savedDeployment.performBackup,
+      maxBackups:     savedDeployment.maxBackups,
+      jarName:        savedDeployment.jarName,
+      // Restore cert / extra-dir config (paths only — files must be re-uploaded)
+      certUploads: savedDeployment.certUploads.map((c) => ({ ...c, file: null })),
+      extraDirs:   savedDeployment.extraDirs.map((d)  => ({ ...d, file: null })),
+    }))
+    setShowPrefillBanner(false)
+    toast.success('Form pre-filled — please re-upload your files.')
+  }
+
+  const handleDismissPrefill = () => {
+    setShowPrefillBanner(false)
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl animate-fade-in">
 
@@ -455,15 +803,123 @@ export default function DeployPage() {
         </p>
       </div>
 
+      {/* ── Pre-fill banner ── */}
+      {showPrefillBanner && savedDeployment && (
+        <div className="rounded-xl border border-wiz-gold/30 bg-wiz-gold-dim flex items-center gap-3.5 px-4 py-3.5 animate-fade-in">
+          <Clock size={16} className="text-wiz-gold flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-wiz-gold leading-snug">
+              Continue last deployment?
+            </p>
+            <p className="text-xs text-wiz-muted mt-0.5 truncate">
+              {savedDeployment.appName || 'Unknown app'} · {savedDeployment.environment} · {formatRelativeTime(savedDeployment.savedAt)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handlePrefill}
+              className="px-3 py-1.5 rounded-lg border border-wiz-gold/50 bg-wiz-gold/10 text-xs font-semibold text-wiz-gold hover:bg-wiz-gold/20 transition-colors"
+            >
+              Pre-fill values
+            </button>
+            <button
+              type="button"
+              onClick={handleDismissPrefill}
+              className="btn-icon h-7 w-7 text-wiz-muted hover:text-sig-red"
+              aria-label="Dismiss"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Upload progress panel (replaces step tabs + card while uploading) ── */}
+      {uploadProgress !== null ? (
+        <div className="wiz-card p-8 flex flex-col gap-6 animate-fade-in">
+          {/* Header */}
+          <div className="flex flex-col gap-1">
+            <p className="text-base font-semibold text-wiz-cream">
+              {uploadProgress < 100 ? 'Uploading files to runner…' : 'Processing deployment…'}
+            </p>
+            <p className="text-sm text-wiz-muted">
+              {uploadProgress < 100
+                ? `Transferring ${form.jarArtifact?.name ?? 'artifact'} and any additional ZIPs over the network.`
+                : 'Upload complete. The runner is initialising your deployment workspace.'}
+            </p>
+          </div>
+
+          {/* Overall progress bar */}
+          <div className="flex flex-col gap-2">
+            <div className="h-2.5 rounded-full bg-wiz-raised overflow-hidden">
+              <div
+                className="h-full rounded-full bg-wiz-gold transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-wiz-muted font-mono">
+              <span>{uploadProgress! < 100 ? `${uploadProgress}% uploaded` : '100% — awaiting server…'}</span>
+              {uploadFiles.length > 0 && (
+                <span>
+                  {(uploadFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB total
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Per-file progress list */}
+          <div className="flex flex-col gap-2">
+            {uploadFiles.map((f, i) => {
+              const pct = fileProgresses[i] ?? 0
+              const done = pct >= 100
+              return (
+                <div key={i} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    {done
+                      ? <Check size={11} className="text-sig-green flex-shrink-0" />
+                      : <Loader2 size={11} className="animate-spin text-wiz-muted flex-shrink-0" />
+                    }
+                    <span className={clsx('font-mono truncate flex-1', done ? 'text-wiz-gray' : 'text-wiz-muted')}>
+                      {f.name}
+                    </span>
+                    <span className="text-wiz-dim flex-shrink-0">— {f.label}</span>
+                    <span className={clsx('font-mono ml-2 flex-shrink-0 w-10 text-right', done ? 'text-sig-green' : 'text-wiz-muted')}>
+                      {pct}%
+                    </span>
+                  </div>
+                  <div className="h-1 rounded-full bg-wiz-raised overflow-hidden ml-[19px]">
+                    <div
+                      className={clsx('h-full rounded-full transition-all duration-200', done ? 'bg-sig-green' : 'bg-wiz-gold/60')}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Spinner hint */}
+          <div className="flex items-center gap-2 text-xs text-wiz-muted">
+            <Loader2 size={13} className="animate-spin text-wiz-gold flex-shrink-0" />
+            <span>
+              {uploadProgress < 100
+                ? 'Do not close this tab — upload in progress.'
+                : 'You will be redirected to the job monitor automatically.'}
+            </span>
+          </div>
+        </div>
+      ) : (
+      <>
+
       {/* ── Step tabs ── */}
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-6 gap-1.5">
         {STEPS.map((s) => (
           <StepTab
             key={s.id}
             num={s.num}
             label={s.label}
-            active={step === s.id}
-            visited={visited.has(s.id)}
+            status={getStepStatus(s.id, step, visited, form)}
             onClick={() => goTo(s.id)}
           />
         ))}
@@ -472,48 +928,401 @@ export default function DeployPage() {
       {/* ── Step content card ── */}
       <div className="wiz-card p-6 animate-fade-in" key={step}>
 
-        {/* ─── Step 1: Identity ──────────────────────────────── */}
+        {/* ─── Step 1: SSH Target ────────────────────────────── */}
         {step === 1 && (
           <>
-            <StepHeading num="01" label="Identity" />
-            <div className="grid grid-cols-2 gap-4">
+            <StepHeading num="01" label="Target Server" />
+            <div className="flex flex-col gap-5">
+
+              {/* ── SSH TARGET CONFIGURATION PANEL ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                {/* Panel header */}
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    SSH Target Configuration
+                  </h3>
+                </div>
+                {/* Panel body */}
+                <div className="p-5 flex flex-col gap-5">
+                  {/* Environment — determines which SSH key the runner uses */}
+                  <SelectField
+                    label="ENVIRONMENT"
+                    name="environment"
+                    required
+                    hint="Deployment environment profile. Determines which SSH key the runner uses to connect, and the Spring profile activated on the target server."
+                    value={form.environment}
+                    onChange={(e) => {
+                      set('environment', e.target.value)
+                      setActiveEnv(e.target.value as ActiveEnv)
+                    }}
+                    options={[
+                      { value: 'SIT',  label: 'SIT — System Integration Testing' },
+                      { value: 'UAT',  label: 'UAT — User Acceptance Testing' },
+                      { value: 'PROD', label: 'PROD — Production' },
+                    ]}
+                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      label="SSH USER"
+                      name="sshUser"
+                      required
+                      placeholder="deploy"
+                      hint="Linux user used to connect to the target server via SSH (e.g. deploy, ubuntu, ec2-user)"
+                      value={form.sshUser}
+                      onChange={(e) => set('sshUser', e.target.value)}
+                      error={errors.sshUser}
+                    />
+                    <FormField
+                      label="SSH HOST"
+                      name="sshHost"
+                      required
+                      placeholder="192.168.56.10"
+                      hint="Public IP or hostname the runner uses to SSH into this server. Use the server's Elastic IP (AWS), static public IP (GCP/Azure), or a DNS hostname."
+                      value={form.sshHost}
+                      onChange={(e) => set('sshHost', e.target.value)}
+                      error={errors.sshHost}
+                    />
+                    <FormField
+                      label="SSH PORT"
+                      name="sshPort"
+                      required
+                      type="number"
+                      placeholder="22"
+                      hint="Port used by the SSH service on the target server (default: 22)"
+                      value={form.sshPort}
+                      onChange={(e) => set('sshPort', e.target.value)}
+                      error={errors.sshPort}
+                    />
+                  </div>
+                  <FormField
+                    label="TARGET BASE PATH"
+                    name="targetBasePath"
+                    required
+                    placeholder="/opt/apps/my-service"
+                    hint="Directory on the target server where the application will be deployed"
+                    value={form.targetBasePath}
+                    onChange={(e) => set('targetBasePath', e.target.value)}
+                    error={errors.targetBasePath}
+                  />
+                </div>
+              </div>
+
+              {/* ── FIREWALL SETUP PANEL ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-panel overflow-hidden">
+                {/* Panel header */}
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/40">
+                  <Shield size={13} className="text-sig-blue opacity-80 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                    Firewall Setup
+                  </h3>
+                </div>
+                {/* Panel body */}
+                <div className="p-5 flex flex-col gap-5">
+                  <p className="text-xs text-wiz-muted leading-relaxed">
+                    Before testing the connection, allow SSH (port&nbsp;22) from the WizardCD
+                    runner on your target server's firewall.
+                  </p>
+
+                  {/* Runner IP display + copy */}
+                  <div className="flex flex-col gap-2">
+                    <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                      Runner Public IP
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-h-[40px] flex items-center bg-wiz-bg border border-wiz-border rounded-lg px-4
+                                      font-mono text-sm text-wiz-cream select-all">
+                        {runnerPublicIp
+                          ? runnerPublicIp
+                          : <span className="text-wiz-muted italic text-xs">Detecting…</span>
+                        }
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyIp}
+                        disabled={!runnerPublicIp}
+                        className={clsx(
+                          'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 rounded-md h-10',
+                          'border transition-all duration-150 disabled:opacity-40',
+                          copiedIp
+                            ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
+                            : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
+                        )}
+                      >
+                        {copiedIp
+                          ? <><Check size={11} /> Copied!</>
+                          : <><Copy  size={11} /> Copy</>
+                        }
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Per-platform whitelist reference table */}
+                  <div className="flex flex-col gap-2">
+                    <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                      Whitelist Command Reference
+                    </p>
+                    <div className="rounded-lg border border-wiz-border overflow-hidden">
+                      <table className="w-full text-xs font-mono">
+                        <thead>
+                          <tr className="bg-wiz-raised border-b border-wiz-border/60">
+                            <th className="text-left px-4 py-2.5 text-wiz-muted font-semibold uppercase tracking-wider w-44">
+                              Platform
+                            </th>
+                            <th className="text-left px-4 py-2.5 text-wiz-muted font-semibold uppercase tracking-wider">
+                              Rule
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-wiz-border/40">
+                          {[
+                            {
+                              platform: 'AWS Security Group',
+                              rule: `Inbound: SSH  TCP  22  ${runnerPublicIp || '<IP>'}/32`,
+                            },
+                            {
+                              platform: 'GCP Firewall',
+                              rule: `Source ranges: ${runnerPublicIp || '<IP>'}/32  Port: 22`,
+                            },
+                            {
+                              platform: 'Azure NSG',
+                              rule: `Source: ${runnerPublicIp || '<IP>'}/32  Dest port: 22  Allow`,
+                            },
+                            {
+                              platform: 'iptables',
+                              rule: `sudo iptables -A INPUT -s ${runnerPublicIp || '<IP>'} -p tcp --dport 22 -j ACCEPT`,
+                            },
+                          ].map(({ platform, rule }) => (
+                            <tr key={platform} className="bg-wiz-bg hover:bg-wiz-surface/50 transition-colors">
+                              <td className="px-4 py-2.5 text-wiz-gray font-semibold">{platform}</td>
+                              <td className="px-4 py-2.5 text-wiz-cream/80 break-all">{rule}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* ── SSH KEYS CONFIGURATION PANEL ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                {/* Panel header */}
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    SSH Keys Configuration
+                  </h3>
+                </div>
+                {/* Panel body */}
+                <div className="p-5 flex flex-col gap-5">
+
+                  {/* ── Per-environment runner public key panel ── */}
+                  <div className={clsx(
+                    'rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden',
+                    envKeyStyle.border,
+                  )}>
+                    {/* Panel header */}
+                    <div className={clsx(
+                      'flex items-center gap-2.5 px-5 py-3.5',
+                      'border-b border-wiz-border/60',
+                      envKeyStyle.header,
+                    )}>
+                      <Key size={13} className={clsx(envKeyStyle.text, 'flex-shrink-0 opacity-80')} />
+                      <h3 className={clsx('font-mono font-semibold text-xs uppercase tracking-widest', envKeyStyle.text)}>
+                        {form.environment} — Runner Public Key
+                      </h3>
+                    </div>
+
+                    {/* Panel body */}
+                    <div className="p-5 flex flex-col gap-5">
+                      {keysLoading ? (
+                        <div className="flex items-center gap-2 text-wiz-muted text-xs py-2">
+                          <Loader2 size={13} className="animate-spin" />
+                          Fetching runner public key…
+                        </div>
+                      ) : keysError ? (
+                        <p className="text-xs text-sig-red">{keysError}</p>
+                      ) : (
+                        <>
+                          {/* Intro */}
+                          <p className="text-xs text-wiz-muted leading-relaxed">
+                            The runner uses this key to SSH into your server. Authorise it for the{' '}
+                            <span className="font-mono text-wiz-cream">{form.sshUser || 'SSH user'}</span>{' '}
+                            account on{' '}
+                            <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
+                            using either option below.
+                          </p>
+
+                          {/* ── Option A — Add key manually ── */}
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                                Option A — Add key manually
+                              </p>
+                              <button
+                                type="button"
+                                onClick={handleCopyKey}
+                                disabled={!envKey}
+                                className={clsx(
+                                  'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
+                                  'border transition-all duration-150 disabled:opacity-40',
+                                  copiedKey
+                                    ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
+                                    : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
+                                )}
+                              >
+                                {copiedKey
+                                  ? <><Check size={11} /> Copied!</>
+                                  : <><Copy  size={11} /> Copy Key</>
+                                }
+                              </button>
+                            </div>
+                            <p className="text-xs text-wiz-muted leading-relaxed">
+                              Copy this key and append it to{' '}
+                              <span className="font-mono text-wiz-cream">~/.ssh/authorized_keys</span>{' '}
+                              on{' '}
+                              <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
+                              under the{' '}
+                              <span className="font-mono text-wiz-cream">{form.sshUser || 'SSH user'}</span>{' '}
+                              account.
+                            </p>
+                            <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3
+                                            font-mono text-xs text-wiz-gray break-all leading-relaxed select-all">
+                              {envKey || (
+                                <span className="text-wiz-muted italic">
+                                  Key not available for {form.environment}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── "or" divider ── */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 h-px bg-wiz-border/60" />
+                            <span className="font-mono text-xs text-wiz-muted uppercase tracking-widest">or</span>
+                            <div className="flex-1 h-px bg-wiz-border/60" />
+                          </div>
+
+                          {/* ── Option B — Setup Script (Recommended) ── */}
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                                Option B — Setup script{' '}
+                                <span className="ml-1 normal-case tracking-normal font-normal text-sig-green">
+                                  · Recommended
+                                </span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={handleCopyScript}
+                                disabled={!envKey}
+                                className={clsx(
+                                  'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
+                                  'border transition-all duration-150 disabled:opacity-40',
+                                  copiedScript
+                                    ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
+                                    : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
+                                )}
+                              >
+                                {copiedScript
+                                  ? <><Check size={11} /> Copied!</>
+                                  : <><Copy  size={11} /> Copy Script</>
+                                }
+                              </button>
+                            </div>
+                            <p className="text-xs text-wiz-muted leading-relaxed">
+                              SSH into{' '}
+                              <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
+                              as{' '}
+                              <span className="font-mono text-wiz-cream">{form.sshUser || 'the SSH user'}</span>{' '}
+                              and run this script. It creates{' '}
+                              <span className="font-mono text-wiz-cream">.ssh</span>{' '}
+                              with correct permissions and appends the key to{' '}
+                              <span className="font-mono text-wiz-cream">authorized_keys</span>{' '}
+                              automatically.
+                            </p>
+                            <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 overflow-x-auto">
+                              <pre className="font-mono text-xs text-wiz-gray leading-6 whitespace-pre m-0 select-all">{setupScript}</pre>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Test Connection ── */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void handleTestConnection()}
+                      disabled={!form.sshUser || !form.sshHost || !form.sshPort || testConnState === 'testing'}
+                      className={clsx(
+                        'btn-secondary gap-2',
+                        testConnState === 'ok'   && 'border-sig-green/40 text-sig-green hover:border-sig-green/60',
+                        testConnState === 'fail' && 'border-sig-red/40   text-sig-red   hover:border-sig-red/60',
+                      )}
+                    >
+                      {testConnState === 'testing'
+                        ? <><Loader2 size={13} className="animate-spin" /> Testing Connection…</>
+                        : testConnState === 'ok'
+                        ? <><Wifi    size={13} /> Connection OK</>
+                        : testConnState === 'fail'
+                        ? <><WifiOff size={13} /> Connection Failed</>
+                        : <><Wifi    size={13} /> Test Connection</>
+                      }
+                    </button>
+                    {testConnMsg && (
+                      <p className={clsx(
+                        'text-xs',
+                        testConnState === 'ok' ? 'text-sig-green' : 'text-sig-red',
+                      )}>
+                        {testConnMsg}
+                      </p>
+                    )}
+                  </div>
+
+                </div>{/* ── end SSH KEYS panel body ── */}
+              </div>{/* ── end SSH KEYS CONFIGURATION PANEL ── */}
+
+            </div>
+          </>
+        )}
+
+        {/* ─── Step 2: Identity ──────────────────────────────── */}
+        {step === 2 && (
+          <>
+            <StepHeading num="02" label="Application" />
+            <div className="flex flex-col gap-5">
               <FormField
-                label="APP NAME"    name="appName" required
-                placeholder="my-app-service-name"
-                hint="Application Name as per application.yml file"
-                value={form.appName} onChange={(e) => set('appName', e.target.value)}
+                label="APP NAME"
+                name="appName"
+                required
+                placeholder="my-service-ms"
+                hint="Unique application identifier. Typically the Spring Boot service name defined in application.yml (spring.application.name)"
+                value={form.appName}
+                onChange={(e) => set('appName', e.target.value)}
                 error={errors.appName}
               />
-              <SelectField
-                label="ENVIRONMENT" name="environment" required
-                hint="Environment profile as per application.yml file"
-                value={form.environment}
-                onChange={(e) => {
-                  set('environment', e.target.value)
-                  setActiveEnv(e.target.value as ActiveEnv)
-                }}
-                options={[
-                  { value: 'SIT',  label: 'SIT — System Integration Testing' },
-                  { value: 'UAT',  label: 'UAT — User Acceptance Testing'    },
-                  { value: 'PROD', label: 'PROD — Production'                },
-                ]}
-              />
               <FormField
-                label="MAIN CLASS"  name="mainClass" required
-                placeholder="com.example.MyApplication"
-                hint="Required for thin JAR; Spring Boot fat JARs ignore this"
-                value={form.mainClass} onChange={(e) => set('mainClass', e.target.value)}
+                label="MAIN CLASS"
+                name="mainClass"
+                required
+                placeholder="com.example.MyServiceMsApplication"
+                hint="Fully qualified Spring Boot main class used to start the application"
+                value={form.mainClass}
+                onChange={(e) => set('mainClass', e.target.value)}
                 error={errors.mainClass}
-                className="col-span-2"
               />
             </div>
           </>
         )}
 
-        {/* ─── Step 2: Java / JVM ────────────────────────────── */}
-        {step === 2 && (
+        {/* ─── Step 3: Java / JVM ────────────────────────────── */}
+        {step === 3 && (
           <>
-            <StepHeading num="02" label="Java / JVM" />
+            <StepHeading num="03" label="Java" />
 
             <div className="flex flex-col gap-5">
 
@@ -611,314 +1420,335 @@ export default function DeployPage() {
           </>
         )}
 
-        {/* ─── Step 3: Runtime ───────────────────────────────── */}
-        {step === 3 && (
-          <>
-            <StepHeading num="03" label="Runtime" />
-            <div className="flex flex-col gap-10">
-              <div className="grid grid-cols-2 gap-10">
-                 <FormField
-                  label="RUN AS USER"
-                  name="runAsUser"
-                  required
-                  placeholder="appuser"
-                  hint="Linux user account that will run the JVM process on the target server (e.g. appuser, tomcat, vagrant)"
-                  value={form.runAsUser}
-                  onChange={(e) => set('runAsUser', e.target.value)}
-                  error={errors.runAsUser}
-                />
-                <FormField
-                  label="SERVER PORT"
-                  name="serverPort"
-                  required
-                  type="number"
-                  placeholder="8080"
-                  hint="HTTP(S) port the application listens on. Must match server.port value in application.yml"
-                  value={form.serverPort}
-                  onChange={(e) => set('serverPort', e.target.value)}
-                  error={errors.serverPort}
-                />
-                <FormField
-                  label="MAX LOG SIZE"
-                  name="maxLogSize"
-                  placeholder="10m"
-                  hint="Maximum size of a single application log file before rotation (e.g. 10m, 100m)"
-                  value={form.maxLogSize}
-                  onChange={(e) => set('maxLogSize', e.target.value)}
-                />
-                <FormField
-                  label="MAX LOG FILES"
-                  name="maxLogFiles"
-                  type="number"
-                  placeholder="10"
-                  hint="Maximum number of rotated log files retained before older logs are deleted"
-                  value={form.maxLogFiles}
-                  onChange={(e) => set('maxLogFiles', e.target.value)}
-                />
-              </div>
-              <FormField
-                label="LIB PATH"
-                name="libPath"
-                placeholder="lib"
-                hint="Directory containing Spring Boot external dependency JARs. Set to lib for thin JARS or leave empty for fat JARs"
-                value={form.libPath}
-                onChange={(e) => set('libPath', e.target.value)}
-              />
-              <DynamicList
-                label="OPTIONAL PATHS"
-                name="optionalPaths"
-                values={form.optionalPaths}
-                onChange={(v) => set('optionalPaths', v)}
-                placeholder="/opt/app/config"
-                addLabel="Add path"
-                hint="Additional directories to transfer to the server during deployment (e.g. certs, deploy)"
-              />
-            </div>
-          </>
-        )}
-
-        {/* ─── Step 4: SSH Target ────────────────────────────── */}
+        {/* ─── Step 4: Runtime ───────────────────────────────── */}
         {step === 4 && (
           <>
-            <StepHeading num="04" label="SSH Target" />
+            <StepHeading num="04" label="Process" />
             <div className="flex flex-col gap-5">
-
-              {/* ── SSH TARGET CONFIGURATION PANEL ── */}
+              {/* ── PROCESS CONFIGURATION PANEL ── */}
               <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
                 <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
                   <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    SSH Target Configuration
+                    Process Configuration
                   </h3>
                 </div>
-                {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
-                  <div className="grid grid-cols-3 gap-4">
+                <div className="p-5">
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
-                      label="SSH USER"
-                      name="sshUser"
+                      label="RUN AS USER"
+                      name="runAsUser"
                       required
-                      placeholder="deploy"
-                      hint="Linux user used to connect to the target server via SSH (e.g. deploy, ubuntu, ec2-user)"
-                      value={form.sshUser}
-                      onChange={(e) => set('sshUser', e.target.value)}
-                      error={errors.sshUser}
+                      placeholder="appuser"
+                      hint="Linux user that runs the JVM process on the target server"
+                      value={form.runAsUser}
+                      onChange={(e) => set('runAsUser', e.target.value)}
+                      error={errors.runAsUser}
                     />
                     <FormField
-                      label="SSH HOST"
-                      name="sshHost"
-                      required
-                      placeholder="192.168.56.10"
-                      hint="Hostname or IP address of the target server (e.g. 192.168.56.10, my-server.example.com)"
-                      value={form.sshHost}
-                      onChange={(e) => set('sshHost', e.target.value)}
-                      error={errors.sshHost}
-                    />
-                    <FormField
-                      label="SSH PORT"
-                      name="sshPort"
+                      label="SERVER PORT"
+                      name="serverPort"
                       required
                       type="number"
-                      placeholder="22"
-                      hint="Port used by the SSH service on the target server (default: 22)"
-                      value={form.sshPort}
-                      onChange={(e) => set('sshPort', e.target.value)}
-                      error={errors.sshPort}
+                      placeholder="8080"
+                      hint="Port the application listens on (must match server.port in application.yml)"
+                      value={form.serverPort}
+                      onChange={(e) => set('serverPort', e.target.value)}
+                      error={errors.serverPort}
+                    />
+                    <FormField
+                      label="MAX LOG SIZE"
+                      name="maxLogSize"
+                      placeholder="10m"
+                      hint="Max size per log file before rotation (e.g. 10m, 100m)"
+                      value={form.maxLogSize}
+                      onChange={(e) => set('maxLogSize', e.target.value)}
+                    />
+                    <FormField
+                      label="MAX LOG FILES"
+                      name="maxLogFiles"
+                      type="number"
+                      placeholder="10"
+                      hint="Number of rotated log files to keep"
+                      value={form.maxLogFiles}
+                      onChange={(e) => set('maxLogFiles', e.target.value)}
                     />
                   </div>
-                  <FormField
-                    label="TARGET BASE PATH"
-                    name="targetBasePath"
-                    required
-                    placeholder="/opt/apps/my-service"
-                    hint="Directory on the target server where the application will be deployed"
-                    value={form.targetBasePath}
-                    onChange={(e) => set('targetBasePath', e.target.value)}
-                    error={errors.targetBasePath}
-                  />
                 </div>
               </div>
-
-              {/* ── USER SSH KEYS CONFIGURATION PANEL ── */}
+              {/* ── JAR TYPE PANEL ── */}
               <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
                 <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
                   <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    SSH Keys Configuration
+                    JAR Type
                   </h3>
                 </div>
-                {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
+                <div className="p-5 flex flex-col gap-4">
+                  {/* Two-card selector */}
+                  <div className="grid grid-cols-2 gap-3">
 
-                {/* ── Per-environment runner public key panel ── */}
-                <div className={clsx(
-                  'rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden',
-                  envKeyStyle.border,
-                )}>
-                {/* Panel header */}
-                <div className={clsx(
-                  'flex items-center gap-2.5 px-5 py-3.5',
-                  'border-b border-wiz-border/60',
-                  envKeyStyle.header,
-                )}>
-                  <Key size={13} className={clsx(envKeyStyle.text, 'flex-shrink-0 opacity-80')} />
-                  <h3 className={clsx('font-mono font-semibold text-xs uppercase tracking-widest', envKeyStyle.text)}>
-                    {form.environment} — Runner Public Key
-                  </h3>
-                </div>
-
-                {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
-                  {keysLoading ? (
-                    <div className="flex items-center gap-2 text-wiz-muted text-xs py-2">
-                      <Loader2 size={13} className="animate-spin" />
-                      Fetching runner public key…
-                    </div>
-                  ) : keysError ? (
-                    <p className="text-xs text-sig-red">{keysError}</p>
-                  ) : (
-                    <>
-                      {/* Intro */}
-                      <p className="text-xs text-wiz-muted leading-relaxed">
-                        The runner uses this key to SSH into your server. Authorise it for the{' '}
-                        <span className="font-mono text-wiz-cream">{form.sshUser || 'SSH user'}</span>{' '}
-                        account on{' '}
-                        <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
-                        using either option below.
-                      </p>
-
-                      {/* ── Option A — Add key manually ── */}
-                      <div className="flex flex-col gap-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            Option A — Add key manually
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleCopyKey}
-                            disabled={!envKey}
-                            className={clsx(
-                              'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
-                              'border transition-all duration-150 disabled:opacity-40',
-                              copiedKey
-                                ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
-                                : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
-                            )}
-                          >
-                            {copiedKey
-                              ? <><Check size={11} /> Copied!</>
-                              : <><Copy  size={11} /> Copy Key</>
-                            }
-                          </button>
-                        </div>
-                        <p className="text-xs text-wiz-muted leading-relaxed">
-                          Copy this key and append it to{' '}
-                          <span className="font-mono text-wiz-cream">~/.ssh/authorized_keys</span>{' '}
-                          on{' '}
-                          <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
-                          under the{' '}
-                          <span className="font-mono text-wiz-cream">{form.sshUser || 'SSH user'}</span>{' '}
-                          account.
-                        </p>
-                        <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3
-                                        font-mono text-xs text-wiz-gray break-all leading-relaxed select-all">
-                          {envKey || (
-                            <span className="text-wiz-muted italic">
-                              Key not available for {form.environment}
-                            </span>
+                    {/* Fat JAR card */}
+                    <button
+                      type="button"
+                      onClick={() => set('jarType', 'fat')}
+                      className={clsx(
+                        'flex flex-col gap-2.5 p-4 rounded-xl border text-left transition-all duration-150',
+                        form.jarType === 'fat'
+                          ? 'border-wiz-gold/50 bg-wiz-gold/5 shadow-gold-sm'
+                          : 'border-wiz-border bg-wiz-bg hover:border-wiz-border-mid hover:bg-wiz-surface',
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={clsx(
+                          'w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                          form.jarType === 'fat' ? 'border-wiz-gold' : 'border-wiz-muted',
+                        )}>
+                          {form.jarType === 'fat' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold" />
                           )}
-                        </div>
+                        </span>
+                        <span className={clsx(
+                          'font-mono font-bold text-xs uppercase tracking-wider',
+                          form.jarType === 'fat' ? 'text-wiz-gold' : 'text-wiz-gray',
+                        )}>
+                          Fat JAR
+                        </span>
                       </div>
+                      <p className="text-xs text-wiz-muted leading-relaxed">
+                        All dependencies bundled inside the JAR.
+                        Upload a <span className="font-mono text-wiz-cream">.jar</span> file in Step 6.
+                      </p>
+                    </button>
 
-                      {/* ── "or" divider ── */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-px bg-wiz-border/60" />
-                        <span className="font-mono text-xs text-wiz-muted uppercase tracking-widest">or</span>
-                        <div className="flex-1 h-px bg-wiz-border/60" />
+                    {/* Thin JAR card */}
+                    <button
+                      type="button"
+                      onClick={() => set('jarType', 'thin')}
+                      className={clsx(
+                        'flex flex-col gap-2.5 p-4 rounded-xl border text-left transition-all duration-150',
+                        form.jarType === 'thin'
+                          ? 'border-wiz-gold/50 bg-wiz-gold/5 shadow-gold-sm'
+                          : 'border-wiz-border bg-wiz-bg hover:border-wiz-border-mid hover:bg-wiz-surface',
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={clsx(
+                          'w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                          form.jarType === 'thin' ? 'border-wiz-gold' : 'border-wiz-muted',
+                        )}>
+                          {form.jarType === 'thin' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold" />
+                          )}
+                        </span>
+                        <span className={clsx(
+                          'font-mono font-bold text-xs uppercase tracking-wider',
+                          form.jarType === 'thin' ? 'text-wiz-gold' : 'text-wiz-gray',
+                        )}>
+                          Thin JAR
+                        </span>
                       </div>
+                      <p className="text-xs text-wiz-muted leading-relaxed">
+                        App JAR + separate <span className="font-mono text-wiz-cream">lib/</span> directory.
+                        Upload both files separately in Step 6.
+                      </p>
+                    </button>
 
-                      {/* ── Option B — Setup Script (Recommended) ── */}
-                      <div className="flex flex-col gap-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            Option B — Setup script{' '}
-                            <span className="ml-1 normal-case tracking-normal font-normal text-sig-green">
-                              · Recommended
-                            </span>
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleCopyScript}
-                            disabled={!envKey}
-                            className={clsx(
-                              'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
-                              'border transition-all duration-150 disabled:opacity-40',
-                              copiedScript
-                                ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
-                                : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
-                            )}
-                          >
-                            {copiedScript
-                              ? <><Check size={11} /> Copied!</>
-                              : <><Copy  size={11} /> Copy Script</>
-                            }
-                          </button>
-                        </div>
-                        <p className="text-xs text-wiz-muted leading-relaxed">
-                          SSH into{' '}
-                          <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
-                          as{' '}
-                          <span className="font-mono text-wiz-cream">{form.sshUser || 'the SSH user'}</span>{' '}
-                          and run this script. It creates{' '}
-                          <span className="font-mono text-wiz-cream">.ssh</span>{' '}
-                          with correct permissions and appends the key to{' '}
-                          <span className="font-mono text-wiz-cream">authorized_keys</span>{' '}
-                          automatically.
-                        </p>
-                        <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 overflow-x-auto">
-                          <pre className="font-mono text-xs text-wiz-gray leading-6 whitespace-pre m-0 select-all">{setupScript}</pre>
-                        </div>
-                      </div>
-                    </>
+                  </div>
+
+                  {/* Thin JAR: hint + CTA to Library Dependencies panel in File Uploads */}
+                  {form.jarType === 'thin' && (
+                    <div className="animate-fade-in rounded-lg bg-wiz-raised/40 border border-wiz-border/60 px-4 py-3 flex items-start justify-between gap-4">
+                      <p className="text-xs text-wiz-muted leading-relaxed">
+                        <span className="font-semibold text-wiz-gray">Thin JAR: </span>
+                        Pack your dependency JARs into a{' '}
+                        <span className="font-mono text-wiz-cream">.zip</span>{' '}
+                        with the JAR files at the root — not inside a{' '}
+                        <span className="font-mono text-wiz-cream">lib/</span>{' '}
+                        subfolder. Upload both the app JAR and this ZIP in File Uploads.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => goToAndScroll(6, 'lib-deps-panel')}
+                        className="flex-shrink-0 inline-flex items-center gap-1 font-mono text-xs
+                                   text-wiz-gold hover:text-wiz-cream transition-colors duration-150 whitespace-nowrap"
+                      >
+                        File Uploads <ArrowRight size={11} />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* ── Test Connection ── */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => void handleTestConnection()}
-                  disabled={!form.sshUser || !form.sshHost || !form.sshPort || testConnState === 'testing'}
-                  className={clsx(
-                    'btn-secondary gap-2',
-                    testConnState === 'ok'   && 'border-sig-green/40 text-sig-green hover:border-sig-green/60',
-                    testConnState === 'fail' && 'border-sig-red/40   text-sig-red   hover:border-sig-red/60',
-                  )}
-                >
-                  {testConnState === 'testing'
-                    ? <><Loader2 size={13} className="animate-spin" /> Testing Connection…</>
-                    : testConnState === 'ok'
-                    ? <><Wifi    size={13} /> Connection OK</>
-                    : testConnState === 'fail'
-                    ? <><WifiOff size={13} /> Connection Failed</>
-                    : <><Wifi    size={13} /> Test Connection</>
-                  }
-                </button>
-                {testConnMsg && (
-                  <p className={clsx(
-                    'text-xs',
-                    testConnState === 'ok' ? 'text-sig-green' : 'text-sig-red',
-                  )}>
-                    {testConnMsg}
+              {/* ── CERTIFICATE PATHS CONFIG PANEL (Step 4 — config only, uploads in Step 6) ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/40 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/30">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                      Certificate Paths
+                      <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goToAndScroll(6, 'cert-files-panel')}
+                    className="flex-shrink-0 inline-flex items-center gap-1 font-mono text-xs
+                               text-sig-blue hover:text-sig-blue/70 transition-colors duration-150 whitespace-nowrap"
+                  >
+                    Upload ZIPs <ArrowRight size={11} />
+                  </button>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  <p className="text-xs text-wiz-muted leading-relaxed">
+                    Define cert / keystore directories and their absolute target paths on the server.
+                    Each ZIP is transferred independently of the application tarball.
+                    Upload the ZIP files in the File Uploads step.
                   </p>
-                )}
+
+                  {form.certUploads.map((cu, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <div className="grid grid-cols-2 gap-2 flex-1">
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                            Dir name (in ZIP)
+                          </label>
+                          <input
+                            type="text"
+                            value={cu.source}
+                            placeholder="certs"
+                            onChange={(e) => {
+                              const next = [...form.certUploads]
+                              next[idx] = { ...next[idx], source: e.target.value }
+                              set('certUploads', next)
+                            }}
+                            className="wiz-input"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                            Target path on server
+                          </label>
+                          <input
+                            type="text"
+                            value={cu.targetPath}
+                            placeholder="/opt/certs"
+                            onChange={(e) => {
+                              const next = [...form.certUploads]
+                              next[idx] = { ...next[idx], targetPath: e.target.value }
+                              set('certUploads', next)
+                            }}
+                            className="wiz-input"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => set('certUploads', form.certUploads.filter((_, i) => i !== idx))}
+                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
+                        aria-label="Remove certificate entry"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => set('certUploads', [...form.certUploads, { source: '', targetPath: '', file: null }])}
+                    className="flex items-center gap-1.5 text-xs text-sig-blue hover:text-sig-blue/80
+                               transition-colors duration-150 w-fit"
+                  >
+                    <Plus size={13} />
+                    Add certificate path
+                  </button>
+                </div>
               </div>
 
-                </div>{/* ── end SSH KEYS panel body ── */}
-              </div>{/* ── end USER SSH KEYS CONFIGURATION PANEL ── */}
+              {/* ── ADDITIONAL DIRECTORIES CONFIG PANEL (Step 4 — config only, uploads in Step 6) ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/40 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/60 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                      Additional Directories
+                      <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goToAndScroll(6, 'extra-dirs-panel')}
+                    className="flex-shrink-0 inline-flex items-center gap-1 font-mono text-xs
+                               text-wiz-gold hover:text-wiz-cream transition-colors duration-150 whitespace-nowrap"
+                  >
+                    Upload ZIPs <ArrowRight size={11} />
+                  </button>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  <p className="text-xs text-wiz-muted leading-relaxed">
+                    Define extra directories and their absolute target paths on the server.
+                    Each ZIP is transferred independently of the application tarball.
+                    Upload the ZIP files in the File Uploads step.
+                  </p>
+
+                  {form.extraDirs.map((ed, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <div className="grid grid-cols-2 gap-2 flex-1">
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                            Directory name
+                          </label>
+                          <input
+                            type="text"
+                            value={ed.dirName}
+                            placeholder="deploy"
+                            onChange={(e) => {
+                              const next = [...form.extraDirs]
+                              next[idx] = { ...next[idx], dirName: e.target.value }
+                              set('extraDirs', next)
+                            }}
+                            className="wiz-input"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                            Target path on server
+                          </label>
+                          <input
+                            type="text"
+                            value={ed.targetPath}
+                            placeholder="/opt/apps/my-service/deploy"
+                            onChange={(e) => {
+                              const next = [...form.extraDirs]
+                              next[idx] = { ...next[idx], targetPath: e.target.value }
+                              set('extraDirs', next)
+                            }}
+                            className="wiz-input"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => set('extraDirs', form.extraDirs.filter((_, i) => i !== idx))}
+                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
+                        aria-label="Remove directory entry"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => set('extraDirs', [...form.extraDirs, { dirName: '', targetPath: '', file: null }])}
+                    className="flex items-center gap-1.5 text-xs text-wiz-gold hover:text-wiz-gold/80
+                               transition-colors duration-150 w-fit"
+                  >
+                    <Plus size={13} />
+                    Add directory
+                  </button>
+                </div>
+              </div>
 
             </div>
           </>
@@ -991,27 +1821,256 @@ export default function DeployPage() {
           </>
         )}
 
-        {/* ─── Step 6: Artifact ──────────────────────────────── */}
+        {/* ─── Step 6: File Uploads ──────────────────────────── */}
         {step === 6 && (
           <>
-            <StepHeading num="06" label="Artifact" />
-            <UploadZone
-              value={form.artifact}
-              onChange={handleArtifact}
-              error={errors.artifact}
-            />
-            {form.artifact && (
-              <div className="mt-4 animate-fade-in">
-                <FormField
-                  label="JAR NAME (auto-filled)"
-                  name="jarName"
-                  placeholder="my-service-1.0.0.jar"
-                  hint="Override if the deployed filename should differ from the uploaded file"
-                  value={form.jarName}
-                  onChange={(e) => set('jarName', e.target.value)}
-                />
+            <StepHeading num="06" label="File Uploads" />
+            <div className="flex flex-col gap-5">
+
+              {/* ── APPLICATION JAR PANEL ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    Application JAR
+                    <span className="ml-1.5 text-sig-red/70 normal-case tracking-normal font-normal">· Required</span>
+                  </h3>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  <UploadZone
+                    value={form.jarArtifact}
+                    onChange={handleJarArtifact}
+                    error={errors.jarArtifact}
+                    accept=".jar"
+                    inputId="jar-artifact-file"
+                  />
+                  <FormField
+                    label="JAR NAME"
+                    name="jarName"
+                    required
+                    placeholder="my-service-1.0.0.jar"
+                    hint="Name of the main application JAR. Auto-filled from the uploaded filename; override if the deployed filename should differ."
+                    value={form.jarName}
+                    onChange={(e) => set('jarName', e.target.value)}
+                    error={errors.jarName}
+                  />
+                </div>
               </div>
-            )}
+
+              {/* ── LIBRARY DEPENDENCIES PANEL ── (thin JAR mode only) */}
+              {form.jarType === 'thin' && (
+                <div id="lib-deps-panel" className="animate-fade-in rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                      Library Dependencies
+                      <span className="ml-1.5 text-sig-red/70 normal-case tracking-normal font-normal">· Required</span>
+                    </h3>
+                  </div>
+                  <div className="p-5 flex flex-col gap-4">
+                    <p className="text-xs text-wiz-muted leading-relaxed">
+                      Upload a <span className="font-mono text-wiz-cream">.zip</span> containing your dependency JARs.
+                      JAR files must be at the <span className="font-semibold text-wiz-gray">root</span> of the ZIP —
+                      not inside a <span className="font-mono text-wiz-cream">lib/</span> subfolder.
+                      The runner extracts the ZIP contents into{' '}
+                      <span className="font-mono text-wiz-cream">lib/</span> on the target server.
+                    </p>
+                    <UploadZone
+                      value={form.libZip}
+                      onChange={(f) => set('libZip', f)}
+                      error={errors.libZip}
+                      accept=".zip"
+                      inputId="lib-zip-file"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── CERTIFICATE FILES PANEL ── */}
+              <div id="cert-files-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/40 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                    Certificate Files
+                    <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
+                  </h3>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  <p className="text-xs text-wiz-muted leading-relaxed">
+                    Upload cert or keystore ZIPs that must live at a custom server path outside
+                    the application directory (e.g.{' '}
+                    <span className="font-mono text-wiz-cream">/opt/certs</span>).
+                    Each ZIP is extracted to its target path independently.
+                  </p>
+
+                  {form.certUploads.map((cu, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <div className="flex flex-col gap-2 flex-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                              Dir name (in ZIP)
+                            </label>
+                            <input
+                              type="text"
+                              value={cu.source}
+                              placeholder="certs"
+                              onChange={(e) => {
+                                const next = [...form.certUploads]
+                                next[idx] = { ...next[idx], source: e.target.value }
+                                set('certUploads', next)
+                              }}
+                              className="wiz-input"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                              Target path on server
+                            </label>
+                            <input
+                              type="text"
+                              value={cu.targetPath}
+                              placeholder="/opt/certs"
+                              onChange={(e) => {
+                                const next = [...form.certUploads]
+                                next[idx] = { ...next[idx], targetPath: e.target.value }
+                                set('certUploads', next)
+                              }}
+                              className="wiz-input"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                            ZIP file
+                          </label>
+                          <MiniUpload
+                            value={cu.file}
+                            onChange={(f) => {
+                              const next = [...form.certUploads]
+                              next[idx] = { ...next[idx], file: f }
+                              set('certUploads', next)
+                            }}
+                            accept=".zip"
+                            inputId={`cert-zip-${idx}`}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => set('certUploads', form.certUploads.filter((_, i) => i !== idx))}
+                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
+                        aria-label="Remove certificate entry"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => set('certUploads', [...form.certUploads, { source: '', targetPath: '', file: null }])}
+                    className="flex items-center gap-1.5 text-xs text-sig-blue hover:text-sig-blue/80
+                               transition-colors duration-150 w-fit"
+                  >
+                    <Plus size={13} />
+                    Add certificate path
+                  </button>
+                </div>
+              </div>
+
+              {/* ── ADDITIONAL DIRECTORIES PANEL ── */}
+              <div id="extra-dirs-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/40 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/60 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    Additional Directories
+                    <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
+                  </h3>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  <p className="text-xs text-wiz-muted leading-relaxed">
+                    Upload extra directories that must land at a custom absolute path on the server.
+                    Each ZIP is transferred to its configured target path independently of the application tarball.
+                  </p>
+
+                  {form.extraDirs.map((ed, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <div className="flex flex-col gap-2 flex-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                              Directory name
+                            </label>
+                            <input
+                              type="text"
+                              value={ed.dirName}
+                              placeholder="deploy"
+                              onChange={(e) => {
+                                const next = [...form.extraDirs]
+                                next[idx] = { ...next[idx], dirName: e.target.value }
+                                set('extraDirs', next)
+                              }}
+                              className="wiz-input"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                              Target path on server
+                            </label>
+                            <input
+                              type="text"
+                              value={ed.targetPath}
+                              placeholder="/opt/apps/my-service/deploy"
+                              onChange={(e) => {
+                                const next = [...form.extraDirs]
+                                next[idx] = { ...next[idx], targetPath: e.target.value }
+                                set('extraDirs', next)
+                              }}
+                              className="wiz-input"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
+                            ZIP file
+                          </label>
+                          <MiniUpload
+                            value={ed.file}
+                            onChange={(f) => {
+                              const next = [...form.extraDirs]
+                              next[idx] = { ...next[idx], file: f }
+                              set('extraDirs', next)
+                            }}
+                            accept=".zip"
+                            inputId={`extra-dir-zip-${idx}`}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => set('extraDirs', form.extraDirs.filter((_, i) => i !== idx))}
+                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
+                        aria-label="Remove directory entry"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => set('extraDirs', [...form.extraDirs, { dirName: '', targetPath: '', file: null }])}
+                    className="flex items-center gap-1.5 text-xs text-wiz-gold hover:text-wiz-gold/80
+                               transition-colors duration-150 w-fit"
+                  >
+                    <Plus size={13} />
+                    Add directory
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </>
         )}
       </div>
@@ -1029,9 +2088,14 @@ export default function DeployPage() {
         </div>
 
         {/* Next / Submit */}
-        <div>
+        <div className="flex flex-col items-end gap-1.5">
           {step < 6 ? (
-            <button type="button" onClick={handleNext} className="btn-secondary gap-2">
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={step === 1 && (!isStep1Valid || testConnState !== 'ok')}
+              className="btn-secondary gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               Next
               <ArrowRight size={13} />
             </button>
@@ -1046,8 +2110,17 @@ export default function DeployPage() {
               {submitting ? 'Deploying…' : 'Submit Deployment →'}
             </button>
           )}
+          {/* Step 1: nudge the user to run the connection test before advancing */}
+          {step === 1 && isStep1Valid && testConnState !== 'ok' && (
+            <p className="text-xs text-wiz-muted">
+              Run the connection test above to continue.
+            </p>
+          )}
         </div>
       </div>
+
+      </> /* end of non-uploading fragment */
+      )} {/* end of uploadProgress ternary */}
 
     </div>
   )

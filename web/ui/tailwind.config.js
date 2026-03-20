@@ -24,10 +24,10 @@ export default {
         'wiz-violet':       '#6B46A0',
         'wiz-violet-dim':   '#120D1E',
         // ── Typography ─────────────────────────────────────────────
-        'wiz-cream':        '#E8DCCA',
-        'wiz-gray':         '#A8A49C',
-        'wiz-muted':        '#9E9893',   // lifted to ~6.4:1 on body, ~5.1:1 on card bg
-        'wiz-dim':          '#878280',   // lifted to ~5.4:1 on body, ~4.3:1 on card bg — WCAG AA
+        'wiz-cream':        '#F2E6D4',  // was #E8DCCA — bright warm white for primary text
+        'wiz-gray':         '#DDD9D1',  // was #A8A49C — bright warm gray for labels
+        'wiz-muted':        '#CCC8C0',  // was #9E9893 — medium gray for hints & section labels
+        'wiz-dim':          '#B4B0A8',  // was #878280 — lighter de-emphasised text
         // ── Signal Colours ─────────────────────────────────────────
         'sig-green':        '#22C55E',
         'sig-green-dim':    '#071A10',
@@ -47,15 +47,15 @@ export default {
         mono: ['"JetBrains Mono"', '"Fira Code"', '"Cascadia Code"', 'monospace'],
       },
       fontSize: {
-        '2xs': ['11px', '15px'],
-        xs:    ['12px', '17px'],
-        sm:    ['13px', '19px'],
-        base:  ['14px', '22px'],
-        md:    ['15px', '23px'],
-        lg:    ['16px', '24px'],
-        xl:    ['18px', '26px'],
-        '2xl': ['22px', '30px'],
-        '3xl': ['28px', '36px'],
+        '2xs': ['11px', '15px'],  // unchanged — tiny detail labels only
+        xs:    ['13px', '18px'],  // was 12/17 — tab badges, small chips
+        sm:    ['14px', '20px'],  // was 13/19 — field labels, secondary text
+        base:  ['15px', '22px'],  // was 14/22 — input values, body copy
+        md:    ['16px', '24px'],  // was 15/23 — medium headings
+        lg:    ['17px', '26px'],  // was 16/24 — section headings
+        xl:    ['19px', '27px'],  // was 18/26 — large headings
+        '2xl': ['22px', '30px'],  // unchanged
+        '3xl': ['28px', '36px'],  // unchanged
       },
       boxShadow: {
         'gold':     '0 0 20px rgba(201, 168, 76, 0.15), 0 0 40px rgba(201, 168, 76, 0.05)',

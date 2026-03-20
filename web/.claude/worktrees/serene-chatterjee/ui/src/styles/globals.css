@@ -26,7 +26,7 @@
     background-color: #080B14;
     color: #E8DCCA;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-size: 14px;
+    font-size: 15px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -85,8 +85,8 @@
   /* ── Select Base ── */
   .wiz-select {
     @apply wiz-input appearance-none cursor-pointer;
-    /* Chevron uses wiz-muted (#9E9893) — matches the updated global token */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239E9893' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    /* Chevron uses wiz-muted (#B8B4AC) — matches the updated global token */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23B8B4AC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
     padding-right: 36px;
@@ -257,76 +257,103 @@
 
 /* ── Body & Root ────────────────────────────────────────────────── */
 .light body {
-  background-color: #F0F2F7;
-  color: #1A1C23;
+  background-color: #DDE1EE;   /* blue-slate — panels (white) stand out clearly */
+  color: #0D1220;
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────── */
 .light ::-webkit-scrollbar-track {
-  background: #F0F2F7;
+  background: #D4D8EC;
 }
 .light ::-webkit-scrollbar-thumb {
-  background: #C0C5D8;
+  background: #A0A8C4;
 }
 .light ::-webkit-scrollbar-thumb:hover {
-  background: #A0A8C0;
+  background: #8088AC;
 }
 
 /* ── Selection ──────────────────────────────────────────────────── */
 .light ::selection {
-  background: rgba(201, 168, 76, 0.25);
-  color: #1A1C23;
+  background: rgba(201, 168, 76, 0.30);
+  color: #0D1220;
 }
 
 /* ── Background Utilities ───────────────────────────────────────── */
-.light .bg-wiz-bg      { background-color: #F0F2F7 !important; }
-.light .bg-wiz-surface { background-color: #FFFFFF !important; }
-.light .bg-wiz-raised  { background-color: #F7F8FC !important; }
-.light .bg-wiz-panel   { background-color: #ECEEF5 !important; }
-/* bg-wiz-border used as a visual separator bar (e.g. <div class="w-px bg-wiz-border">) */
-.light .bg-wiz-border  { background-color: #D4D8E5 !important; }
-/* Gold dim — used for gold-tinted hover / focus backgrounds */
-.light .bg-wiz-gold-dim { background-color: #FEF9EE !important; }
+/* Clear depth hierarchy: sidebar < page bg < raised < panel */
+.light .bg-wiz-bg      { background-color: #DDE1EE !important; }  /* page content bg */
+.light .bg-wiz-surface { background-color: #CDD1E4 !important; }  /* sidebar — distinctly darker */
+.light .bg-wiz-raised  { background-color: #D8DCF0 !important; }  /* table headers, hover bg */
+.light .bg-wiz-panel   { background-color: #FFFFFF !important; }  /* card panels — clean white */
+/* bg-wiz-border used as a visual separator bar */
+.light .bg-wiz-border  { background-color: #B4BCDA !important; }
+/* Gold dim — warm tint for gold-panel focus backgrounds */
+.light .bg-wiz-gold-dim { background-color: #F5E8B0 !important; }
 
-/* ── Signal Dim Backgrounds (pastel in light mode) ──────────────── */
-.light .bg-sig-green-dim  { background-color: #E8FAF0 !important; }
-.light .bg-sig-red-dim    { background-color: #FDEAEA !important; }
-.light .bg-sig-yellow-dim { background-color: #FEF6E4 !important; }
-.light .bg-sig-blue-dim   { background-color: #E8F2FF !important; }
-.light .bg-sig-orange-dim { background-color: #FEF0E8 !important; }
-.light .bg-sig-purple-dim { background-color: #F5EEFF !important; }
+/* ── Opacity-variant panel-header backgrounds ───────────────────── */
+/* bg-wiz-raised\/30 is used for gold-labelled panel headers.
+   On a white panel we need the tint to be warm & clearly visible. */
+.light .bg-wiz-raised\/30 {
+  background-color: rgba(210, 200, 155, 0.35) !important;  /* warm gold wash */
+}
+/* bg-sig-blue-dim\/40 is the Firewall Setup panel header */
+.light .bg-sig-blue-dim\/40 {
+  background-color: rgba(80, 140, 220, 0.14) !important;   /* visible blue wash */
+}
+
+/* ── Signal Dim Backgrounds ─────────────────────────────────────── */
+/* Saturated enough that even /30–/40 opacity on white is clearly visible */
+.light .bg-sig-green-dim  { background-color: #A8ECC0 !important; }
+.light .bg-sig-red-dim    { background-color: #F8A8A8 !important; }
+.light .bg-sig-yellow-dim { background-color: #F8D870 !important; }
+.light .bg-sig-blue-dim   { background-color: #A0C8F8 !important; }
+.light .bg-sig-orange-dim { background-color: #FAB878 !important; }
+.light .bg-sig-purple-dim { background-color: #CCA0F8 !important; }
 
 /* ── Text Utilities ─────────────────────────────────────────────── */
-.light .text-wiz-cream { color: #1A1C23 !important; }
-.light .text-wiz-gray  { color: #3D4256 !important; }
-.light .text-wiz-muted { color: #6E7491 !important; }
-.light .text-wiz-dim   { color: #8E94B0 !important; }
+.light .text-wiz-cream { color: #0D1220 !important; }   /* near-black primary text */
+.light .text-wiz-gray  { color: #252D4C !important; }   /* dark navy for labels */
+.light .text-wiz-muted { color: #4A5270 !important; }   /* mid-navy for hints */
+.light .text-wiz-dim   { color: #6878A0 !important; }   /* softer for de-emphasis */
+
+/* ── Signal & Brand Colours — dark variants for light backgrounds ─ */
+/* These neon/pastel shades are designed for dark mode; replace with
+   saturated-dark equivalents so they're readable on white panels.   */
+.light .text-wiz-gold   { color: #7A5200 !important; }   /* dark amber */
+.light .text-sig-blue   { color: #1050C0 !important; }   /* deep blue */
+.light .text-sig-yellow { color: #865600 !important; }   /* dark amber-yellow */
+.light .text-sig-green  { color: #096628 !important; }   /* deep green */
+.light .text-sig-red    { color: #B41010 !important; }   /* deep red */
+.light .text-sig-purple { color: #5808B8 !important; }   /* deep purple */
+.light .text-sig-orange { color: #8A4200 !important; }   /* dark orange */
 
 /* ── Border Utilities ───────────────────────────────────────────── */
-.light .border-wiz-border        { border-color: #D4D8E5 !important; }
-.light .border-wiz-border-mid    { border-color: #B8BDD0 !important; }
-.light .border-wiz-border-strong { border-color: #9BA3BC !important; }
+.light .border-wiz-border        { border-color: #AEB6D4 !important; }
+.light .border-wiz-border-mid    { border-color: #8E98BC !important; }
+.light .border-wiz-border-strong { border-color: #6E7AA4 !important; }
 
 /* ── Component Class Overrides ──────────────────────────────────── */
 
-/* Card */
+/* Card — clearly elevated above the blue-slate page background */
 .light .wiz-card {
-  background: linear-gradient(180deg, #FFFFFF 0%, #F8F9FC 100%) !important;
-  border-color: #D4D8E5 !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.90) !important;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFF 100%) !important;
+  border-color: #B4BCDA !important;
+  box-shadow:
+    0 4px 24px rgba(20, 50, 130, 0.09),
+    0 1px 4px  rgba(20, 50, 130, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
 }
 .light .wiz-card:hover {
-  border-color: #B8BDD0 !important;
+  border-color: #8E98BC !important;
 }
 
-/* Input */
+/* Input — slightly blue-tinted white, stands out from panel */
 .light .wiz-input {
-  background-color: #FFFFFF !important;
-  border-color: #D4D8E5 !important;
-  color: #1A1C23 !important;
+  background-color: #F6F8FF !important;
+  border-color: #AEB6D4 !important;
+  color: #0D1220 !important;
 }
 .light .wiz-input::placeholder {
-  color: #8E94B0 !important;
+  color: #7888B0 !important;
 }
 .light .wiz-input:focus {
   border-color: #C9A84C !important;
@@ -334,70 +361,70 @@
   background-color: #FFFDF7 !important;
 }
 
-/* Select — use a dark chevron (#3D4256) on light backgrounds for better contrast */
+/* Select — dark navy chevron for contrast on light bg */
 .light .wiz-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233D4256' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23252D4C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
 }
 
 /* Secondary Button */
 .light .btn-secondary {
   background-color: #FFFFFF !important;
-  border-color: #D4D8E5 !important;
-  color: #3D4256 !important;
+  border-color: #AEB6D4 !important;
+  color: #252D4C !important;
 }
 .light .btn-secondary:hover:not(:disabled) {
-  background-color: #F7F8FC !important;
-  border-color: #B8BDD0 !important;
-  color: #1A1C23 !important;
+  background-color: #EEF1FF !important;
+  border-color: #8E98BC !important;
+  color: #0D1220 !important;
 }
 
 /* Ghost Button */
 .light .btn-ghost {
-  color: #6E7491 !important;
+  color: #4A5270 !important;
 }
 .light .btn-ghost:hover {
-  background-color: #ECEEF5 !important;
-  color: #3D4256 !important;
+  background-color: #D8DCF0 !important;
+  color: #252D4C !important;
 }
 
 /* Icon Button */
 .light .btn-icon {
-  color: #6E7491 !important;
+  color: #4A5270 !important;
 }
 .light .btn-icon:hover {
-  background-color: #ECEEF5 !important;
-  color: #3D4256 !important;
+  background-color: #D8DCF0 !important;
+  color: #252D4C !important;
 }
 
 /* Section Label */
 .light .section-label {
-  color: #6E7491 !important;
+  color: #4A5270 !important;
 }
 
 /* Divider */
 .light .wiz-divider {
-  border-color: #D4D8E5 !important;
+  border-color: #B4BCDA !important;
 }
 
 /* Log Console */
 .light .log-console {
-  background-color: #F8F9FC !important;
-  border-color: #D4D8E5 !important;
+  background-color: #F2F5FF !important;
+  border-color: #AEB6D4 !important;
 }
 .light .log-line {
-  color: #3D4256 !important;
+  color: #252D4C !important;
 }
 .light .log-line:hover {
-  background-color: rgba(212, 216, 229, 0.40) !important;
+  background-color: rgba(174, 182, 212, 0.25) !important;
 }
 
 /* Skeleton Shimmer */
 .light .skeleton {
   background: linear-gradient(
     90deg,
-    #E4E7F0 25%,
-    #F0F2F7 50%,
-    #E4E7F0 75%
+    #D4D8EC 25%,
+    #E4E8F8 50%,
+    #D4D8EC 75%
   ) !important;
   background-size: 200% 100% !important;
 }

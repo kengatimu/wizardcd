@@ -1,5 +1,5 @@
 import { NavLink, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Rocket, Settings, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Wand2, Settings, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 
 interface NavItemDef {
@@ -11,7 +11,7 @@ interface NavItemDef {
 
 const PRIMARY_NAV: NavItemDef[] = [
   { to: '/',       label: 'Dashboard',  icon: <LayoutDashboard size={15} />, exact: true },
-  { to: '/deploy', label: 'New Deploy', icon: <Rocket size={15} /> },
+  { to: '/deploy', label: 'New Deploy', icon: <Wand2 size={15} /> },
 ]
 
 function SidebarLink({ to, label, icon, exact }: NavItemDef) {

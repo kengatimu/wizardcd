@@ -9,10 +9,12 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Manages per-environment ED25519 SSH key pairs for the runner service.
@@ -101,8 +103,11 @@ public class SshKeyServiceImpl implements SshKeyService {
 
             int exitCode = process.exitValue();
             if (exitCode == 0) {
+                List<String> javaInstallations = detectJavaInstallations(
+                        keyPath, sshUser, sshHost, sshPort);
                 return new SshTestResult(true,
-                        "Connection to " + sshUser + "@" + sshHost + ":" + sshPort + " successful.");
+                        "Connection to " + sshUser + "@" + sshHost + ":" + sshPort + " successful.",
+                        javaInstallations);
             }
 
             // Provide the raw ssh error output to help the user diagnose the problem
@@ -117,6 +122,75 @@ public class SshKeyServiceImpl implements SshKeyService {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Runs a second SSH command on a successfully connected server to find Java binary paths.
+     * Uses {@code find} across common JVM installation directories.
+     * Returns an empty list if nothing is found or if the detection command fails —
+     * this is non-fatal; the user can still enter the path manually.
+     */
+    private List<String> detectJavaInstallations(String keyPath, String sshUser,
+                                                  String sshHost, int sshPort) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "ssh",
+                    "-i", keyPath,
+                    "-o", "BatchMode=yes",
+                    "-o", "StrictHostKeyChecking=accept-new",
+                    "-o", "ConnectTimeout=" + SSH_CONNECT_TIMEOUT_SECONDS,
+                    "-p", String.valueOf(sshPort),
+                    sshUser + "@" + sshHost,
+                    // Cross-distro Java discovery:
+                    //   -xtype f   = follow symlinks (critical — many distros use symlinked java binaries)
+                    //   Covers: Debian/Ubuntu, RHEL/CentOS/Rocky/Alma, Fedora, Alpine, Arch, SDKMAN, JAVA_HOME
+                    "{ " +
+                    // 1. Deep find in every known JVM root across all major Linux distros
+                    //    Debian/Ubuntu: /usr/lib/jvm/  |  RHEL: /usr/java/ /usr/lib/jvm/
+                    //    Alpine: /usr/lib/jvm/  |  Arch: /usr/lib/jvm/
+                    //    Tarball installs: /opt/java /opt/jdk /opt/jdk-* /usr/local/java /usr/local/jdk
+                    //    Adoptium/Temurin: /opt/adoptium* /opt/temurin*  |  Corretto: /opt/amazon-corretto*
+                    "find /usr/lib/jvm /usr/local/lib/jvm" +
+                    " /usr/java /usr/local/java /usr/local/jdk" +
+                    " /opt/java /opt/jdk /opt/jdk-* /opt/jre /opt/jre-*" +
+                    " /opt/temurin* /opt/adoptium* /opt/amazon-corretto*" +
+                    " /opt/zulu* /opt/graalvm* /opt/sapmachine*" +
+                    " /app/java /usr/local/bin" +
+                    " -xtype f -name java 2>/dev/null; " +
+                    // 2. Debian/Ubuntu/Fedora/RHEL: both tool names resolve to same database
+                    "update-alternatives --list java 2>/dev/null; " +
+                    "alternatives --list java 2>/dev/null | awk 'NR>1{print $1}' 2>/dev/null; " +
+                    // 3. Resolve /usr/bin/java + /usr/local/bin/java symlinks to real binary path
+                    "for __b in /usr/bin/java /usr/local/bin/java; do " +
+                    "  test -e \"$__b\" && readlink -f \"$__b\" 2>/dev/null; " +
+                    "done; " +
+                    // 4. SDKMAN-managed installs (any distro)
+                    "test -d \"$HOME/.sdkman/candidates/java\" && " +
+                    "  find \"$HOME/.sdkman/candidates/java\" -xtype f -name java -maxdepth 6 2>/dev/null; " +
+                    // 5. JAVA_HOME env var (set by user profile or system-wide /etc/environment)
+                    "test -n \"$JAVA_HOME\" && test -x \"$JAVA_HOME/bin/java\" && echo \"$JAVA_HOME/bin/java\"; " +
+                    // 6. SCL (Software Collections) on RHEL/CentOS — e.g. /opt/rh/java-17-openjdk/root/...
+                    "find /opt/rh -xtype f -name java -path '*/bin/java' 2>/dev/null; " +
+                    "} 2>/dev/null | grep '/java$' | sort -u"
+            );
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes()).trim();
+            process.waitFor(SSH_PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            if (output.isEmpty()) return List.of();
+
+            return Arrays.stream(output.split("\n"))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty() && s.endsWith("/java"))
+                    .distinct()
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.warn("Java detection failed for {}@{}:{}: {}", sshUser, sshHost, sshPort, e.getMessage());
+            return List.of();
+        }
+    }
 
     /**
      * Returns the absolute path to the private key file for the given environment.

@@ -19,9 +19,8 @@ wrapper.app.parameter.1={{MAIN_CLASS}}
 
 # JVM settings
 wrapper.java.additional.auto_bits=TRUE
-wrapper.java.additional.1={{JVM_XMS}}
-wrapper.java.additional.2={{JVM_XMX}}
-wrapper.java.additional.3={{JVM_NEW_RATIO}}
+# Additional JVM args (-Xms, -Xmx, extra_opts) are appended dynamically
+# by generate-tanuki-wrapper-conf.sh based on the deployment config.
 
 # Native library path (ensure Tanuki can load libwrapper.so)
 wrapper.java.library.path.1=%MYAPP_HOME%/lib

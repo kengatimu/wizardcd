@@ -61,8 +61,13 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
             // Resolve job workspace root
             Path jobRoot = Path.of(workspaceRoot, jobId);
 
-            // Prevent accidental workspace reuse
-            if (Files.exists(jobRoot)) {
+            // Prevent accidental workspace reuse.
+            // We check for the 'input/' subdirectory, NOT the job root directory.
+            // The job root is created as a side-effect of writeAtomically() persisting
+            // the initial CREATED/VALIDATING lifecycle states via Files.createDirectories().
+            // A true collision only exists when a previous prepareWorkspace() run completed
+            // and the 'input/' subdirectory was fully initialised.
+            if (Files.exists(jobRoot.resolve("input"))) {
                 throw new IllegalStateException("Workspace already exists for jobId=" + jobId);
             }
 
@@ -168,19 +173,53 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
 
     // ------------------------------------------------------------------
     // ZIP extraction helper (MultipartFile → target directory)
-    // Extracts all entries from the ZIP directly from the upload stream
-    // into targetDir.  Includes ZIP-slip protection: any entry whose
-    // resolved path escapes targetDir causes an immediate IOException.
+    //
+    // Two-pass extraction:
+    //   Pass 1 — scan entry names to detect a common top-level directory
+    //            prefix (e.g. all entries start with "certs/").  This handles
+    //            the common user mistake of zipping the folder itself rather
+    //            than its contents (`zip -r certs.zip certs/` instead of
+    //            `cd certs && zip ../certs.zip *`).
+    //   Pass 2 — extract, stripping the detected prefix so files land
+    //            directly in targetDir rather than targetDir/<name>/.
+    //
+    // Both passes also skip macOS metadata entries (__MACOSX/ and ._* files).
+    // ZIP-slip protection is applied on the resolved entry path.
     // ------------------------------------------------------------------
     private void extractZipToDir(MultipartFile zip, Path targetDir) throws IOException {
         log.info("Extracting ZIP: {} → {}", zip.getOriginalFilename(), targetDir);
+
+        // ── Pass 1: detect common top-level prefix ──────────────────────
+        String stripPrefix = detectCommonPrefix(zip);
+        if (stripPrefix != null) {
+            log.info("ZIP has common top-level dir '{}' — stripping it during extraction", stripPrefix);
+        }
+
+        // ── Pass 2: extract ─────────────────────────────────────────────
         int fileCount = 0;
         int dirCount  = 0;
 
         try (ZipInputStream zis = new ZipInputStream(zip.getInputStream())) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                Path entryPath = targetDir.resolve(entry.getName()).normalize();
+                String name = entry.getName();
+
+                // Skip macOS resource-fork metadata added by Mac zip utilities
+                if (isMacOSJunk(name)) {
+                    zis.closeEntry();
+                    continue;
+                }
+
+                // Strip the common top-level directory prefix when detected
+                if (stripPrefix != null && name.startsWith(stripPrefix)) {
+                    name = name.substring(stripPrefix.length());
+                    if (name.isEmpty()) {           // the root dir entry itself
+                        zis.closeEntry();
+                        continue;
+                    }
+                }
+
+                Path entryPath = targetDir.resolve(name).normalize();
 
                 // ZIP-slip prevention — reject paths that escape targetDir
                 if (!entryPath.startsWith(targetDir)) {
@@ -191,12 +230,12 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
                 if (entry.isDirectory()) {
                     Files.createDirectories(entryPath);
                     dirCount++;
-                    log.debug("ZIP extract — dir:  {}", entry.getName());
+                    log.debug("ZIP extract — dir:  {}", name);
                 } else {
                     Files.createDirectories(entryPath.getParent());
                     Files.copy(zis, entryPath, StandardCopyOption.REPLACE_EXISTING);
                     fileCount++;
-                    log.debug("ZIP extract — file: {}", entry.getName());
+                    log.debug("ZIP extract — file: {}", name);
                 }
                 zis.closeEntry();
             }
@@ -206,5 +245,46 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
         }
 
         log.info("ZIP extraction complete — {} file(s), {} dir(s) extracted to {}", fileCount, dirCount, targetDir);
+    }
+
+    // ------------------------------------------------------------------
+    // Scan the ZIP (without extracting) to detect whether ALL non-junk
+    // entries share a single common top-level directory.  If they do,
+    // return that prefix (e.g. "certs/") so it can be stripped during
+    // extraction.  Returns null when no stripping is needed.
+    // ------------------------------------------------------------------
+    private String detectCommonPrefix(MultipartFile zip) throws IOException {
+        String commonPrefix = null;
+        try (ZipInputStream zis = new ZipInputStream(zip.getInputStream())) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                zis.closeEntry();
+
+                if (isMacOSJunk(name)) continue;
+
+                int slash = name.indexOf('/');
+                if (slash <= 0) {
+                    // A top-level file — no common directory prefix possible
+                    return null;
+                }
+                String prefix = name.substring(0, slash + 1); // e.g. "certs/"
+                if (commonPrefix == null) {
+                    commonPrefix = prefix;
+                } else if (!commonPrefix.equals(prefix)) {
+                    // Multiple different top-level directories — nothing to strip
+                    return null;
+                }
+            }
+        }
+        return commonPrefix;
+    }
+
+    /** Returns true for macOS ZIP metadata entries that should always be skipped. */
+    private static boolean isMacOSJunk(String entryName) {
+        return entryName.startsWith("__MACOSX/")
+            || entryName.contains("/__MACOSX/")
+            || entryName.startsWith("._")
+            || entryName.contains("/._");
     }
 }

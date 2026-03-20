@@ -17,7 +17,7 @@
 # Phase 1  : Runner VM  — this file
 # Phase 2  : Client VM  — see deploying-to-client-vm-aws-ec2.sh (coming)
 #
-# Updated  : 2026-03-11
+# Updated  : 2026-03-13
 # =============================================================================
 
 
@@ -293,22 +293,31 @@ ssh wizardcd-runner-admin \
 # -----------------------------------------------------------------------------
 # 4.5  Grant scoped passwordless sudo to wizard
 #      Limited to service management commands only
+#
+#      IMPORTANT: On Ubuntu 22.04, systemctl lives at /usr/bin/systemctl.
+#      /bin is a symlink → /usr/bin, but sudo matches the real binary path.
+#      Use /usr/bin/systemctl (not /bin/systemctl) to avoid password prompts.
 # -----------------------------------------------------------------------------
 
 ssh wizardcd-runner-admin "sudo tee /etc/sudoers.d/wizardcd-runner > /dev/null << 'EOF'
-wizard ALL=(ALL) NOPASSWD: /bin/systemctl start wizardcd-runner
-wizard ALL=(ALL) NOPASSWD: /bin/systemctl stop wizardcd-runner
-wizard ALL=(ALL) NOPASSWD: /bin/systemctl restart wizardcd-runner
-wizard ALL=(ALL) NOPASSWD: /bin/systemctl status wizardcd-runner
-wizard ALL=(ALL) NOPASSWD: /bin/systemctl enable wizardcd-runner
-wizard ALL=(ALL) NOPASSWD: /bin/systemctl daemon-reload
-wizard ALL=(ALL) NOPASSWD: /bin/tee /etc/systemd/system/wizardcd-runner.service
-wizard ALL=(ALL) NOPASSWD: /bin/journalctl
+wizard ALL=(ALL) NOPASSWD: /usr/bin/systemctl start wizardcd-runner
+wizard ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop wizardcd-runner
+wizard ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart wizardcd-runner
+wizard ALL=(ALL) NOPASSWD: /usr/bin/systemctl status wizardcd-runner
+wizard ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable wizardcd-runner
+wizard ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+wizard ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/systemd/system/wizardcd-runner.service
+wizard ALL=(ALL) NOPASSWD: /usr/bin/journalctl
 EOF
 sudo chmod 440 /etc/sudoers.d/wizardcd-runner"
 
 # Alternative — full sudo access (simpler for dev/test):
 # wizard ALL=(ALL) NOPASSWD:ALL
+
+# Verify passwordless sudo works for the wizard user:
+# ssh wizardcd-runner "sudo systemctl status wizardcd-runner"
+# If this prompts for a password, the sudoers path is wrong.
+# Use 'which systemctl' on the VM to confirm the real binary path.
 
 
 # -----------------------------------------------------------------------------
@@ -361,11 +370,11 @@ ls -lh target/runner-service-ms-0.0.1-SNAPSHOT.jar
 
 
 # -----------------------------------------------------------------------------
-# 6.1  Copy the JAR
+# 6.1  Copy the JAR (2-step)
 # -----------------------------------------------------------------------------
 
-scp /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms/target/runner-service-ms-0.0.1-SNAPSHOT.jar \
-    wizardcd-runner:/opt/wizardcd/
+scp target/runner-service-ms-0.0.1-SNAPSHOT.jar wizardcd-runner:/tmp/
+ssh wizardcd-runner-admin "sudo mv /tmp/runner-service-ms-0.0.1-SNAPSHOT.jar /opt/wizardcd/ && sudo chown wizard:wizard /opt/wizardcd/runner-service-ms-0.0.1-SNAPSHOT.jar"
 
 
 # -----------------------------------------------------------------------------
@@ -531,27 +540,62 @@ npm run dev
 
 # -----------------------------------------------------------------------------
 # 10.1  Redeploy a new JAR (build → stop → copy → start)
+#
+#       IMPORTANT — 3 quirks to be aware of:
+#
+#       (a) SCP the JAR via /tmp/, NOT directly to /opt/wizardcd/.
+#           Even though wizard owns /opt/wizardcd/, direct SCP fails in practice
+#           on this EC2.  The reliable pattern is: scp → /tmp/,
+#           then admin user moves it into place with sudo.
+#
+#       (b) systemctl stop/start must use wizardcd-runner-admin (ubuntu user).
+#           The wizard sudoers rule requires /usr/bin/systemctl — if the rule
+#           was written with /bin/systemctl it will prompt for a password.
+#           Until that is corrected on the VM, always use the admin alias.
+#
+#       (c) Runner scripts only need re-deploying when .sh files have changed.
+#           If only the JAR changed, skip step 3 (scripts) and step 4 (chmod).
 # -----------------------------------------------------------------------------
 
+# 1. Build
 cd /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms
 ./mvnw clean package -DskipTests
 
-ssh wizardcd-runner "sudo systemctl stop wizardcd-runner"
+# 2. Stop the service (admin user — reliable regardless of sudoers state)
+ssh wizardcd-runner-admin "sudo systemctl stop wizardcd-runner"
 
-scp target/runner-service-ms-0.0.1-SNAPSHOT.jar \
+# 3. Copy the JAR via /tmp/ (2-step — direct SCP to /opt/wizardcd/ is unreliable)
+scp target/runner-service-ms-0.0.1-SNAPSHOT.jar wizardcd-runner:/tmp/
+ssh wizardcd-runner-admin "
+  sudo mv  /tmp/runner-service-ms-0.0.1-SNAPSHOT.jar /opt/wizardcd/ &&
+  sudo chown wizard:wizard /opt/wizardcd/runner-service-ms-0.0.1-SNAPSHOT.jar
+"
+
+# 4. Copy runner scripts (only when .sh files have changed)
+scp -r /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner/ \
     wizardcd-runner:/opt/wizardcd/
+ssh wizardcd-runner "chmod +x /opt/wizardcd/runner/*.sh"
 
-ssh wizardcd-runner "sudo systemctl start wizardcd-runner"
+# 5. Start the service
+ssh wizardcd-runner-admin "sudo systemctl start wizardcd-runner"
+
+# 6. Verify
+ssh wizardcd-runner-admin "sudo systemctl status wizardcd-runner --no-pager"
+curl -s http://54.144.235.55:8081/actuator/health
 
 
 # -----------------------------------------------------------------------------
 # 10.2  Restart / Stop / Start
+#
+#       Use wizardcd-runner-admin (ubuntu) for all sudo systemctl commands.
+#       The wizard user's sudoers rule may use the wrong systemctl path —
+#       ubuntu always has unrestricted sudo and never prompts for a password.
 # -----------------------------------------------------------------------------
 
-ssh wizardcd-runner "sudo systemctl restart wizardcd-runner"
-ssh wizardcd-runner "sudo systemctl stop    wizardcd-runner"
-ssh wizardcd-runner "sudo systemctl start   wizardcd-runner"
-ssh wizardcd-runner "sudo systemctl status  wizardcd-runner"
+ssh wizardcd-runner-admin "sudo systemctl restart wizardcd-runner"
+ssh wizardcd-runner-admin "sudo systemctl stop    wizardcd-runner"
+ssh wizardcd-runner-admin "sudo systemctl start   wizardcd-runner"
+ssh wizardcd-runner-admin "sudo systemctl status  wizardcd-runner --no-pager"
 
 
 # -----------------------------------------------------------------------------
@@ -610,3 +654,107 @@ ssh wizardcd-runner "sudo journalctl -u wizardcd-runner -n 100 -f"
 #
 #   EC2             Public IP changes on stop/start unless Elastic IP is attached
 #   Vagrant         IP is static (defined in Vagrantfile)
+
+
+# =============================================================================
+# QUICK DEPLOYMENT CHECKLIST  (Java + scripts changed)
+# =============================================================================
+#
+#   Use this section for routine redeployments after code changes.
+#   All commands run from your MacBook.
+#
+#   Symbols:
+#     [J] Java backend changed   -> always run steps 1, 2, 3, 5, 6, 7
+#     [S] Scripts (.sh) changed  -> also run step 4
+#     [F] Frontend only changed  -> skip this checklist (UI is served locally)
+#
+# =============================================================================
+
+# -- STEP 1  Build ------------------------------------------------------------
+
+cd /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms
+./mvnw clean package -DskipTests
+
+# Confirm build succeeded and note JAR size:
+ls -lh target/runner-service-ms-0.0.1-SNAPSHOT.jar
+
+
+# -- STEP 2  Stop the service -------------------------------------------------
+#
+#   Use wizardcd-runner-admin (ubuntu) -- it always has unrestricted sudo.
+#   The wizard sudoers rule requires /usr/bin/systemctl; if the rule on the VM
+#   was written with /bin/systemctl it will prompt for a password and hang.
+
+ssh wizardcd-runner-admin "sudo systemctl stop wizardcd-runner"
+
+
+# -- STEP 3  Deploy the JAR  (2-step -- SCP via /tmp/) -----------------------
+#
+#   Direct SCP to /opt/wizardcd/ is unreliable on this EC2 even though wizard
+#   owns the directory.  Always SCP to /tmp/ first, then admin user moves it.
+
+scp /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms/target/runner-service-ms-0.0.1-SNAPSHOT.jar wizardcd-runner:/tmp/
+
+ssh wizardcd-runner-admin "
+  sudo mv  /tmp/runner-service-ms-0.0.1-SNAPSHOT.jar /opt/wizardcd/ &&
+  sudo chown wizard:wizard /opt/wizardcd/runner-service-ms-0.0.1-SNAPSHOT.jar
+"
+
+
+# -- STEP 4  Deploy runner scripts  [only when .sh files changed] -------------
+
+scp -r /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner/ \
+    wizardcd-runner:/opt/wizardcd/
+
+ssh wizardcd-runner "chmod +x /opt/wizardcd/runner/*.sh"
+
+
+# -- STEP 5  Start the service ------------------------------------------------
+
+ssh wizardcd-runner-admin "sudo systemctl start wizardcd-runner"
+
+
+# -- STEP 6  Verify service is running ----------------------------------------
+
+ssh wizardcd-runner-admin "sudo systemctl status wizardcd-runner --no-pager -l"
+
+
+# -- STEP 7  Health check from Mac --------------------------------------------
+
+curl -s http://54.144.235.55:8081/actuator/health
+# Expected: {"status":"UP"}
+
+curl -s http://54.144.235.55:8081/runner/info
+# Expected: {"publicIp":"54.144.235.55"}
+
+curl -s http://54.144.235.55:8081/runner/public-keys | python3 -m json.tool
+# Expected: { "SIT": "ssh-ed25519 ...", "UAT": "...", "PROD": "..." }
+
+
+# -- OPTIONAL  Tail live logs to confirm clean startup ------------------------
+
+ssh wizardcd-runner "tail -n 50 -f /opt/wizardcd/logs/runner-service-ms.log"
+# Look for: "Runner is READY to accept jobs"
+# Press Ctrl+C to stop tailing.
+
+
+# =============================================================================
+# ONE-LINER  (Java changes only -- no script changes)
+# =============================================================================
+#
+#   Paste this into your terminal for a fully automated build + deploy cycle.
+#   If scripts also changed, use the step-by-step above and insert step 4
+#   (scp runner/ + chmod) after the JAR has been moved into place.
+
+cd /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/runner-service-ms && \
+./mvnw clean package -DskipTests && \
+ssh wizardcd-runner-admin "sudo systemctl stop wizardcd-runner" && \
+scp target/runner-service-ms-0.0.1-SNAPSHOT.jar wizardcd-runner:/tmp/ && \
+ssh wizardcd-runner-admin "
+  sudo mv  /tmp/runner-service-ms-0.0.1-SNAPSHOT.jar /opt/wizardcd/ &&
+  sudo chown wizard:wizard /opt/wizardcd/runner-service-ms-0.0.1-SNAPSHOT.jar &&
+  sudo systemctl start wizardcd-runner
+" && \
+sleep 5 && \
+curl -s http://54.144.235.55:8081/actuator/health
+# Expected final output: {"status":"UP"}

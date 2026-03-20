@@ -146,9 +146,21 @@ public class RunnerServiceImpl implements RunnerService {
             interpretExitCode(jobId, exitCode);
 
         } catch (Exception e) {
-            // Any unexpected exception transitions lifecycle into FAILED
-            transitionState(jobId, JobStatus.FAILED);
-            jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED, "Execution exception: " + e.getMessage());
+            // Any unexpected exception transitions lifecycle into FAILED — unless abort
+            // is already in progress (ABORT_REQUESTED / ABORTED), in which case we must
+            // not override the abort with FAILED.
+            JobStatus currentStatus = jobStateService.getStatus(jobId);
+            if (currentStatus != JobStatus.ABORT_REQUESTED && currentStatus != JobStatus.ABORTED) {
+                try {
+                    transitionState(jobId, JobStatus.FAILED);
+                    jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED,
+                            "Execution exception: " + e.getMessage());
+                } catch (Exception inner) {
+                    log.error("Failed to transition job {} to FAILED after exception (current state: {})",
+                            jobId, currentStatus, inner);
+                }
+            }
+            log.error("Job {} execution failed with exception", jobId, e);
 
         } finally {
             // Always remove job from active tracking map
@@ -188,11 +200,31 @@ public class RunnerServiceImpl implements RunnerService {
     // Handles abort request coming from web/controller layer
     @Override
     public void abort(String jobId) {
-        // Transition lifecycle into ABORT_REQUESTED
-        transitionState(jobId, JobStatus.ABORT_REQUESTED);
+        JobStatus current = jobStateService.getStatus(jobId);
+        if (current == null) {
+            throw new IllegalStateException("Job not found: " + jobId);
+        }
 
-        // Delegate actual process termination to execution layer
-        processExecutorService.abort(jobId);
+        if (current == JobStatus.RUNNING) {
+            // Active process — signal abort, process executor will kill it
+            transitionState(jobId, JobStatus.ABORT_REQUESTED);
+            processExecutorService.abort(jobId);
+            return;
+        }
+
+        if (current == JobStatus.CREATED
+                || current == JobStatus.VALIDATING
+                || current == JobStatus.PREPARING_WORKSPACE) {
+            // No process is running yet — transition directly to ABORTED
+            transitionState(jobId, JobStatus.ABORT_REQUESTED);
+            transitionState(jobId, JobStatus.ABORTED);
+            jobStateService.updateState(jobId, JobExecutionStateStatus.ABORTED,
+                    "Aborted by user before script execution started");
+            return;
+        }
+
+        // Already in a terminal or abort state — nothing to do
+        throw new IllegalStateException("Cannot abort job in current state: " + current);
     }
 
     // Enforces strict lifecycle transitions
@@ -209,13 +241,24 @@ public class RunnerServiceImpl implements RunnerService {
     private boolean isValidTransition(JobStatus current, JobStatus next) {
 
         return switch (current) {
-            case CREATED -> next == JobStatus.VALIDATING;
-            case VALIDATING -> next == JobStatus.PREPARING_WORKSPACE;
-            case PREPARING_WORKSPACE -> next == JobStatus.RUNNING;
+            // Pre-execution: allow FAILED for early error paths (validation, capacity)
+            case CREATED -> next == JobStatus.VALIDATING
+                    || next == JobStatus.FAILED;
+            // Pre-execution: allow FAILED (validation error) or ABORT_REQUESTED (user cancelled)
+            case VALIDATING -> next == JobStatus.PREPARING_WORKSPACE
+                    || next == JobStatus.FAILED
+                    || next == JobStatus.ABORT_REQUESTED;
+            // Workspace phase: allow FAILED (prep error) or ABORT_REQUESTED (user cancelled)
+            case PREPARING_WORKSPACE -> next == JobStatus.RUNNING
+                    || next == JobStatus.FAILED
+                    || next == JobStatus.ABORT_REQUESTED;
+            // Active execution: normal terminal paths + abort signal
             case RUNNING -> next == JobStatus.SUCCESS
                     || next == JobStatus.FAILED
                     || next == JobStatus.ABORT_REQUESTED;
-            case ABORT_REQUESTED -> next == JobStatus.ABORTED;
+            // Abort path: allow FAILED as well (process may die with non-zero exit after abort)
+            case ABORT_REQUESTED -> next == JobStatus.ABORTED
+                    || next == JobStatus.FAILED;
             default -> false;
         };
     }

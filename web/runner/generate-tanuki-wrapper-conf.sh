@@ -1,43 +1,33 @@
 #!/bin/bash
-set -euo pipefail # Exit on error, unset variables as error, fail on pipe errors
+set -euo pipefail
 
 # ==================================================
-# WizardCd - Generate Tanuki Wrapper Config
+# WizardCD - Generate Tanuki Wrapper Config
 #
-# This script generates two files for a given app/env:
+# Generates two files for a given app/env:
 #   1. Tanuki wrapper config (.conf)
 #   2. Tanuki wrapper start/stop script (.sh)
 #
-# The values are loaded from config/deployment-config.yml
+# Called by deploy.sh. Uses WIZARDCONFIG env var for
+# the deployment config YAML path.
 #
 # Usage:
-#   ./bin/generate-tanuki-wrapper-conf.sh --app <app_name> --env <environment>
+#   ./generate-tanuki-wrapper-conf.sh --app <app_name> --env <environment>
 # ==================================================
 
-# --------------------------------------------------
-# Load WizardCd shared utilities (helpers.sh)
-# --------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/helpers.sh"
-log_info "SCRIPT_DIR: $SCRIPT_DIR"
 
-# Resolve WizardCD root directory (for locating templates)
-ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
-log_info "ROOT_DIR: $ROOT_DIR"
-
-trap 'log_error "Unexpected error on line $LINENO (exit code $?)"; exit 1' ERR
+trap 'log_error "Wrapper generation failed on line $LINENO (exit code $?)"; exit 1' ERR
 
 # --------------------------------------------------
-# Function: Print usage instructions
+# Parse arguments
 # --------------------------------------------------
 print_usage() {
   log_error "Usage: $0 --app <app_name> --env <environment>"
   exit 1
 }
 
-# --------------------------------------------------
-# Parse arguments
-# --------------------------------------------------
 if [[ "$1" == "--app" && "$3" == "--env" ]]; then
   APP="$2"
   ENV="$4"
@@ -48,10 +38,10 @@ else
   print_usage
 fi
 
-export APP ENV WIZARD_LOG_FILE
+export APP ENV
 
 # --------------------------------------------------
-# Paths
+# Resolve config file
 # --------------------------------------------------
 if [[ -n "${WIZARDCONFIG:-}" ]]; then
   CONFIG_FILE="$WIZARDCONFIG"
@@ -72,83 +62,113 @@ SH_TEMPLATE="${SCRIPT_DIR}/wrappers/tanuki/bin/wrapper.sh.template"
 OUTPUT_DIR="${SCRIPT_DIR}/wrappers/tanuki/configs"
 
 # --------------------------------------------------
-# Load values from YAML (FIXED MAPPINGS)
+# Load values from YAML
 # --------------------------------------------------
-APP_NAME="$APP"
-
-APP_HOME_BASE=$(yq -r ".apps.${APP}.${ENV}.deployment.target.base_path" "$CONFIG_FILE")
-APP_HOME="$APP_HOME_BASE"
-
+APP_HOME=$(yq -r ".apps.${APP}.${ENV}.deployment.target.base_path" "$CONFIG_FILE")
 JAVA_CMD=$(yq -r ".apps.${APP}.${ENV}.java.command" "$CONFIG_FILE")
 APP_JAR=$(yq -r ".apps.${APP}.${ENV}.app.jar_name" "$CONFIG_FILE")
 MAIN_CLASS=$(yq -r ".apps.${APP}.${ENV}.app.main_class" "$CONFIG_FILE")
-
-# Detect optional external lib mode
 LIB_PATH=$(yq -r ".apps.${APP}.${ENV}.build.lib_path" "$CONFIG_FILE")
-
 JVM_XMS=$(yq -r ".apps.${APP}.${ENV}.jvm.xms" "$CONFIG_FILE")
 JVM_XMX=$(yq -r ".apps.${APP}.${ENV}.jvm.xmx" "$CONFIG_FILE")
 JVM_NEW_RATIO=$(yq -r ".apps.${APP}.${ENV}.jvm.new_ratio" "$CONFIG_FILE")
-
 LOGFILE_MAXSIZE=$(yq -r ".apps.${APP}.${ENV}.logging.max_size" "$CONFIG_FILE")
 LOGFILE_MAXFILES=$(yq -r ".apps.${APP}.${ENV}.logging.max_files" "$CONFIG_FILE")
 
 # --------------------------------------------------
-# Determine deployment mode (Backward Compatible)
+# Determine deployment mode
 # --------------------------------------------------
-# If lib_path is empty or null, use Spring Boot FAT JAR mode, Otherwise, use classic external lib (THIN JAR) mode
 if [[ -z "$LIB_PATH" || "$LIB_PATH" == "null" ]]; then
-  log_info "Deployment mode detected: FAT_JAR (Spring Boot)"
+  DEPLOY_MODE="FAT_JAR (Spring Boot JarLauncher)"
   MAIN_CLASS="org.springframework.boot.loader.launch.JarLauncher"
 else
-  log_info "Deployment mode detected: EXTERNAL_LIB - Thin Jar (WrapperSimpleApp)"
-  # MAIN_CLASS remains the application main class from deployment-config.yaml file
+  DEPLOY_MODE="THIN_JAR (external lib)"
 fi
+
+log_info "Deployment mode: ${DEPLOY_MODE}"
 
 # --------------------------------------------------
 # Validate required values
 # --------------------------------------------------
 if [[ -z "$APP_HOME" || -z "$JAVA_CMD" || -z "$APP_JAR" || -z "$MAIN_CLASS" ]]; then
-  log_error "Missing required configuration values for app=$APP env=$ENV"
+  log_error "Missing required configuration values for app=${APP} env=${ENV}"
   exit 1
 fi
 
 if [[ ! -f "$CONF_TEMPLATE" || ! -f "$SH_TEMPLATE" ]]; then
-  log_error "Missing Tanuki template files. Expected at: $CONF_TEMPLATE and $SH_TEMPLATE"
+  log_error "Tanuki template files not found — check runner installation"
   exit 1
 fi
 
 mkdir -p "$OUTPUT_DIR"
 
 # --------------------------------------------------
-# Generate wrapper.conf
+# Generate wrapper.conf (base from template)
 # --------------------------------------------------
 CONF_FILE="${OUTPUT_DIR}/${APP}-${ENV}.conf"
-log_info "Generating Tanuki wrapper config: $CONF_FILE ..."
 
 sed \
-  -e "s|{{APP_NAME}}|$APP_NAME|g" \
-  -e "s|{{APP_HOME}}|$APP_HOME|g" \
-  -e "s|{{JAVA_CMD}}|$JAVA_CMD|g" \
-  -e "s|{{APP_JAR}}|$APP_JAR|g" \
-  -e "s|{{MAIN_CLASS}}|$MAIN_CLASS|g" \
-  -e "s|{{JVM_XMS}}|$JVM_XMS|g" \
-  -e "s|{{JVM_XMX}}|$JVM_XMX|g" \
-  -e "s|{{JVM_NEW_RATIO}}|$JVM_NEW_RATIO|g" \
-  -e "s|{{LOGFILE_MAXSIZE}}|$LOGFILE_MAXSIZE|g" \
-  -e "s|{{LOGFILE_MAXFILES}}|$LOGFILE_MAXFILES|g" \
+  -e "s|{{APP_NAME}}|${APP}|g" \
+  -e "s|{{APP_HOME}}|${APP_HOME}|g" \
+  -e "s|{{JAVA_CMD}}|${JAVA_CMD}|g" \
+  -e "s|{{APP_JAR}}|${APP_JAR}|g" \
+  -e "s|{{MAIN_CLASS}}|${MAIN_CLASS}|g" \
+  -e "s|{{LOGFILE_MAXSIZE}}|${LOGFILE_MAXSIZE}|g" \
+  -e "s|{{LOGFILE_MAXFILES}}|${LOGFILE_MAXFILES}|g" \
   "$CONF_TEMPLATE" > "$CONF_FILE"
+
+# --------------------------------------------------
+# Append JVM additional args dynamically
+# Only emit args that have actual values — empty xms/xmx means
+# the JVM uses ergonomic defaults (recommended for modern JVMs).
+# --------------------------------------------------
+ADDITIONAL_IDX=1
+
+# Heap sizing — optional; omit to let JVM auto-size
+if [[ -n "${JVM_XMS}" && "${JVM_XMS}" != "null" ]]; then
+  echo "wrapper.java.additional.${ADDITIONAL_IDX}=-Xms${JVM_XMS}" >> "$CONF_FILE"
+  ((ADDITIONAL_IDX++))
+fi
+if [[ -n "${JVM_XMX}" && "${JVM_XMX}" != "null" ]]; then
+  echo "wrapper.java.additional.${ADDITIONAL_IDX}=-Xmx${JVM_XMX}" >> "$CONF_FILE"
+  ((ADDITIONAL_IDX++))
+fi
+
+# NewRatio — only include when explicitly set
+if [[ -n "${JVM_NEW_RATIO}" && "${JVM_NEW_RATIO}" != "null" && "${JVM_NEW_RATIO}" != "0" ]]; then
+  echo "wrapper.java.additional.${ADDITIONAL_IDX}=-XX:NewRatio=${JVM_NEW_RATIO}" >> "$CONF_FILE"
+  ((ADDITIONAL_IDX++))
+fi
+
+# Extra JVM opts from deployment config (GC flags, workload flags, user-defined opts).
+# These were previously written to extra_opts[] in the YAML but never applied to the
+# Tanuki conf — this loop wires them through correctly.
+EXTRA_OPTS_COUNT=$(yq -r ".apps.${APP}.${ENV}.jvm.extra_opts | length" "$CONFIG_FILE" 2>/dev/null || echo "0")
+if [[ "$EXTRA_OPTS_COUNT" =~ ^[0-9]+$ && "$EXTRA_OPTS_COUNT" -gt 0 ]]; then
+  for ((i=0; i<EXTRA_OPTS_COUNT; i++)); do
+    OPT=$(yq -r ".apps.${APP}.${ENV}.jvm.extra_opts[${i}]" "$CONFIG_FILE")
+    if [[ -n "$OPT" && "$OPT" != "null" ]]; then
+      echo "wrapper.java.additional.${ADDITIONAL_IDX}=${OPT}" >> "$CONF_FILE"
+      ((ADDITIONAL_IDX++))
+    fi
+  done
+fi
+
+if [[ $ADDITIONAL_IDX -gt 1 ]]; then
+  log_info "  Added $((ADDITIONAL_IDX - 1)) additional JVM arg(s) to wrapper conf"
+else
+  log_info "  No heap constraints — JVM will use ergonomic defaults"
+fi
 
 # --------------------------------------------------
 # Generate wrapper.sh
 # --------------------------------------------------
 SH_FILE="${OUTPUT_DIR}/${APP}-wrapper.sh"
-log_info "Generating Tanuki wrapper script: $SH_FILE ..."
 
 sed \
-  -e "s|{{APP_NAME}}|$APP_NAME|g" \
-  -e "s|{{APP_HOME}}|$APP_HOME|g" \
-  -e "s|{{ENV}}|$ENV|g" \
+  -e "s|{{APP_NAME}}|${APP}|g" \
+  -e "s|{{APP_HOME}}|${APP_HOME}|g" \
+  -e "s|{{ENV}}|${ENV}|g" \
   "$SH_TEMPLATE" > "$SH_FILE"
 
 chmod +x "$SH_FILE"
@@ -156,9 +176,7 @@ chmod +x "$SH_FILE"
 # --------------------------------------------------
 # Summary
 # --------------------------------------------------
-log_info "--------------------------------------------------"
-log_info "Generated Tanuki wrapper files for $APP ($ENV):"
-log_info "  - $CONF_FILE"
-log_info "  - $SH_FILE"
-log_info "Tanuki wrapper configuration completed successfully."
-log_info "--------------------------------------------------"
+log_info "Tanuki wrapper generated for ${APP} (${ENV}):"
+log_info "  Config:  ${APP}-${ENV}.conf"
+log_info "  Script:  ${APP}-wrapper.sh"
+log_info "Tanuki wrapper configuration completed."

@@ -75,7 +75,6 @@ log_info "Resolved root directory for deployment context: $ROOT_DIR"
 
 # Ensure APP_PATH always includes app name
 APP_PATH="${APP_PATH%/}/${APP}"
-[[ -d "$APP_PATH" ]] || { log_info "Creating application base path: $APP_PATH"; mkdir -p "$APP_PATH"; }
 
 export APP ENV WIZARD_LOG_FILE
 
@@ -97,10 +96,25 @@ DEPLOYMENT_TAR="/tmp/${APP}-${ENV}.tar.gz"
 # Helper Functions
 # --------------------------------------------------
 
-# Safely create directory if missing
+# Safely create directory — tries normal mkdir first, falls back to sudo mkdir.
+# This allows the deploy user to create directories outside its home when a
+# sudoers rule grants NOPASSWD: /bin/mkdir (set up by WizardCD installer).
 create_dir() {
   local dir=$1
-  [[ -d "$dir" ]] || { log_info "Creating $dir ..."; mkdir -p "$dir"; }
+  if [[ -d "$dir" ]]; then
+    return 0
+  fi
+  log_info "Creating directory: $dir"
+  if mkdir -p "$dir" 2>/dev/null; then
+    return 0
+  fi
+  # Fallback: try with sudo (requires NOPASSWD sudoers entry for /bin/mkdir)
+  if sudo mkdir -p "$dir" 2>/dev/null; then
+    sudo chown "${RUN_AS_USER}:${RUN_AS_USER}" "$dir" 2>/dev/null || true
+    return 0
+  fi
+  log_error "Cannot create directory: $dir — check permissions or add sudo rule for deploy user"
+  exit 1
 }
 
 # Rotate old release backups (retain only MAX_BACKUPS)
@@ -207,7 +221,7 @@ start_app() {
     exit 60
   fi
 
-  log_info "Wrapper start command executed. Entering stabilization phase..."
+  log_info "Wrapper start command executed. Waiting for application to stabilize..."
 
   # --------------------------------------------------
   # Stabilization Logic
@@ -230,19 +244,24 @@ start_app() {
 
   sleep "$GRACE_PERIOD"
 
+  local check_num=0
+  local total_checks=$(( STABILITY_WINDOW / CHECK_INTERVAL ))
+
   while (( elapsed < STABILITY_WINDOW )); do
+    check_num=$(( check_num + 1 ))
 
     # Validate wrapper status
     STATUS_OUTPUT=$("$wrapper_sh" status || true)
     if ! echo "$STATUS_OUTPUT" | grep -q "STARTED"; then
-      log_error "Wrapper status not STARTED during stabilization."
+      log_error "Stabilization failed — wrapper status not STARTED (check ${check_num}/${total_checks})"
+      log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60
     fi
 
     # Validate PID file
     local pid_file="${BIN_DIR}/${APP}.pid"
     if [[ ! -f "$pid_file" ]]; then
-      log_error "PID file missing during stabilization."
+      log_error "Stabilization failed — PID file missing (check ${check_num}/${total_checks})"
       exit 60
     fi
 
@@ -251,16 +270,19 @@ start_app() {
 
     # Ensure process still alive
     if ! kill -0 "$pid" 2>/dev/null; then
-      log_error "Process $pid died during stabilization."
+      log_error "Stabilization failed — process ${pid} exited unexpectedly (check ${check_num}/${total_checks})"
+      log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60
     fi
 
     # Ensure application port is bound
     if ! ss -lnt | grep -q ":${SERVER_PORT}"; then
-      log_error "Port $SERVER_PORT not bound during stabilization."
+      log_error "Stabilization failed — port ${SERVER_PORT} not bound (check ${check_num}/${total_checks})"
+      log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60
     fi
 
+    log_info "  Health check ${check_num}/${total_checks} — process alive, port ${SERVER_PORT} bound"
     sleep "$CHECK_INTERVAL"
     elapsed=$((elapsed + CHECK_INTERVAL))
   done
@@ -277,21 +299,19 @@ start_app() {
 # Main Deployment Flow
 # --------------------------------------------------
 
-log_info "--------------------------------------------------"
-log_info "REMOTE: Starting remote deployment via application-deployment.sh ..."
-log_info "App: $APP ($ENV)"
-log_info "Host: $VM_HOST"
-log_info "Path: $APP_PATH"
-log_info "Server port: $SERVER_PORT"
-log_info "--------------------------------------------------"
+log_info "=================================================="
+log_info "Remote deployment started"
+log_info "  Application: ${APP} (${ENV})"
+log_info "  Deploy path: ${APP_PATH}"
+log_info "  Server port: ${SERVER_PORT}"
+log_info "=================================================="
 
 BASE_DIR="$(dirname "$APP_PATH")"
 
 [[ -z "$APP_PATH" ]] && { log_error "Application path is undefined!"; exit 1; }
 
-[[ ! -d "$BASE_DIR" ]] && { log_warn "Base directory missing. Creating it..."; mkdir -p "$BASE_DIR"; }
-
-[[ ! -d "$APP_PATH" ]] && { log_info "Creating application path: $APP_PATH"; mkdir -p "$APP_PATH"; }
+create_dir "$BASE_DIR"
+create_dir "$APP_PATH"
 
 WRAPPER_LOG_PATH="$(dirname "$APP_PATH")/wrapper.log"
 [[ -f "$WRAPPER_LOG_PATH" ]] && { log_info "Removing old Tanuki wrapper log."; rm -f "$WRAPPER_LOG_PATH"; }

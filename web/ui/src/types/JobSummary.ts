@@ -11,4 +11,5 @@ export interface JobSummary {
   createdAt:       string           // ISO 8601 string from backend
   lifecycleStatus: JobLifecycleStatus
   executionStatus: JobExecutionStatus
+  completedAt?:    string           // ISO 8601; set when job reaches a terminal state
 }

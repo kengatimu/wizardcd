@@ -82,14 +82,19 @@ public class JobQueryServiceImpl implements JobQueryService {
                 JobMetadata meta = objectMapper.readValue(metadataFile, JobMetadata.class);
                 JobExecutionStateStatus execState = jobStateService.readCurrentState(jobId);
 
-                // 6. Map to DTO and add to results
+                // 6. Read completedAt from the full status snapshot
+                com.ebb.wizardcd.runner.dto.JobExecutionStatus snapshot = jobStateService.readSnapshot(jobId);
+                java.time.Instant completedAt = (snapshot != null) ? snapshot.getCompletedAt() : null;
+
+                // 7. Map to DTO and add to results
                 summaries.add(new JobSummary(
                         jobId,
                         meta.getApplication(),
                         meta.getEnvironment(),
                         meta.getCreatedAt(),
                         currentLifecycle,
-                        execState
+                        execState,
+                        completedAt
                 ));
 
             } catch (Exception e) {

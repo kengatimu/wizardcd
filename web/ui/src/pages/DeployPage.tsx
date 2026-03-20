@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Rocket, Key, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Wand2, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle, Clock, ChevronDown, Info, Search } from 'lucide-react'
+import JSZip from 'jszip'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { submitJob, fetchRunnerPublicKeys, fetchRunnerInfo, testSshConnection } from '../api/jobs'
 import type { DeploymentRequest } from '../types/DeploymentRequest'
-import FormField, { SelectField, FieldWrapper } from '../components/FormField'
+import FormField, { SelectField, FieldWrapper, RowInput, RowSelect, RowField } from '../components/FormField'
 import ToggleSwitch from '../components/ToggleSwitch'
 import DynamicList from '../components/DynamicList'
 import { useTheme, type ActiveEnv } from '../context/ThemeContext'
@@ -13,12 +14,10 @@ import { useTheme, type ActiveEnv } from '../context/ThemeContext'
 // ── Step metadata ─────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, num: '01', label: 'Target Server' },
-  { id: 2, num: '02', label: 'Application' },
-  { id: 3, num: '03', label: 'Java'        },
-  { id: 4, num: '04', label: 'Process'     },
-  { id: 5, num: '05', label: 'Backup'      },
-  { id: 6, num: '06', label: 'File Uploads' },
+  { id: 1, num: '01', label: 'Target Server'  },
+  { id: 2, num: '02', label: 'Application'    },
+  { id: 3, num: '03', label: 'Deployment Options' },
+  { id: 4, num: '04', label: 'Review & Deploy' },
 ] as const
 
 // ── File upload helper types ───────────────────────────────────────
@@ -38,9 +37,9 @@ interface ExtraDirUpload {
 // ── Per-environment SSH key panel style tokens ────────────────────
 
 const ENV_KEY_STYLE = {
-  SIT:  { border: 'border-l-sig-blue/60',   dot: 'bg-sig-blue',   text: 'text-sig-blue',   header: 'bg-sig-blue-dim'   },
-  UAT:  { border: 'border-l-sig-yellow/60', dot: 'bg-sig-yellow', text: 'text-sig-yellow', header: 'bg-sig-yellow-dim' },
-  PROD: { border: 'border-l-sig-purple/60', dot: 'bg-sig-purple', text: 'text-sig-purple', header: 'bg-sig-purple-dim' },
+  SIT:  { border: 'border-l-sig-blue/60',   dot: 'bg-sig-blue',   text: 'text-sig-blue',   header: 'bg-sig-blue-dim',   badge: 'border-sig-blue/30 bg-sig-blue-dim/40'     },
+  UAT:  { border: 'border-l-sig-yellow/60', dot: 'bg-sig-yellow', text: 'text-sig-yellow', header: 'bg-sig-yellow-dim', badge: 'border-sig-yellow/30 bg-sig-yellow-dim/40'  },
+  PROD: { border: 'border-l-sig-purple/60', dot: 'bg-sig-purple', text: 'text-sig-purple', header: 'bg-sig-purple-dim', badge: 'border-sig-purple/30 bg-sig-purple-dim/40'  },
 } as const
 
 // ── Form state ────────────────────────────────────────────────────
@@ -74,7 +73,9 @@ interface FormState {
   // Step 6 — File Uploads
   jarArtifact: File | null      // the application JAR (always required)
   libZip:      File | null      // lib/ dependencies ZIP (thin JAR mode only)
+  hasCerts:    boolean           // explicit opt-in: user has cert/keystore files
   certUploads: CertUpload[]     // cert/keystore entries, each with its own ZIP
+  hasExtraDirs: boolean          // explicit opt-in: user has extra directories
   extraDirs:   ExtraDirUpload[] // extra directory entries, each with its own ZIP
   jarName:     string           // auto-filled from jarArtifact filename
 }
@@ -102,14 +103,16 @@ const INITIAL: FormState = {
   extraOpts:      [],
   runAsUser:      '',
   serverPort:     '',
-  maxLogSize:     '',
-  maxLogFiles:    '',
+  maxLogSize:     '10m',
+  maxLogFiles:    '10',
   jarType:        'fat',
   performBackup:  true,
-  maxBackups:     '5',
+  maxBackups:     '3',
   jarArtifact:    null,
   libZip:         null,
+  hasCerts:       false,
   certUploads:    [],
+  hasExtraDirs:   false,
   extraDirs:      [],
   jarName:        '',
 }
@@ -118,46 +121,39 @@ const INITIAL: FormState = {
 
 type FormErrors = Partial<Record<keyof FormState, string>>
 
-function validateStep(step: number, form: FormState): FormErrors {
+function validateStep(step: number, form: FormState, jvmConfigEnabled = false): FormErrors {
   const e: FormErrors = {}
   switch (step) {
-    case 1:  // SSH Target
+    case 1:  // Target Server
       if (!form.sshUser)        e.sshUser        = 'Required'
       if (!form.sshHost)        e.sshHost        = 'Required'
       if (!form.sshPort)        e.sshPort        = 'Required'
-      if (!form.targetBasePath) e.targetBasePath = 'Required'
       break
-    case 2:  // Identity
-      if (!form.appName)   e.appName   = 'Required'
-      if (!form.mainClass) e.mainClass = 'Required'
-      break
-    case 3:  // Java / JVM
-      if (!form.javaCommand) e.javaCommand = 'Required'
-      if (!form.javaVersion) e.javaVersion = 'Required'
-      if (!form.xms)         e.xms         = 'Required'
-      if (!form.xmx)         e.xmx         = 'Required'
-      break
-    case 4:  // Runtime
-      if (!form.runAsUser)  e.runAsUser  = 'Required'
-      if (!form.serverPort) e.serverPort = 'Required'
-      break
-    case 5:
-      // no required fields
-      break
-    case 6:
+    case 2:  // Application
       if (!form.jarArtifact) {
         e.jarArtifact = 'Required'
       } else if (!form.jarArtifact.name.toLowerCase().endsWith('.jar')) {
         e.jarArtifact = 'Must be a .jar file'
       }
       if (!form.jarName.trim()) e.jarName = 'Required'
-      if (form.jarType === 'thin') {
-        if (!form.libZip) {
-          e.libZip = 'Required for Thin JAR — upload your lib/ directory as a .zip'
-        } else if (!form.libZip.name.toLowerCase().endsWith('.zip')) {
-          e.libZip = 'Must be a .zip file'
-        }
+      if (form.jarType === 'thin' && !form.libZip) {
+        e.libZip = 'Required — upload your lib/ dependencies as a .zip'
       }
+      if (!form.appName)    e.appName    = 'Required'
+      if (!form.mainClass)  e.mainClass  = 'Required'
+      if (!form.javaCommand) e.javaCommand = 'Required'
+      if (!form.javaVersion) e.javaVersion = 'Required'
+      if (!form.runAsUser)      e.runAsUser      = 'Required'
+      if (!form.serverPort)     e.serverPort     = 'Required'
+      if (!form.targetBasePath) e.targetBasePath = 'Required'
+      if (jvmConfigEnabled) {
+        if (!form.xms) e.xms = 'Required'
+        if (!form.xmx) e.xmx = 'Required'
+        if (form.xms && form.xmx && heapMB(form.xms) > heapMB(form.xmx))
+          e.xms = 'Heap min cannot exceed heap max'
+      }
+      break
+    case 3:  // Configuration — no required fields
       break
   }
   return e
@@ -176,15 +172,16 @@ function getStepStatus(
   activeStep: number,
   visited: Set<number>,
   form: FormState,
+  jvmConfigEnabled = false,
 ): StepStatus {
   if (stepId === activeStep) return 'active'
   if (!visited.has(stepId))  return 'unvisited'
-  return Object.keys(validateStep(stepId, form)).length === 0 ? 'complete' : 'incomplete'
+  return Object.keys(validateStep(stepId, form, jvmConfigEnabled)).length === 0 ? 'complete' : 'incomplete'
 }
 
 // ── Build DeploymentRequest ───────────────────────────────────────
 
-function buildRequest(form: FormState): DeploymentRequest {
+function buildRequest(form: FormState, computedJvmFlags: string[] = []): DeploymentRequest {
   return {
     appName:        form.appName,
     environment:    form.environment,
@@ -194,8 +191,8 @@ function buildRequest(form: FormState): DeploymentRequest {
     javaVersion:    parseInt(form.javaVersion,  10),
     xms:            form.xms,
     xmx:            form.xmx,
-    newRatio:       form.newRatio,
-    extraOpts:      form.extraOpts.filter(Boolean),
+    newRatio:       '',    // empty = omitted from Tanuki conf; modern GCs self-tune generational sizing
+    extraOpts:      [...computedJvmFlags, ...form.extraOpts.filter(Boolean)],
     runAsUser:      form.runAsUser,
     serverPort:     parseInt(form.serverPort,   10),
     maxLogSize:     form.maxLogSize,
@@ -204,10 +201,10 @@ function buildRequest(form: FormState): DeploymentRequest {
     // empty string triggers FAT_JAR mode (deploy.sh uses this to pick the classpath).
     libPath:        form.jarType === 'thin' ? 'lib' : '',
     extraDirs:      form.extraDirs
-      .filter((d) => d.dirName.trim() && d.targetPath.trim())
+      .filter((d) => d.dirName.trim() && d.targetPath.trim() && d.file)
       .map((d) => ({ dirName: d.dirName.trim(), targetPath: d.targetPath.trim() })),
     certPaths:      form.certUploads
-      .filter((c) => c.source.trim() && c.targetPath.trim())
+      .filter((c) => c.source.trim() && c.targetPath.trim() && c.file)
       .map((c) => ({ source: c.source.trim(), targetPath: c.targetPath.trim() })),
     sshUser:        form.sshUser,
     sshHost:        form.sshHost,
@@ -227,13 +224,52 @@ interface StepTabProps {
   onClick: () => void
 }
 
+// ── Review row (Step 4) ──────────────────────────────────────────
+
+const REVIEW_ENV_BADGE: Record<string, string> = {
+  SIT:  'bg-sig-blue-dim text-sig-blue border-sig-blue/25',
+  UAT:  'bg-sig-yellow-dim text-sig-yellow border-sig-yellow/25',
+  PROD: 'bg-sig-purple-dim text-sig-purple border-sig-purple/25',
+}
+
+function ReviewRow({ label, value, mono, badge }: {
+  label: string
+  value: string
+  mono?: boolean
+  badge?: boolean   // render value as env badge
+}) {
+  return (
+    <div className="flex items-center gap-3 py-1.5 last:pb-0 first:pt-0">
+      <span className="text-xs text-wiz-muted/50 w-24 flex-shrink-0">{label}</span>
+      {badge ? (
+        <span className={clsx(
+          'inline-flex items-center px-2.5 py-0.5 rounded font-mono text-[11px] font-bold uppercase tracking-wider border',
+          REVIEW_ENV_BADGE[value] ?? 'bg-wiz-surface text-wiz-muted border-wiz-border',
+        )}>
+          {value}
+        </span>
+      ) : (
+        <span
+          className={clsx(
+            'flex-1 rounded-md bg-wiz-bg/60 border border-wiz-border/15 px-2.5 py-1',
+            'text-xs text-wiz-cream/80 break-all font-mono',
+          )}
+          title={value || '—'}
+        >
+          {value || '—'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function StepTab({ num, label, status, onClick }: StepTabProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={clsx(
-        'flex items-center gap-2 px-4 py-2 rounded-lg border font-mono text-sm',
+        'flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border font-mono text-xs w-full',
         'transition-all duration-150 whitespace-nowrap cursor-pointer',
         status === 'active'
           ? 'border-wiz-gold       text-wiz-gold    bg-wiz-gold/5          shadow-gold-sm'
@@ -265,16 +301,6 @@ function StepTab({ num, label, status, onClick }: StepTabProps) {
   )
 }
 
-// ── Section heading ───────────────────────────────────────────────
-
-function StepHeading({ num, label }: { num: string; label: string }) {
-  return (
-    <h2 className="flex items-center gap-2 font-mono font-bold text-sm text-wiz-gold tracking-wider mb-6">
-      <span>{num} —</span>
-      <span className="uppercase">{label}</span>
-    </h2>
-  )
-}
 
 // ── File upload zone ──────────────────────────────────────────────
 
@@ -369,6 +395,62 @@ function UploadZone({ value, onChange, error, accept = '.jar,.zip', inputId = 'a
   )
 }
 
+// ── CompactUploadZone — drag-and-drop, fits inside a RowField right column ──
+
+interface CompactUploadZoneProps {
+  accept:   string
+  inputId:  string
+  onChange: (file: File) => void
+  error?:   string
+}
+
+function CompactUploadZone({ accept, inputId, onChange, error }: CompactUploadZoneProps) {
+  const [dragging, setDragging] = useState(false)
+  const fileLabel = accept === '.jar' ? '.jar file' : accept === '.zip' ? '.zip bundle' : accept
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragging(false)
+    const f = e.dataTransfer.files[0]
+    if (f) onChange(f)
+  }
+
+  return (
+    <>
+      <input
+        id={inputId}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f) }}
+      />
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => document.getElementById(inputId)?.click()}
+        className={clsx(
+          'flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer',
+          'border-2 border-dashed transition-all duration-150',
+          dragging
+            ? 'border-wiz-gold bg-wiz-gold/5'
+            : error
+            ? 'border-sig-red/40 bg-sig-red-dim/20'
+            : 'border-wiz-border bg-wiz-bg hover:border-wiz-border-mid hover:bg-wiz-surface',
+        )}
+      >
+        <div className="w-8 h-8 rounded-lg bg-wiz-raised flex items-center justify-center flex-shrink-0">
+          <Upload size={15} className="text-wiz-muted" />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium text-wiz-gray">Click to select or drag & drop</span>
+          <span className="font-mono text-2xs text-wiz-muted/60">{fileLabel}</span>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Compact inline file upload (for per-row cert / extra-dir entries) ────
 
 interface MiniUploadProps {
@@ -422,6 +504,544 @@ function MiniUpload({ value, onChange, accept, inputId }: MiniUploadProps) {
   )
 }
 
+// ── localStorage deploy history ───────────────────────────────────
+
+/** Stores the last 5 unique (appName + environment) deployments. */
+
+type GcType = 'G1GC' | 'ParallelGC' | 'ZGC' | 'Shenandoah'
+type WorkloadProfile = 'API' | 'HighThroughput' | 'Batch' | 'MemoryIntensive'
+
+// ── JVM Memory Presets ─────────────────────────────────────────────────────
+const JVM_PRESETS = [
+  { id: 'small',  label: 'Small',  heap: '512m', gc: 'G1GC',       desc: 'Lightweight APIs'        },
+  { id: 'medium', label: 'Medium', heap: '1g',   gc: 'G1GC',       desc: 'Standard Spring Boot'    },
+  { id: 'large',  label: 'Large',  heap: '2g',   gc: 'G1GC',       desc: 'Transaction systems'     },
+  { id: 'xlarge', label: 'XLarge', heap: '4g',   gc: 'G1GC',       desc: 'High throughput / batch' },
+] as const
+
+/** minJava: minimum Java version required to use this GC */
+const GC_OPTIONS: { id: GcType; label: string; desc: string; minJava: number }[] = [
+  { id: 'G1GC',       label: 'G1GC',       desc: 'Balanced latency and throughput with configurable pause targets. Default since Java 9, available on 8+ — safe for most workloads.',          minJava: 8  },
+  { id: 'ParallelGC', label: 'ParallelGC', desc: 'Maximum throughput using all CPU cores. Full stop-the-world pauses — best for batch jobs and ETL. Available on Java 8+.',              minJava: 8  },
+  { id: 'ZGC',        label: 'ZGC',        desc: 'Sub-millisecond pauses regardless of heap size. Needs ≥ 4 GB heap, optimal at ≥ 8 GB. Production-ready since Java 15.',               minJava: 15 },
+  { id: 'Shenandoah', label: 'Shenandoah', desc: 'Low-pause concurrent collector, similar to ZGC. OpenJDK 12+ only — not available on Oracle JDK.',                                    minJava: 12 },
+]
+
+const WORKLOAD_OPTIONS: { id: WorkloadProfile; label: string; desc: string }[] = [
+  { id: 'API',            label: 'API',                desc: 'MaxGCPauseMillis=200 — balanced for REST APIs and web services.'                                  },
+  { id: 'HighThroughput', label: 'Low Latency',        desc: 'MaxGCPauseMillis=100 — aggressive target for real-time APIs and WebSocket servers.'               },
+  { id: 'Batch',          label: 'Batch / Throughput', desc: 'MaxGCPauseMillis=500 — relaxed pauses, maximises throughput for batch processing and scheduled jobs.' },
+  { id: 'MemoryIntensive',label: 'Memory Intensive',   desc: 'MaxGCPauseMillis=500 + pre-touch — stable heap for large in-memory datasets and caches.'          },
+]
+
+// ── Java Installation Presets ──────────────────────────────────────────────
+
+const JAVA_PRESETS: { id: string; label: string; path: string; version: string }[] = [
+  { id: 'openjdk-8',   label: 'OpenJDK 8',    path: '/usr/lib/jvm/java-8-openjdk-amd64/bin/java',    version: '8'  },
+  { id: 'openjdk-11',  label: 'OpenJDK 11',   path: '/usr/lib/jvm/java-11-openjdk-amd64/bin/java',   version: '11' },
+  { id: 'openjdk-17',  label: 'OpenJDK 17',   path: '/usr/lib/jvm/java-17-openjdk-amd64/bin/java',   version: '17' },
+  { id: 'openjdk-21',  label: 'OpenJDK 21',   path: '/usr/lib/jvm/java-21-openjdk-amd64/bin/java',   version: '21' },
+  { id: 'temurin-17',  label: 'Temurin 17',   path: '/usr/lib/jvm/temurin-17-jdk-amd64/bin/java',    version: '17' },
+  { id: 'temurin-21',  label: 'Temurin 21',   path: '/usr/lib/jvm/temurin-21-jdk-amd64/bin/java',    version: '21' },
+  { id: 'temurin-25',  label: 'Temurin 25',   path: '/usr/lib/jvm/temurin-25-jdk-amd64/bin/java',    version: '25' },
+  { id: 'corretto-11', label: 'Corretto 11',  path: '/usr/lib/jvm/java-11-amazon-corretto/bin/java', version: '11' },
+  { id: 'corretto-17', label: 'Corretto 17',  path: '/usr/lib/jvm/java-17-amazon-corretto/bin/java', version: '17' },
+  { id: 'corretto-21', label: 'Corretto 21',  path: '/usr/lib/jvm/java-21-amazon-corretto/bin/java', version: '21' },
+  { id: 'custom',      label: 'Custom path…', path: '',                                               version: ''   },
+]
+
+// ── Java path helpers ──────────────────────────────────────────────────────
+
+/**
+ * Infer a Java major version number from a binary path reported by the server.
+ * Handles common patterns: temurin-21, java-17-openjdk, jdk-11, corretto-21, etc.
+ */
+function inferJavaVersion(path: string): number | null {
+  const m = path.match(/(?:temurin|java|jdk|corretto|openjdk)[_-](\d+)/i)
+  return m ? parseInt(m[1], 10) : null
+}
+
+/**
+ * Derive a human-readable distribution label from a Java binary path.
+ * Falls back to the directory name just above bin/.
+ */
+function inferJavaLabel(path: string): string {
+  // e.g. /usr/lib/jvm/temurin-21-jdk-amd64/bin/java → "temurin-21-jdk-amd64"
+  const parts = path.split('/')
+  const binIdx = parts.indexOf('bin')
+  if (binIdx > 0) return parts[binIdx - 1]
+  return path
+}
+
+// ── SSH failure diagnosis ──────────────────────────────────────────────────
+// Parses the raw SSH error message to identify whether the failure is due to
+// a firewall/connectivity issue or a key/auth issue so we can mark the right
+// checklist item with X rather than blindly marking both.
+type SshFailTarget = 'firewall' | 'key' | 'both'
+
+function diagnoseSshFailure(msg: string | null): SshFailTarget {
+  if (!msg) return 'both'
+  const m = msg.toLowerCase()
+  // Firewall / connectivity — port not reachable
+  if (m.includes('connection refused') || m.includes('timed out') || m.includes('timeout') ||
+      m.includes('no route to host')   || m.includes('network unreachable') ||
+      m.includes('host unreachable')   || m.includes('could not resolve hostname')) {
+    return 'firewall'
+  }
+  // Key / auth — port reachable but authentication failed
+  if (m.includes('permission denied') || m.includes('publickey') ||
+      m.includes('authentication failed') || m.includes('auth')) {
+    return 'key'
+  }
+  return 'both'
+}
+
+// ── JAR Manifest Parser ────────────────────────────────────────────────────
+
+interface ManifestFields {
+  mainClass:    string
+  appTitle:     string
+  isSpringBoot: boolean
+  buildJdkSpec: string | null   // from Build-Jdk-Spec or Build-Jdk manifest attribute
+}
+
+/**
+ * Read the Java major version from a .class file's bytecode header.
+ * This is the definitive source — it reflects the actual compiler target,
+ * not the machine that ran the build.
+ *
+ * Class file format: bytes 0-3 = 0xCAFEBABE, bytes 6-7 = major version
+ * major version → Java version: 52=8, 55=11, 61=17, 65=21, 69=25, etc.
+ */
+async function detectJavaVersionFromBytecode(zip: JSZip): Promise<string | null> {
+  // Prefer class files under BOOT-INF/classes/ (Spring Boot fat/thin JAR)
+  let classFiles = zip.filter((p) => p.startsWith('BOOT-INF/classes/') && p.endsWith('.class'))
+  // Fall back to root-level class files (non-Spring / executable JARs)
+  if (classFiles.length === 0)
+    classFiles = zip.filter((p) => !p.includes('/META-INF') && p.endsWith('.class'))
+  if (classFiles.length === 0) return null
+  try {
+    const buf  = await classFiles[0].async('arraybuffer')
+    const view = new DataView(buf)
+    if (view.byteLength >= 8 && view.getUint32(0) === 0xCAFEBABE) {
+      const major      = view.getUint16(6)
+      const javaVer    = major - 44          // 52→8, 55→11, 61→17, 65→21, 69→25
+      if (javaVer >= 8 && javaVer <= 40) return String(javaVer)
+    }
+  } catch { /* non-fatal */ }
+  return null
+}
+
+async function parseJarManifest(file: File): Promise<ManifestFields> {
+  const zip = await JSZip.loadAsync(file)
+  const isSpringBoot = Object.keys(zip.files).some((n) => n.startsWith('BOOT-INF/'))
+  let mainClass    = ''
+  let appTitle     = ''
+  let buildJdkSpec: string | null = null
+  const manifestEntry = zip.file('META-INF/MANIFEST.MF')
+  if (manifestEntry) {
+    const content  = await manifestEntry.async('string')
+    // Unfold multi-line values (continuation lines start with a space)
+    const unfolded = content.replace(/\r?\n /g, '')
+    const attrs: Record<string, string> = {}
+    for (const line of unfolded.split(/\r?\n/)) {
+      const colon = line.indexOf(':')
+      if (colon > 0) attrs[line.slice(0, colon).trim()] = line.slice(colon + 1).trim()
+    }
+    mainClass = attrs['Start-Class'] || attrs['Main-Class'] || ''
+    appTitle  = attrs['Implementation-Title'] || ''
+  }
+  // Primary: read bytecode — definitive compiler target version
+  buildJdkSpec = await detectJavaVersionFromBytecode(zip)
+  return { mainClass, appTitle, isSpringBoot, buildJdkSpec }
+}
+
+// ── Port detection helpers ──────────────────────────────────────────────────
+
+function extractActiveProfile(text: string, format: 'props' | 'yml'): string | null {
+  if (format === 'props') {
+    const m = text.match(/^\s*spring\.profiles\.active\s*=\s*(\S+)/m)
+    return m ? m[1].split(',')[0].trim() : null
+  }
+  // YAML flat: spring.profiles.active: uat
+  const flat = text.match(/^\s*spring\.profiles\.active\s*:\s*(\S+)/m)
+  if (flat) return flat[1].split(',')[0].trim()
+  // YAML nested: spring: \n  profiles: \n    active: uat
+  const nested = text.match(/profiles:\s*\n\s+active:\s*(\S+)/m)
+  return nested ? nested[1].split(',')[0].trim() : null
+}
+
+function extractServerPort(text: string, format: 'props' | 'yml'): string | null {
+  // Matches a port value: either a literal number OR a ${VAR:default} placeholder
+  const portVal = (raw: string): string | null => {
+    const literal     = raw.match(/^(\d+)/)
+    if (literal) return literal[1]
+    const placeholder = raw.match(/^\$\{[^}]*:(\d+)\}/)
+    if (placeholder) return placeholder[1]
+    return null
+  }
+  if (format === 'props') {
+    const m = text.match(/^\s*server\.port\s*=\s*(.+)/m)
+    return m ? portVal(m[1].trim()) : null
+  }
+  // YAML flat: server.port: 8080  OR  server.port: ${PORT:8080}
+  const flat = text.match(/^\s*server\.port\s*:\s*(.+)/m)
+  if (flat) { const v = portVal(flat[1].trim()); if (v) return v }
+  // YAML nested: server:\n  port: 8080
+  const serverIdx = text.search(/^server\s*:/m)
+  if (serverIdx >= 0) {
+    const after = text.slice(serverIdx)
+    const portM = after.match(/\n[ \t]+port\s*:\s*(.+)/)
+    if (portM) { const v = portVal(portM[1].trim()); if (v) return v }
+  }
+  return null
+}
+
+interface PortDetection {
+  port:    string | null
+  source:  string | null   // which file the port was found in
+  profile: string | null   // which Spring profile was active (if detected)
+}
+
+/**
+ * Profile-aware server.port detection from a Spring Boot fat JAR.
+ * 1. Reads spring.profiles.active from the default config files.
+ * 2. Checks the profile-specific config file first (application-{profile}.yml/properties).
+ * 3. Falls back to the default config file.
+ * Returns port, the source filename, and the detected profile.
+ */
+async function parseServerPort(file: File): Promise<PortDetection> {
+  try {
+    const zip = await JSZip.loadAsync(file)
+
+    // Candidate config directories — Spring Boot fat/thin JARs use BOOT-INF/classes/,
+    // plain JARs and non-Spring apps put configs at root or config/
+    const prefixes = ['BOOT-INF/classes/', '', 'config/']
+
+    let defaultPropsText: string | null = null
+    let defaultYmlText:   string | null = null
+    let activeProfile:    string | null = null
+    let defaultPropsName: string | null = null
+    let defaultYmlName:   string | null = null
+
+    // Helper: try both .yml and .yaml extensions
+    const readYml = async (path: string) => {
+      const e = zip.file(path + '.yml') ?? zip.file(path + '.yaml')
+      return e ? { text: await e.async('string'), name: e.name.split('/').pop() ?? path } : null
+    }
+
+    for (const prefix of prefixes) {
+      if (!defaultPropsText) {
+        const e = zip.file(`${prefix}application.properties`)
+        if (e) { defaultPropsText = await e.async('string'); defaultPropsName = `${prefix}application.properties` }
+      }
+      if (!defaultYmlText) {
+        const r = await readYml(`${prefix}application`)
+        if (r) { defaultYmlText = r.text; defaultYmlName = r.name }
+      }
+    }
+
+    if (defaultPropsText) activeProfile = activeProfile ?? extractActiveProfile(defaultPropsText, 'props')
+    if (defaultYmlText)   activeProfile = activeProfile ?? extractActiveProfile(defaultYmlText,   'yml')
+
+    // Check profile-specific config first
+    if (activeProfile) {
+      for (const prefix of prefixes) {
+        const pProps = zip.file(`${prefix}application-${activeProfile}.properties`)
+        if (pProps) {
+          const text = await pProps.async('string')
+          const port = extractServerPort(text, 'props')
+          if (port) return { port, source: `application-${activeProfile}.properties`, profile: activeProfile }
+        }
+        const pYml = await readYml(`${prefix}application-${activeProfile}`)
+        if (pYml) {
+          const port = extractServerPort(pYml.text, 'yml')
+          if (port) return { port, source: pYml.name, profile: activeProfile }
+        }
+      }
+    }
+
+    // Fall back to default configs
+    if (defaultPropsText) {
+      const port = extractServerPort(defaultPropsText, 'props')
+      if (port) return { port, source: defaultPropsName ?? 'application.properties', profile: activeProfile }
+    }
+    if (defaultYmlText) {
+      const port = extractServerPort(defaultYmlText, 'yml')
+      if (port) return { port, source: defaultYmlName ?? 'application.yml', profile: activeProfile }
+    }
+
+    // Last resort: bootstrap.yml / bootstrap.yaml (Spring Cloud apps — Eureka, Config Server, etc.)
+    for (const prefix of prefixes) {
+      const bootstrap = await readYml(`${prefix}bootstrap`)
+      if (bootstrap) {
+        const port = extractServerPort(bootstrap.text, 'yml')
+        if (port) return { port, source: bootstrap.name, profile: activeProfile }
+      }
+      const bProps = zip.file(`${prefix}bootstrap.properties`)
+      if (bProps) {
+        const text = await bProps.async('string')
+        const port = extractServerPort(text, 'props')
+        if (port) return { port, source: 'bootstrap.properties', profile: activeProfile }
+      }
+    }
+
+  } catch { /* non-fatal */ }
+  return { port: null, source: null, profile: null }
+}
+
+/** Parse a heap string like "512m" or "1g" → numeric part as string. */
+function heapNum(v: string): string { return v.replace(/[mgMG]/g, '') }
+
+/** Convert heap string to MB for comparison. */
+function heapMB(v: string): number {
+  const n = parseFloat(v)
+  if (isNaN(n)) return 0
+  return (v.endsWith('g') || v.endsWith('G')) ? n * 1024 : n
+}
+
+interface JvmConfig {
+  gcType:           GcType
+  workloadProfile:  WorkloadProfile
+  containerAware:   boolean
+  advancedGcTuning: boolean
+  maxGcPauseMs:     string
+  metaspaceSize:    string   // e.g. "256m" — empty = JVM default
+  threadStackSize:  string   // e.g. "512k" — empty = JVM default
+}
+
+/** Full input to the JVM flag deriver — includes heap, version, and container config. */
+interface JvmDeriveInput extends JvmConfig {
+  xms:         string   // e.g. "1g" or "" for ergonomic default
+  xmx:         string
+  javaVersion: string   // e.g. "25", "21", "17", "11", "8" — drives version-gated flags
+  maxRamPct:   string   // container MaxRAMPercentage override, default "70.0"
+}
+
+/** Structured result: flags to write, advisory warnings, blocking errors. */
+interface JvmDeriveResult {
+  flags:    string[]   // ordered JVM flags ready for Tanuki wrapper
+  warnings: string[]   // non-blocking — shown in UI, do not prevent deploy
+  errors:   string[]   // blocking — must be resolved before submission
+}
+
+/**
+ * Single source of truth for all JVM flag generation.
+ * GC-aware, Java-version-aware, container-aware.
+ * Never silently generates conflicting or invalid flag combinations.
+ */
+function deriveJvmFlags({
+  xms, xmx,
+  gcType, workloadProfile, containerAware,
+  advancedGcTuning, maxGcPauseMs,
+  metaspaceSize, threadStackSize,
+  javaVersion, maxRamPct,
+}: JvmDeriveInput): JvmDeriveResult {
+  const flags:    string[] = []
+  const warnings: string[] = []
+  const errors:   string[] = []
+
+  const jvNum      = parseInt(javaVersion.trim(), 10)  // NaN when blank → gates open
+  const hasVersion = Number.isFinite(jvNum) && jvNum > 0
+  const hasFixedHeap = Boolean(xms.trim() || xmx.trim())
+
+  // ── Errors: blocking ─────────────────────────────────────────────────────
+
+  if (containerAware && hasFixedHeap) {
+    errors.push(
+      'Container Optimisation (MaxRAMPercentage) conflicts with fixed Xms/Xmx. ' +
+      'Use one strategy — either fixed heap or container-aware percentage.'
+    )
+  }
+
+  // GC version requirements — only raised when the Java version is known
+  if (gcType === 'ZGC'        && hasVersion && jvNum < 15) {
+    errors.push(`ZGC requires Java 15 or later. Configured version is Java ${jvNum} — switch to G1GC or update the Java version in the Java Config step.`)
+  }
+  if (gcType === 'Shenandoah' && hasVersion && jvNum < 12) {
+    errors.push(`Shenandoah GC requires Java 12 or later. Configured version is Java ${jvNum} — switch to G1GC or update the Java version.`)
+  }
+
+  // ── Warnings: GC + workload compatibility ────────────────────────────────
+
+  if (gcType === 'ZGC') {
+    if (advancedGcTuning && maxGcPauseMs) {
+      warnings.push('ZGC manages its own pause targets — MaxGCPauseMillis is ignored by ZGC.')
+    }
+    if (workloadProfile === 'Batch') {
+      warnings.push('Batch / Throughput profile is tuned for G1GC or ParallelGC. With ZGC, some tuning flags have no effect.')
+    }
+    if (hasFixedHeap && heapMB(xmx || xms) < 4096) {
+      warnings.push('ZGC is designed for large heaps — recommended ≥ 4 GB, optimal ≥ 8 GB. On smaller heaps G1GC typically performs better.')
+    }
+    // ZGC SoftMaxHeapSize is more effective than a hard Xmx on Java 21+
+    if (hasFixedHeap && hasVersion && jvNum >= 21) {
+      warnings.push('ZGC on Java 21+: consider -XX:SoftMaxHeapSize instead of a hard Xmx — ZGC can adapt heap usage within the soft limit, improving throughput under variable load. Add it in Additional JVM Options.')
+    }
+  }
+
+  if (gcType === 'Shenandoah' && advancedGcTuning && maxGcPauseMs) {
+    warnings.push('Shenandoah uses its own adaptive heuristics — MaxGCPauseMillis has no effect.')
+  }
+
+  // Low Latency profile targets minimal pauses — ParallelGC does the opposite
+  if (gcType === 'ParallelGC' && workloadProfile === 'HighThroughput') {
+    warnings.push('Low Latency profile targets minimal GC pauses but ParallelGC is optimised for throughput. Consider G1GC for low latency, or switch to Batch / Throughput for maximum throughput.')
+  }
+
+  // AlwaysPreTouch pre-allocates the full heap at startup — only valid with a fixed heap
+  // and when the JVM owns its memory directly (not delegated to a container runtime).
+  const canPreTouch = hasFixedHeap && !containerAware
+  const preTouchProfiles: WorkloadProfile[] = ['HighThroughput', 'Batch', 'MemoryIntensive']
+  if (preTouchProfiles.includes(workloadProfile) && !canPreTouch) {
+    if (containerAware) {
+      warnings.push('AlwaysPreTouch is skipped in container mode — heap pre-allocation is managed by the container runtime.')
+    } else {
+      warnings.push('AlwaysPreTouch is most effective with a fixed heap size. Set Xms/Xmx above to enable it.')
+    }
+  }
+
+  // Container mode + heavy workload profile: GC tuning has reduced impact
+  const performanceProfiles: WorkloadProfile[] = ['HighThroughput', 'Batch', 'MemoryIntensive']
+  if (containerAware && performanceProfiles.includes(workloadProfile)) {
+    warnings.push('Some GC tuning flags have reduced impact in container-managed memory — the container runtime controls memory allocation and scheduling.')
+  }
+
+  // ── GC selector ──────────────────────────────────────────────────────────
+  if      (gcType === 'G1GC')       flags.push('-XX:+UseG1GC')
+  else if (gcType === 'ParallelGC') flags.push('-XX:+UseParallelGC')
+  else if (gcType === 'ZGC')        flags.push('-XX:+UseZGC')
+  else                              flags.push('-XX:+UseShenandoahGC')
+
+  // ── GC pause target ───────────────────────────────────────────────────────
+  // G1GC: workload sets default, advanced tuning overrides.
+  // ParallelGC / ZGC / Shenandoah: manage their own pause behavior — do not emit.
+  if (gcType === 'G1GC') {
+    const pause = advancedGcTuning && maxGcPauseMs
+      ? maxGcPauseMs
+      : workloadProfile === 'HighThroughput' ? '100'
+      : workloadProfile === 'Batch'          ? '500'
+      : '200'   // API / MemoryIntensive
+    flags.push(`-XX:MaxGCPauseMillis=${pause}`)
+  }
+
+  // ── Workload-specific flags (GC-aware) ───────────────────────────────────
+  if (workloadProfile === 'HighThroughput') {
+    if (canPreTouch) flags.push('-XX:+AlwaysPreTouch')
+    // ParallelRefProcEnabled became the G1GC default in Java 18 — only emit for older JVMs.
+    // Never apply to ZGC, Shenandoah, or ParallelGC (irrelevant or harmful).
+    if (gcType === 'G1GC' && (!hasVersion || jvNum < 18)) {
+      flags.push('-XX:+ParallelRefProcEnabled')
+    }
+  } else if (workloadProfile === 'Batch' || workloadProfile === 'MemoryIntensive') {
+    if (canPreTouch) flags.push('-XX:+AlwaysPreTouch')
+  }
+
+  // ── Container-aware memory — only when no fixed heap conflict ────────────
+  if (containerAware && !hasFixedHeap) {
+    flags.push('-XX:+UseContainerSupport')
+    const pct = maxRamPct.trim() || '70.0'
+    flags.push(`-XX:MaxRAMPercentage=${pct}`)
+  }
+
+  // ── Advanced: metaspace cap ───────────────────────────────────────────────
+  if (metaspaceSize.trim()) flags.push(`-XX:MaxMetaspaceSize=${metaspaceSize.trim()}`)
+
+  // ── Advanced: thread stack size ───────────────────────────────────────────
+  if (threadStackSize.trim()) flags.push(`-Xss${threadStackSize.trim()}`)
+
+  // ── Deduplicate — safety net against future logic producing duplicates ────
+  return { flags: [...new Set(flags)], warnings, errors }
+}
+
+// ── Deploy History ──────────────────────────────────────────────────────────
+const DEPLOY_HISTORY_KEY = 'wizardcd-deploy-history'
+/** Old single-record key — migrated to array on first mount. */
+const LEGACY_DEPLOY_KEY  = 'wizardcd-last-deployment'
+const HISTORY_MAX        = 5
+
+// File objects can't be serialised to JSON, so we persist every field
+// EXCEPT the actual File references (JAR, libZip, cert/extra ZIPs).
+interface SavedCertUpload {
+  source:     string
+  targetPath: string
+}
+interface SavedExtraDirUpload {
+  dirName:    string
+  targetPath: string
+}
+interface SavedDeployment {
+  savedAt:        string   // ISO timestamp used to display "X ago"
+  environment:    string
+  sshUser:        string
+  sshHost:        string
+  sshPort:        string
+  targetBasePath: string
+  appName:        string
+  mainClass:      string
+  javaCommand:    string
+  javaVersion:    string
+  xms:            string
+  xmx:            string
+  newRatio:       string
+  extraOpts:      string[]
+  runAsUser:      string
+  serverPort:     string
+  maxLogSize:     string
+  maxLogFiles:    string
+  jarType:        'fat' | 'thin'
+  performBackup:  boolean
+  maxBackups:     string
+  jarName:        string
+  certUploads:    SavedCertUpload[]
+  extraDirs:      SavedExtraDirUpload[]
+}
+
+function formatRelativeTime(isoString: string): string {
+  const diff  = Date.now() - new Date(isoString).getTime()
+  const mins  = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days  = Math.floor(diff / 86_400_000)
+  if (mins  < 1)  return 'just now'
+  if (mins  < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
+}
+
+// ── FirewallRulesRow — collapsible whitelist rules table ───────────
+
+function FirewallRulesRow({ runnerPublicIp }: { runnerPublicIp: string }) {
+  const ip = runnerPublicIp || '<IP>'
+  const rules = [
+    { platform: 'AWS',      rule: `Inbound: SSH  TCP  22  ${ip}/32` },
+    { platform: 'GCP',      rule: `Source ranges: ${ip}/32  Port: 22` },
+    { platform: 'Azure',    rule: `Source: ${ip}/32  Dest port: 22  Allow` },
+    { platform: 'iptables', rule: `iptables -A INPUT -s ${ip} -p tcp --dport 22 -j ACCEPT` },
+  ]
+  return (
+    <RowField label="Whitelist Rules" sublabel="Per platform" name="firewallRules">
+      <div className="rounded-lg border border-wiz-border overflow-hidden">
+        <table className="w-full text-xs font-mono">
+          <thead>
+            <tr className="bg-wiz-raised border-b border-wiz-border-strong/60">
+              <th className="text-left px-4 py-2.5 text-wiz-muted font-semibold uppercase tracking-wider w-24">Platform</th>
+              <th className="text-left px-4 py-2.5 text-wiz-muted font-semibold uppercase tracking-wider">Rule</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-wiz-border/40">
+            {rules.map(({ platform, rule }) => (
+              <tr key={platform} className="bg-wiz-bg hover:bg-wiz-surface/50 transition-colors">
+                <td className="px-4 py-2.5 text-wiz-gray font-semibold">{platform}</td>
+                <td className="px-4 py-2.5 text-wiz-cream/80 break-all">{rule}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </RowField>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────
 
 export default function DeployPage() {
@@ -433,6 +1053,17 @@ export default function DeployPage() {
   const [form,      setForm]      = useState<FormState>(INITIAL)
   const [errors,    setErrors]    = useState<FormErrors>({})
   const [submitting,setSubmitting]= useState(false)
+  // null = not uploading; 0–100 = upload in progress; 100 = upload done, awaiting server response
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  // Per-file upload info and individual progress percentages (parallel arrays)
+  interface UploadFileInfo { label: string; name: string; size: number }
+  const [uploadFiles, setUploadFiles] = useState<UploadFileInfo[]>([])
+  const [fileProgresses, setFileProgresses] = useState<number[]>([])
+
+  // ── Deploy history pre-fill ─────────────────────────────────────
+  const [deployHistory,    setDeployHistory]    = useState<SavedDeployment[]>([])
+  const [historyDismissed, setHistoryDismissed] = useState(false)
+  const [historyExpanded,  setHistoryExpanded]  = useState(false)
 
   // ── Runner public keys, runner info & SSH test ──────────────────
   const [publicKeys,    setPublicKeys]    = useState<Record<string, string> | null>(null)
@@ -442,8 +1073,79 @@ export default function DeployPage() {
   const [copiedScript,  setCopiedScript]  = useState(false)
   const [runnerPublicIp, setRunnerPublicIp] = useState<string>('')
   const [copiedIp,       setCopiedIp]      = useState(false)
-  const [testConnState, setTestConnState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
-  const [testConnMsg,   setTestConnMsg]   = useState<string | null>(null)
+  const [testConnState,   setTestConnState]   = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+  const [testConnMsg,     setTestConnMsg]     = useState<string | null>(null)
+  // null = not yet checked, true = runner API responded, false = runner API unreachable
+  const [runnerReachable, setRunnerReachable] = useState<boolean | null>(null)
+  // null  = detection not yet run (show detect button)
+  // []    = ran but no Java found on server (show install advisory)
+  // [...] = ran and found Java binaries (show clickable tiles)
+  const [detectedJavas,  setDetectedJavas]  = useState<string[] | null>(null)
+  const [javaDetecting,    setJavaDetecting]    = useState(false)
+  const [jarJavaVersion,   setJarJavaVersion]   = useState<string | null>(null)
+  const [javaAutoMatched,  setJavaAutoMatched]  = useState<boolean | null>(null)
+  const [showAllJavas,     setShowAllJavas]     = useState(false)
+  const [portDetection,         setPortDetection]         = useState<{ source: string; profile: string | null } | null>(null)
+  const [portMismatchDismissed, setPortMismatchDismissed] = useState(false)
+
+  // ── JVM heap unit toggles (used in advanced separate-heap mode) ─────────
+  const [xmsUnit, setXmsUnit] = useState<'m' | 'g'>(() =>
+    form.xms.endsWith('g') ? 'g' : 'm',
+  )
+  const [xmxUnit, setXmxUnit] = useState<'m' | 'g'>(() =>
+    form.xmx.endsWith('g') ? 'g' : 'm',
+  )
+
+  // ── JVM UI state (Step 3) ─────────────────────────────────────────────────
+  // false = JVM uses ergonomic defaults; no -Xms/-Xmx/-XX flags sent
+  const [jvmConfigEnabled,  setJvmConfigEnabled]  = useState(false)
+  const [gcType,            setGcType]            = useState<GcType>('G1GC')
+  const [workloadProfile,   setWorkloadProfile]   = useState<WorkloadProfile>('API')
+  const [containerAware,    setContainerAware]     = useState(false)
+  const [advancedJvmEnabled,setAdvancedJvmEnabled] = useState(false)
+  const [advancedGcTuning,  setAdvancedGcTuning]   = useState(false)
+  const [maxGcPauseMs,      setMaxGcPauseMs]       = useState('200')
+  const [metaspaceSize,     setMetaspaceSize]       = useState('')
+  const [threadStackSize,   setThreadStackSize]     = useState('')
+  const [advancedHeap,      setAdvancedHeap]       = useState(false)
+  const [heapSize,          setHeapSize]           = useState('')
+  const [heapUnit,          setHeapUnit]           = useState<'m' | 'g'>('g')
+  const [activePreset,      setActivePreset]       = useState<string>('medium')
+  const [maxRamPct,         setMaxRamPct]          = useState('70.0')
+
+  // ── Phase 1 UX redesign state ─────────────────────────────────────────────
+  // Java preset selector: tracks which Java distribution is selected
+  const [javaPreset,        setJavaPreset]         = useState<string>(() => {
+    const match = JAVA_PRESETS.find((p) => p.path === INITIAL.javaCommand)
+    return match ? match.id : 'custom'
+  })
+  // True while JSZip parses the uploaded JAR's manifest
+  const [manifestParsing,   setManifestParsing]    = useState(false)
+  // Tracks which form fields were auto-filled from the JAR manifest
+  const [autoFilledFields,  setAutoFilledFields]   = useState<Set<string>>(new Set())
+  // Controls the Advanced Settings accordion in Step 3
+
+  // Load deploy history from localStorage on mount.
+  // Migrates the old single-record format to the new array format transparently.
+  useEffect(() => {
+    try {
+      const newRaw  = localStorage.getItem(DEPLOY_HISTORY_KEY)
+      const legacyRaw = localStorage.getItem(LEGACY_DEPLOY_KEY)
+
+      if (newRaw) {
+        setDeployHistory(JSON.parse(newRaw) as SavedDeployment[])
+      } else if (legacyRaw) {
+        // One-time migration from the old single-record key
+        const legacy = JSON.parse(legacyRaw) as SavedDeployment
+        const migrated = [legacy]
+        localStorage.setItem(DEPLOY_HISTORY_KEY, JSON.stringify(migrated))
+        localStorage.removeItem(LEGACY_DEPLOY_KEY)
+        setDeployHistory(migrated)
+      }
+    } catch {
+      // Corrupt or missing — ignore silently
+    }
+  }, [])
 
   // Keep the environment field in sync with whatever the user picks in Settings.
   // This runs whenever activeEnv changes so the form always reflects the
@@ -456,8 +1158,8 @@ export default function DeployPage() {
   useEffect(() => {
     setKeysLoading(true)
     fetchRunnerPublicKeys()
-      .then((keys) => { setPublicKeys(keys); setKeysError(null) })
-      .catch(() => setKeysError('Could not fetch runner public keys. Please contact your administrator.'))
+      .then((keys) => { setPublicKeys(keys); setKeysError(null); setRunnerReachable(true) })
+      .catch(() => { setKeysError('Could not fetch runner public keys. Please contact your administrator.'); setRunnerReachable(false) })
       .finally(() => setKeysLoading(false))
 
     fetchRunnerInfo()
@@ -477,13 +1179,45 @@ export default function DeployPage() {
   }, [])
 
   // Handle JAR artifact upload.
-  // Auto-fills jarName from the filename when a .jar is selected.
-  const handleJarArtifact = (file: File | null) => {
+  // Auto-fills jarName and reads the manifest via JSZip to pre-fill app fields.
+  const handleJarArtifact = async (file: File | null) => {
     set('jarArtifact', file)
-    if (file?.name.toLowerCase().endsWith('.jar')) {
-      set('jarName', file.name)
-    } else {
+    if (!file?.name.toLowerCase().endsWith('.jar')) {
       set('jarName', '')
+      setAutoFilledFields(new Set())
+      return
+    }
+    set('jarName', file.name)
+    // Always reset dependent state on new JAR — new JAR = fresh start
+    set('libZip', null)
+    setManifestParsing(true)
+    setJarJavaVersion(null)
+    setJavaAutoMatched(null)
+    setDetectedJavas(null)
+    setShowAllJavas(false)
+    setPortDetection(null)
+    setPortMismatchDismissed(false)
+    try {
+      const [{ mainClass, appTitle, isSpringBoot, buildJdkSpec }, portResult] = await Promise.all([
+        parseJarManifest(file),
+        parseServerPort(file),
+      ])
+      const filled = new Set<string>()
+      if (mainClass)        { set('mainClass',   mainClass);         filled.add('mainClass')   }
+      if (appTitle)         { set('appName',     appTitle);          filled.add('appName')     }
+      if (portResult.port)  { set('serverPort',  portResult.port);   filled.add('serverPort')  }
+      if (buildJdkSpec)     { setJarJavaVersion(buildJdkSpec) }
+      if (portResult.source){ setPortDetection({ source: portResult.source, profile: portResult.profile }); setPortMismatchDismissed(false) }
+      const detectedType: 'fat' | 'thin' = isSpringBoot ? 'fat' : 'thin'
+      set('jarType', detectedType)
+      setAutoFilledFields(filled)
+      if (mainClass || appTitle) {
+        toast.success('Fields pre-filled from JAR manifest')
+      }
+    } catch {
+      // Manifest parse failed silently — fields stay editable
+    } finally {
+      setManifestParsing(false)
     }
   }
 
@@ -517,13 +1251,13 @@ export default function DeployPage() {
   const handleSubmit = async () => {
     // Reveal all step statuses before validation so the user can see which tabs
     // are highlighted as incomplete (yellow warning triangles).
-    setVisited(new Set([1, 2, 3, 4, 5, 6]))
+    setVisited(new Set([1, 2, 3]))
 
     // Final validation of all steps — collect errors and incomplete step names
     let allErrors: FormErrors = {}
     const incompleteStepLabels: string[] = []
-    for (let s = 1; s <= 6; s++) {
-      const stepErrors = validateStep(s, form)
+    for (let s = 1; s <= 3; s++) {
+      const stepErrors = validateStep(s, form, jvmConfigEnabled)
       if (Object.keys(stepErrors).length > 0) {
         incompleteStepLabels.push(STEPS[s - 1].label)
         allErrors = { ...allErrors, ...stepErrors }
@@ -536,22 +1270,115 @@ export default function DeployPage() {
     }
 
     setSubmitting(true)
+    setUploadProgress(0)
     try {
-      const req        = buildRequest(form)
-      const certFiles  = form.certUploads.filter((c) => c.file).map((c) => c.file!)
-      const extraFiles = form.extraDirs.filter((d) => d.file).map((d) => d.file!)
+      // Only compute GC/workload flags when the user has opted in — otherwise
+      // JVM ergonomic defaults apply (no -Xms/-Xmx/-XX flags sent at all).
+      let computedFlags: string[] = []
+      if (jvmConfigEnabled) {
+        const derived = deriveJvmFlags({
+          xms: form.xms, xmx: form.xmx,
+          gcType, workloadProfile, containerAware, advancedGcTuning, maxGcPauseMs,
+          metaspaceSize:   advancedJvmEnabled ? metaspaceSize   : '',
+          threadStackSize: advancedJvmEnabled ? threadStackSize : '',
+          javaVersion: form.javaVersion,
+          maxRamPct,
+        })
+        if (derived.errors.length > 0) {
+          toast.error(`JVM config error: ${derived.errors[0]}`)
+          setSubmitting(false)
+          return
+        }
+        computedFlags = derived.flags
+      }
+      const req = buildRequest(form, computedFlags)
+      // Use the same filter as buildRequest so certFiles[i] ↔ certPaths[i] exactly
+      const activeCerts  = form.certUploads.filter((c) => c.source.trim() && c.targetPath.trim() && c.file)
+      const activeExtras = form.extraDirs.filter((d) => d.dirName.trim() && d.targetPath.trim() && d.file)
+      const certFiles  = activeCerts.map((c) => c.file!)
+      const extraFiles = activeExtras.map((d) => d.file!)
+
+      // Build ordered file list matching the FormData append order in submitJob
+      const fileList: { label: string; name: string; size: number }[] = [
+        { label: 'Application JAR', name: form.jarArtifact!.name, size: form.jarArtifact!.size },
+        ...(form.libZip ? [{ label: 'Library ZIP', name: form.libZip.name, size: form.libZip.size }] : []),
+        ...activeCerts.map((c, i) => ({ label: `Cert: ${c.source || i + 1}`, name: certFiles[i].name, size: certFiles[i].size })),
+        ...activeExtras.map((d, i) => ({ label: `Dir: ${d.dirName || i + 1}`, name: extraFiles[i].name, size: extraFiles[i].size })),
+      ]
+      const totalFileBytes = fileList.reduce((s, f) => s + f.size, 0)
+      setUploadFiles(fileList)
+      setFileProgresses(new Array(fileList.length).fill(0))
+
       const res = await submitJob(
         req,
         form.jarArtifact!,
         form.libZip ?? undefined,
         certFiles.length  > 0 ? certFiles  : undefined,
         extraFiles.length > 0 ? extraFiles : undefined,
+        (loaded, total) => {
+          setUploadProgress(Math.round((loaded * 100) / total))
+          if (totalFileBytes > 0) {
+            const scale = total / totalFileBytes
+            setFileProgresses(fileList.map((f, i) => {
+              const cumStart = fileList.slice(0, i).reduce((s, x) => s + x.size, 0) * scale
+              const scaledSize = f.size * scale
+              return Math.min(100, Math.max(0, Math.round((loaded - cumStart) / scaledSize * 100)))
+            }))
+          }
+        },
       )
       toast.success(`Deployment started — Job ${res.jobId.slice(0, 8)}`)
+
+      // Persist a snapshot of this deployment (without File objects) so the
+      // user can pre-fill the form on their next visit.
+      try {
+        const saved: SavedDeployment = {
+          savedAt:        new Date().toISOString(),
+          environment:    form.environment,
+          sshUser:        form.sshUser,
+          sshHost:        form.sshHost,
+          sshPort:        form.sshPort,
+          targetBasePath: form.targetBasePath,
+          appName:        form.appName,
+          mainClass:      form.mainClass,
+          javaCommand:    form.javaCommand,
+          javaVersion:    form.javaVersion,
+          xms:            form.xms,
+          xmx:            form.xmx,
+          newRatio:       form.newRatio,
+          extraOpts:      form.extraOpts,
+          runAsUser:      form.runAsUser,
+          serverPort:     form.serverPort,
+          maxLogSize:     form.maxLogSize,
+          maxLogFiles:    form.maxLogFiles,
+          jarType:        form.jarType,
+          performBackup:  form.performBackup,
+          maxBackups:     form.maxBackups,
+          jarName:        form.jarName,
+          certUploads:    form.certUploads.map((c) => ({ source: c.source, targetPath: c.targetPath })),
+          extraDirs:      form.extraDirs.map((d)  => ({ dirName: d.dirName, targetPath: d.targetPath })),
+        }
+        // Push to front, deduplicate by appName+environment, cap at HISTORY_MAX
+        const existing = (() => {
+          try { return JSON.parse(localStorage.getItem(DEPLOY_HISTORY_KEY) ?? '[]') as SavedDeployment[] }
+          catch { return [] }
+        })()
+        const deduped  = existing.filter(d => !(d.appName === saved.appName && d.environment === saved.environment))
+        const updated  = [saved, ...deduped].slice(0, HISTORY_MAX)
+        localStorage.setItem(DEPLOY_HISTORY_KEY, JSON.stringify(updated))
+        setDeployHistory(updated)
+        setHistoryDismissed(false)
+      } catch {
+        // localStorage quota exceeded or unavailable — not critical
+      }
+
       navigate(`/jobs/${res.jobId}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Deployment failed to start.'
       toast.error(msg)
+      setUploadProgress(null)
+      setUploadFiles([])
+      setFileProgresses([])
     } finally {
       setSubmitting(false)
     }
@@ -566,6 +1393,13 @@ export default function DeployPage() {
     `echo "${envKey}" >> ~/.ssh/authorized_keys && \\`,
     'chmod 600 ~/.ssh/authorized_keys',
   ].join('\n')
+
+  // Step 1 gate: all required SSH fields must be filled AND connection test must pass
+  // before the user can advance. Used to disable the Next button and show a hint.
+  const isStep1Valid =
+    form.sshUser.trim() !== '' &&
+    form.sshHost.trim() !== '' &&
+    form.sshPort.trim() !== ''
 
   const handleCopyKey = () => {
     if (!envKey) return
@@ -588,6 +1422,41 @@ export default function DeployPage() {
     setTimeout(() => setCopiedIp(false), 2000)
   }
 
+  // Detect Java installations on the target server, then auto-match against JAR's required version.
+  const runJavaDetect = async () => {
+    setJavaDetecting(true)
+    try {
+      const res = await testSshConnection({
+        sshUser:     form.sshUser,
+        sshHost:     form.sshHost,
+        sshPort:     parseInt(form.sshPort, 10),
+        environment: form.environment,
+      })
+      const installations = res.javaInstallations ?? []
+      setDetectedJavas(installations)
+
+      // Auto-match: if JAR specifies a required Java version, find it on the server
+      if (jarJavaVersion && installations.length > 0) {
+        const requiredVer = parseInt(jarJavaVersion, 10)
+        const match = installations.find(p => inferJavaVersion(p) === requiredVer)
+        if (match) {
+          set('javaCommand', match)
+          set('javaVersion', jarJavaVersion)
+          setJavaAutoMatched(true)
+        } else {
+          setJavaAutoMatched(false)
+        }
+      } else {
+        setJavaAutoMatched(null)
+      }
+    } catch {
+      setDetectedJavas([])
+      setJavaAutoMatched(null)
+    } finally {
+      setJavaDetecting(false)
+    }
+  }
+
   const handleTestConnection = async () => {
     setTestConnState('testing')
     setTestConnMsg(null)
@@ -598,16 +1467,84 @@ export default function DeployPage() {
         sshPort:     parseInt(form.sshPort, 10),
         environment: form.environment,
       })
+      // Got a response — runner service is reachable regardless of SSH result
+      setRunnerReachable(true)
       setTestConnState(res.success ? 'ok' : 'fail')
       setTestConnMsg(res.message ?? null)
+      if (res.success) {
+        setDetectedJavas(res.javaInstallations ?? [])
+      }
     } catch {
+      // Fetch itself failed — runner service is down or unreachable on port 8081
+      setRunnerReachable(false)
       setTestConnState('fail')
-      setTestConnMsg('Connection test failed. Verify host, port, and that the key is authorized.')
+      setTestConnMsg('runner-unreachable')
     }
   }
 
+  // Apply a history entry to the live form.
+  // File references (JAR, ZIPs) are intentionally left as null —
+  // the user will need to re-upload their files each time.
+  const handlePrefill = (entry: SavedDeployment) => {
+    setForm((prev) => ({
+      ...prev,
+      environment:    entry.environment,
+      sshUser:        entry.sshUser,
+      sshHost:        entry.sshHost,
+      sshPort:        entry.sshPort,
+      targetBasePath: entry.targetBasePath,
+      appName:        entry.appName,
+      mainClass:      entry.mainClass,
+      javaCommand:    entry.javaCommand,
+      javaVersion:    entry.javaVersion,
+      xms:            entry.xms,
+      xmx:            entry.xmx,
+      newRatio:       entry.newRatio,
+      extraOpts:      entry.extraOpts,
+      runAsUser:      entry.runAsUser,
+      serverPort:     entry.serverPort,
+      maxLogSize:     entry.maxLogSize,
+      maxLogFiles:    entry.maxLogFiles,
+      jarType:        entry.jarType,
+      performBackup:  entry.performBackup,
+      maxBackups:     entry.maxBackups,
+      jarName:        entry.jarName,
+      // Restore cert / extra-dir config (paths only — files must be re-uploaded)
+      hasCerts:    entry.certUploads.length > 0,
+      certUploads: entry.certUploads.map((c) => ({ ...c, file: null })),
+      hasExtraDirs: entry.extraDirs.length > 0,
+      extraDirs:   entry.extraDirs.map((d)  => ({ ...d, file: null })),
+    }))
+    // Restore heap UI state from saved values
+    const xmsVal = entry.xms
+    const xmxVal = entry.xmx
+    if (xmsVal === xmxVal && xmxVal) {
+      const u = (xmxVal.endsWith('g') ? 'g' : 'm') as 'm' | 'g'
+      setHeapSize(heapNum(xmxVal))
+      setHeapUnit(u)
+      setAdvancedHeap(false)
+    } else if (xmsVal && xmxVal) {
+      setAdvancedHeap(true)
+      setXmsUnit(xmsVal.endsWith('g') ? 'g' : 'm')
+      setXmxUnit(xmxVal.endsWith('g') ? 'g' : 'm')
+    }
+    setActivePreset('custom')
+
+    // Restore Java preset selector based on the saved javaCommand path
+    const matchedPreset = JAVA_PRESETS.find((p) => p.path === entry.javaCommand)
+    setJavaPreset(matchedPreset ? matchedPreset.id : 'custom')
+
+    // Pre-filled from history — fields were set by the user, not detected from manifest
+    setAutoFilledFields(new Set())
+
+    setHistoryExpanded(false)
+    toast.success(`Pre-filled from ${entry.appName} (${entry.environment}) — please re-upload your files.`)
+  }
+
   return (
-    <div className="flex flex-col gap-6 max-w-3xl animate-fade-in">
+    <>
+    {/* ── Page header (title + history) — scrolls away naturally ── */}
+    <div className="flex flex-col gap-6 max-w-3xl pt-6 mb-4">
 
       {/* ── Page title ── */}
       <div>
@@ -617,30 +1554,206 @@ export default function DeployPage() {
         </p>
       </div>
 
-      {/* ── Step tabs ── */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {STEPS.map((s) => (
-          <StepTab
-            key={s.id}
-            num={s.num}
-            label={s.label}
-            status={getStepStatus(s.id, step, visited, form)}
-            onClick={() => goTo(s.id)}
-          />
-        ))}
+      {/* ── Deploy history card ── */}
+      {deployHistory.length > 0 && !historyDismissed && (
+        <div className="rounded-xl border border-wiz-gold/30 bg-wiz-gold-dim overflow-hidden animate-fade-in">
+
+          {/* Header — clicking it toggles collapse */}
+          <div className="flex items-center gap-2.5 px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => setHistoryExpanded(e => !e)}
+              className="flex items-center gap-2.5 flex-1 hover:opacity-80 transition-opacity text-left"
+            >
+              <Clock size={14} className="text-wiz-gold flex-shrink-0" />
+              <span className="text-sm font-semibold text-wiz-gold flex-1">Recent Deployments</span>
+              <span className="text-2xs font-mono text-wiz-muted">
+                {deployHistory.length} saved
+              </span>
+            </button>
+            <ChevronDown
+              size={14}
+              onClick={() => setHistoryExpanded(e => !e)}
+              className={clsx(
+                'text-wiz-gold/60 transition-transform duration-200 flex-shrink-0 cursor-pointer',
+                historyExpanded ? 'rotate-0' : '-rotate-90',
+              )}
+            />
+            <button
+              type="button"
+              onClick={() => setHistoryDismissed(true)}
+              className="btn-icon h-6 w-6 text-wiz-muted hover:text-sig-red flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              <X size={12} />
+            </button>
+          </div>
+
+          {/* History rows — only when expanded */}
+          {historyExpanded && <div className="divide-y divide-wiz-gold/10 border-t border-wiz-gold/15">
+            {deployHistory.map((entry, i) => {
+              const envColor =
+                entry.environment === 'UAT'  ? 'bg-sig-yellow/15 text-sig-yellow' :
+                entry.environment === 'PROD' ? 'bg-sig-purple/15 text-sig-purple' :
+                                               'bg-sig-blue/15   text-sig-blue'
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-wiz-gold/5 transition-colors">
+                  {/* Index */}
+                  <span className="text-2xs font-mono text-wiz-dim/50 w-4 shrink-0 text-right">{i + 1}</span>
+
+                  {/* App name + timestamp */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono text-wiz-cream truncate leading-snug">
+                      {entry.appName || 'Unknown app'}
+                    </p>
+                    <p className="text-2xs text-wiz-muted mt-0.5">
+                      {entry.sshHost} · {formatRelativeTime(entry.savedAt)}
+                    </p>
+                  </div>
+
+                  {/* Environment badge */}
+                  <span className={`text-2xs font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${envColor}`}>
+                    {entry.environment}
+                  </span>
+
+                  {/* Pre-fill button */}
+                  <button
+                    type="button"
+                    onClick={() => handlePrefill(entry)}
+                    className="shrink-0 px-3 py-1 rounded-lg border border-wiz-gold/40 bg-wiz-gold/10 text-2xs font-semibold text-wiz-gold hover:bg-wiz-gold/20 transition-colors"
+                  >
+                    Pre-fill
+                  </button>
+
+                  {/* Remove from list */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const updated = deployHistory.filter((_, j) => j !== i)
+                      setDeployHistory(updated)
+                      localStorage.setItem(DEPLOY_HISTORY_KEY, JSON.stringify(updated))
+                    }}
+                    className="btn-icon h-6 w-6 text-wiz-muted/50 hover:text-sig-red hover:bg-sig-red-dim flex-shrink-0"
+                    aria-label="Remove from list"
+                    title="Remove from list"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>}
+        </div>
+      )}
+
+    </div> {/* end page header block */}
+
+    {/* ── Upload progress panel (replaces step tabs + card while uploading) ── */}
+    {uploadProgress !== null ? (
+      <div className="max-w-3xl">
+        <div className="wiz-card p-8 flex flex-col gap-6 animate-fade-in">
+          {/* Header */}
+          <div className="flex flex-col gap-1">
+            <p className="text-base font-semibold text-wiz-cream">
+              {uploadProgress < 100 ? 'Uploading files to runner…' : 'Processing deployment…'}
+            </p>
+            <p className="text-sm text-wiz-muted">
+              {uploadProgress < 100
+                ? `Transferring ${form.jarArtifact?.name ?? 'artifact'} and any additional ZIPs over the network.`
+                : 'Upload complete. The runner is initialising your deployment workspace.'}
+            </p>
+          </div>
+
+          {/* Overall progress bar */}
+          <div className="flex flex-col gap-2">
+            <div className="h-2.5 rounded-full bg-wiz-raised overflow-hidden">
+              <div
+                className="h-full rounded-full bg-wiz-gold transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-wiz-muted font-mono">
+              <span>{uploadProgress! < 100 ? `${uploadProgress}% uploaded` : '100% — awaiting server…'}</span>
+              {uploadFiles.length > 0 && (
+                <span>
+                  {(uploadFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB total
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Per-file progress list */}
+          <div className="flex flex-col gap-2">
+            {uploadFiles.map((f, i) => {
+              const pct = fileProgresses[i] ?? 0
+              const done = pct >= 100
+              return (
+                <div key={i} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    {done
+                      ? <Check size={11} className="text-sig-green flex-shrink-0" />
+                      : <Loader2 size={11} className="animate-spin text-wiz-muted flex-shrink-0" />
+                    }
+                    <span className={clsx('font-mono truncate flex-1', done ? 'text-wiz-gray' : 'text-wiz-muted')}>
+                      {f.name}
+                    </span>
+                    <span className="text-wiz-dim flex-shrink-0">— {f.label}</span>
+                    <span className={clsx('font-mono ml-2 flex-shrink-0 w-10 text-right', done ? 'text-sig-green' : 'text-wiz-muted')}>
+                      {pct}%
+                    </span>
+                  </div>
+                  <div className="h-1 rounded-full bg-wiz-raised overflow-hidden ml-[19px]">
+                    <div
+                      className={clsx('h-full rounded-full transition-all duration-200', done ? 'bg-sig-green' : 'bg-wiz-gold/60')}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Spinner hint */}
+          <div className="flex items-center gap-2 text-xs text-wiz-muted">
+            <Loader2 size={13} className="animate-spin text-wiz-gold flex-shrink-0" />
+            <span>
+              {uploadProgress < 100
+                ? 'Do not close this tab — upload in progress.'
+                : 'You will be redirected to the job monitor automatically.'}
+            </span>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <>
+
+      {/* ── Step tabs — direct sibling at page level, no animated ancestor ── */}
+      <div className="sticky top-0 z-50 -mx-6 px-6 bg-wiz-bg border-b border-wiz-border/40">
+        <div className="grid grid-cols-4 gap-1.5 py-3 max-w-3xl">
+          {STEPS.map((s) => (
+            <StepTab
+              key={s.id}
+              num={s.num}
+              label={s.label}
+              status={getStepStatus(s.id, step, visited, form, jvmConfigEnabled)}
+              onClick={() => goTo(s.id)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* ── Step content card ── */}
-      <div className="wiz-card p-6 animate-fade-in" key={step}>
+      <div className="max-w-3xl mt-5 relative z-0" key={step}>
+      <div className="wiz-card p-5">
 
         {/* ─── Step 1: SSH Target ────────────────────────────── */}
         {step === 1 && (
           <>
-            <StepHeading num="01" label="Target Server" />
             <div className="flex flex-col gap-5">
 
               {/* ── SSH TARGET CONFIGURATION PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+              <div id="ssh-target-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
                 {/* Panel header */}
                 <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
@@ -648,17 +1761,16 @@ export default function DeployPage() {
                     SSH Target Configuration
                   </h3>
                 </div>
-                {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
-                  {/* Environment — determines which SSH key the runner uses */}
-                  <SelectField
-                    label="ENVIRONMENT"
+                <div className="divide-y divide-wiz-border/30">
+                  <RowSelect
+                    label="Environment"
+                    sublabel="Deployment profile"
                     name="environment"
                     required
-                    hint="Deployment environment profile. Determines which SSH key the runner uses to connect, and the Spring profile activated on the target server."
+                    hint="Determines which SSH key the runner uses and the Spring profile activated on the target server."
                     value={form.environment}
                     onChange={(e) => {
-                      set('environment', e.target.value)
+                      set('environment', e.target.value); setPortMismatchDismissed(false)
                       setActiveEnv(e.target.value as ActiveEnv)
                     }}
                     options={[
@@ -667,76 +1779,68 @@ export default function DeployPage() {
                       { value: 'PROD', label: 'PROD — Production' },
                     ]}
                   />
-                  <div className="grid grid-cols-3 gap-4">
-                    <FormField
-                      label="SSH USER"
-                      name="sshUser"
-                      required
-                      placeholder="deploy"
-                      hint="Linux user used to connect to the target server via SSH (e.g. deploy, ubuntu, ec2-user)"
-                      value={form.sshUser}
-                      onChange={(e) => set('sshUser', e.target.value)}
-                      error={errors.sshUser}
-                    />
-                    <FormField
-                      label="SSH HOST"
-                      name="sshHost"
-                      required
-                      placeholder="192.168.56.10"
-                      hint="Public IP or hostname the runner uses to SSH into this server. Use the server's Elastic IP (AWS), static public IP (GCP/Azure), or a DNS hostname."
-                      value={form.sshHost}
-                      onChange={(e) => set('sshHost', e.target.value)}
-                      error={errors.sshHost}
-                    />
-                    <FormField
-                      label="SSH PORT"
-                      name="sshPort"
-                      required
-                      type="number"
-                      placeholder="22"
-                      hint="Port used by the SSH service on the target server (default: 22)"
-                      value={form.sshPort}
-                      onChange={(e) => set('sshPort', e.target.value)}
-                      error={errors.sshPort}
-                    />
-                  </div>
-                  <FormField
-                    label="TARGET BASE PATH"
-                    name="targetBasePath"
+                  <RowInput
+                    label="SSH User"
+                    sublabel="Login account"
+                    name="sshUser"
                     required
-                    placeholder="/opt/apps/my-service"
-                    hint="Directory on the target server where the application will be deployed"
-                    value={form.targetBasePath}
-                    onChange={(e) => set('targetBasePath', e.target.value)}
-                    error={errors.targetBasePath}
+                    placeholder="deploy"
+                    hint="Linux user the runner uses to SSH in — e.g. deploy, ubuntu, ec2-user"
+                    value={form.sshUser}
+                    onChange={(e) => set('sshUser', e.target.value)}
+                    error={errors.sshUser}
+                  />
+                  <RowInput
+                    label="SSH Host"
+                    sublabel="IP or hostname"
+                    name="sshHost"
+                    required
+                    placeholder="34.201.190.116"
+                    hint="Public IP or DNS hostname the runner uses to reach this server."
+                    value={form.sshHost}
+                    onChange={(e) => set('sshHost', e.target.value)}
+                    error={errors.sshHost}
+                  />
+                  <RowInput
+                    label="SSH Port"
+                    sublabel="Default: 22"
+                    name="sshPort"
+                    required
+                    type="number"
+                    placeholder="22"
+                    hint="Port the SSH service listens on (default: 22)."
+                    value={form.sshPort}
+                    onChange={(e) => set('sshPort', e.target.value)}
+                    error={errors.sshPort}
                   />
                 </div>
-              </div>
+
+              </div>{/* ── end SSH TARGET CONFIGURATION PANEL ── */}
 
               {/* ── FIREWALL SETUP PANEL ── */}
               <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-panel overflow-hidden">
                 {/* Panel header */}
                 <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/40">
                   <Shield size={13} className="text-sig-blue opacity-80 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
-                    Firewall Setup
-                  </h3>
+                  <div className="flex flex-col gap-0.5">
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                      Firewall Setup
+                    </h3>
+                    <p className="text-xs text-wiz-muted/60">Open port 22 on your target server's firewall for the WizardCD runner IP</p>
+                  </div>
                 </div>
                 {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
-                  <p className="text-xs text-wiz-muted leading-relaxed">
-                    Before testing the connection, allow SSH (port&nbsp;22) from the WizardCD
-                    runner on your target server's firewall.
-                  </p>
+                <div className="divide-y divide-wiz-border/30">
 
-                  {/* Runner IP display + copy */}
-                  <div className="flex flex-col gap-2">
-                    <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                      Runner Public IP
-                    </p>
+                  {/* Runner IP row */}
+                  <RowField
+                    label="Runner IP"
+                    sublabel="Whitelist this"
+                    name="runnerIp"
+                    hint="WizardCD runner's public IP — add this to your server's firewall allow rules."
+                  >
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 min-h-[40px] flex items-center bg-wiz-bg border border-wiz-border rounded-lg px-4
-                                      font-mono text-sm text-wiz-cream select-all">
+                      <div className="flex-1 min-h-[36px] flex items-center bg-wiz-bg border border-wiz-border rounded-lg px-4 font-mono text-sm text-wiz-cream select-all">
                         {runnerPublicIp
                           ? runnerPublicIp
                           : <span className="text-wiz-muted italic text-xs">Detecting…</span>
@@ -747,226 +1851,233 @@ export default function DeployPage() {
                         onClick={handleCopyIp}
                         disabled={!runnerPublicIp}
                         className={clsx(
-                          'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 rounded-md h-10',
-                          'border transition-all duration-150 disabled:opacity-40',
+                          'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 rounded-md h-9',
+                          'border transition-all duration-150 disabled:opacity-40 flex-shrink-0',
                           copiedIp
                             ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
                             : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
                         )}
                       >
-                        {copiedIp
-                          ? <><Check size={11} /> Copied!</>
-                          : <><Copy  size={11} /> Copy</>
-                        }
+                        {copiedIp ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy</>}
                       </button>
                     </div>
-                  </div>
+                  </RowField>
 
-                  {/* Per-platform whitelist reference table */}
-                  <div className="flex flex-col gap-2">
-                    <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                      Whitelist Command Reference
-                    </p>
-                    <div className="rounded-lg border border-wiz-border overflow-hidden">
-                      <table className="w-full text-xs font-mono">
-                        <thead>
-                          <tr className="bg-wiz-raised border-b border-wiz-border/60">
-                            <th className="text-left px-4 py-2.5 text-wiz-muted font-semibold uppercase tracking-wider w-44">
-                              Platform
-                            </th>
-                            <th className="text-left px-4 py-2.5 text-wiz-muted font-semibold uppercase tracking-wider">
-                              Rule
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-wiz-border/40">
-                          {[
-                            {
-                              platform: 'AWS Security Group',
-                              rule: `Inbound: SSH  TCP  22  ${runnerPublicIp || '<IP>'}/32`,
-                            },
-                            {
-                              platform: 'GCP Firewall',
-                              rule: `Source ranges: ${runnerPublicIp || '<IP>'}/32  Port: 22`,
-                            },
-                            {
-                              platform: 'Azure NSG',
-                              rule: `Source: ${runnerPublicIp || '<IP>'}/32  Dest port: 22  Allow`,
-                            },
-                            {
-                              platform: 'iptables',
-                              rule: `sudo iptables -A INPUT -s ${runnerPublicIp || '<IP>'} -p tcp --dport 22 -j ACCEPT`,
-                            },
-                          ].map(({ platform, rule }) => (
-                            <tr key={platform} className="bg-wiz-bg hover:bg-wiz-surface/50 transition-colors">
-                              <td className="px-4 py-2.5 text-wiz-gray font-semibold">{platform}</td>
-                              <td className="px-4 py-2.5 text-wiz-cream/80 break-all">{rule}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  {/* Whitelist rules row — collapsible */}
+                  <FirewallRulesRow runnerPublicIp={runnerPublicIp} />
 
                 </div>
               </div>
 
               {/* ── SSH KEYS CONFIGURATION PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    SSH Keys Configuration
-                  </h3>
-                </div>
-                {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
-
-                  {/* ── Per-environment runner public key panel ── */}
-                  <div className={clsx(
-                    'rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden',
-                    envKeyStyle.border,
-                  )}>
-                    {/* Panel header */}
-                    <div className={clsx(
-                      'flex items-center gap-2.5 px-5 py-3.5',
-                      'border-b border-wiz-border/60',
-                      envKeyStyle.header,
-                    )}>
-                      <Key size={13} className={clsx(envKeyStyle.text, 'flex-shrink-0 opacity-80')} />
-                      <h3 className={clsx('font-mono font-semibold text-xs uppercase tracking-widest', envKeyStyle.text)}>
-                        {form.environment} — Runner Public Key
+              <div className={clsx('rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden', envKeyStyle.border)}>
+                {/* Panel header — env badge + subtitle, no inner wrapper needed */}
+                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <div className="flex items-center gap-2.5">
+                    <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', envKeyStyle.dot)} />
+                    <div className="flex flex-col gap-0.5">
+                      <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                        SSH Keys Configuration
                       </h3>
-                    </div>
-
-                    {/* Panel body */}
-                    <div className="p-5 flex flex-col gap-5">
-                      {keysLoading ? (
-                        <div className="flex items-center gap-2 text-wiz-muted text-xs py-2">
-                          <Loader2 size={13} className="animate-spin" />
-                          Fetching runner public key…
-                        </div>
-                      ) : keysError ? (
-                        <p className="text-xs text-sig-red">{keysError}</p>
-                      ) : (
-                        <>
-                          {/* Intro */}
-                          <p className="text-xs text-wiz-muted leading-relaxed">
-                            The runner uses this key to SSH into your server. Authorise it for the{' '}
-                            <span className="font-mono text-wiz-cream">{form.sshUser || 'SSH user'}</span>{' '}
-                            account on{' '}
-                            <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
-                            using either option below.
-                          </p>
-
-                          {/* ── Option A — Add key manually ── */}
-                          <div className="flex flex-col gap-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                                Option A — Add key manually
-                              </p>
-                              <button
-                                type="button"
-                                onClick={handleCopyKey}
-                                disabled={!envKey}
-                                className={clsx(
-                                  'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
-                                  'border transition-all duration-150 disabled:opacity-40',
-                                  copiedKey
-                                    ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
-                                    : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
-                                )}
-                              >
-                                {copiedKey
-                                  ? <><Check size={11} /> Copied!</>
-                                  : <><Copy  size={11} /> Copy Key</>
-                                }
-                              </button>
-                            </div>
-                            <p className="text-xs text-wiz-muted leading-relaxed">
-                              Copy this key and append it to{' '}
-                              <span className="font-mono text-wiz-cream">~/.ssh/authorized_keys</span>{' '}
-                              on{' '}
-                              <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
-                              under the{' '}
-                              <span className="font-mono text-wiz-cream">{form.sshUser || 'SSH user'}</span>{' '}
-                              account.
-                            </p>
-                            <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3
-                                            font-mono text-xs text-wiz-gray break-all leading-relaxed select-all">
-                              {envKey || (
-                                <span className="text-wiz-muted italic">
-                                  Key not available for {form.environment}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* ── "or" divider ── */}
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-px bg-wiz-border/60" />
-                            <span className="font-mono text-xs text-wiz-muted uppercase tracking-widest">or</span>
-                            <div className="flex-1 h-px bg-wiz-border/60" />
-                          </div>
-
-                          {/* ── Option B — Setup Script (Recommended) ── */}
-                          <div className="flex flex-col gap-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                                Option B — Setup script{' '}
-                                <span className="ml-1 normal-case tracking-normal font-normal text-sig-green">
-                                  · Recommended
-                                </span>
-                              </p>
-                              <button
-                                type="button"
-                                onClick={handleCopyScript}
-                                disabled={!envKey}
-                                className={clsx(
-                                  'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
-                                  'border transition-all duration-150 disabled:opacity-40',
-                                  copiedScript
-                                    ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
-                                    : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
-                                )}
-                              >
-                                {copiedScript
-                                  ? <><Check size={11} /> Copied!</>
-                                  : <><Copy  size={11} /> Copy Script</>
-                                }
-                              </button>
-                            </div>
-                            <p className="text-xs text-wiz-muted leading-relaxed">
-                              SSH into{' '}
-                              <span className="font-mono text-wiz-cream">{form.sshHost || 'your target server'}</span>{' '}
-                              as{' '}
-                              <span className="font-mono text-wiz-cream">{form.sshUser || 'the SSH user'}</span>{' '}
-                              and run this script. It creates{' '}
-                              <span className="font-mono text-wiz-cream">.ssh</span>{' '}
-                              with correct permissions and appends the key to{' '}
-                              <span className="font-mono text-wiz-cream">authorized_keys</span>{' '}
-                              automatically.
-                            </p>
-                            <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 overflow-x-auto">
-                              <pre className="font-mono text-xs text-wiz-gray leading-6 whitespace-pre m-0 select-all">{setupScript}</pre>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                      <p className="text-xs text-wiz-muted/60">
+                        Grant the WizardCD <span className="text-wiz-cream/60">{form.environment.toLowerCase()}</span> runner SSH access to{' '}
+                        <span className="font-mono text-wiz-cream/60">{form.sshUser || 'SSH user'}@{form.sshHost || 'target server'}</span>
+                      </p>
                     </div>
                   </div>
+                  <span className={clsx('font-mono text-sm px-3 py-1.5 rounded-md border-2 font-extrabold flex-shrink-0 tracking-widest', envKeyStyle.text, envKeyStyle.badge)}>
+                    {form.environment}
+                  </span>
+                </div>
 
-                  {/* ── Test Connection ── */}
-                  <div className="flex items-center gap-3">
+                {/* Panel body — rows sit directly here, no inner wrapper */}
+                <div className="divide-y divide-wiz-border/30">
+                  {keysLoading ? (
+                    <div className="flex items-center gap-2 text-wiz-muted text-xs px-5 py-4">
+                      <Loader2 size={13} className="animate-spin" />
+                      Fetching runner public key…
+                    </div>
+                  ) : keysError ? (
+                    <p className="text-xs text-sig-red px-5 py-4">{keysError}</p>
+                  ) : (
+                    <>
+                      {/* Option A row */}
+                      <RowField
+                        label="Add Manually"
+                        sublabel="Copy key"
+                        name="optionA"
+                        hint={<>Append to <span className="font-mono text-wiz-cream/70">~/.ssh/authorized_keys</span> on the target server under the <span className="font-mono text-wiz-cream/70">{form.sshUser || 'SSH user'}</span> account.</>}
+                      >
+                        <div className="flex flex-col gap-2">
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={handleCopyKey}
+                              disabled={!envKey}
+                              className={clsx(
+                                'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md',
+                                'border transition-all duration-150 disabled:opacity-40',
+                                copiedKey
+                                  ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
+                                  : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
+                              )}
+                            >
+                              {copiedKey ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Key</>}
+                            </button>
+                          </div>
+                          <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 font-mono text-xs text-wiz-gray break-all leading-relaxed select-all">
+                            {envKey || <span className="text-wiz-muted italic">Key not available for {form.environment}</span>}
+                          </div>
+                        </div>
+                      </RowField>
+
+                      {/* Option B row — plain div to avoid label/click issues */}
+                      <div className="flex items-start gap-4 px-5 py-4">
+                        <div className="flex flex-col gap-0.5 w-36 flex-shrink-0 pt-0.5">
+                          <span className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">Setup Script</span>
+                          <span className="text-xs text-wiz-muted/50">Run on server</span>
+                        </div>
+                        <div className="flex flex-col gap-2 flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-sig-green/80">Recommended</span>
+                            <button
+                              type="button"
+                              onClick={handleCopyScript}
+                              disabled={!envKey}
+                              className={clsx(
+                                'inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-md flex-shrink-0',
+                                'border transition-all duration-150 disabled:opacity-40',
+                                copiedScript
+                                  ? 'border-sig-green/40 bg-sig-green-dim text-sig-green'
+                                  : 'border-wiz-border bg-wiz-raised text-wiz-gray hover:text-wiz-cream hover:border-wiz-border/60',
+                              )}
+                            >
+                              {copiedScript ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Script</>}
+                            </button>
+                          </div>
+                          <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 overflow-x-auto">
+                            <pre className="font-mono text-xs text-wiz-gray leading-6 whitespace-pre m-0 select-all">{setupScript}</pre>
+                          </div>
+                          <p className="text-xs text-wiz-muted/50 leading-relaxed">
+                            SSH into the server as the <span className="font-mono text-wiz-cream/60">{form.sshUser || 'SSH user'}</span> and run this script — it creates <span className="font-mono text-wiz-cream/60">.ssh</span> and appends the key to <span className="font-mono text-wiz-cream/60">authorized_keys</span> automatically.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>{/* ── end SSH KEYS CONFIGURATION PANEL ── */}
+
+              {/* ── VERIFY CONNECTION PANEL ── */}
+              <div className={clsx(
+                'rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden transition-all duration-300',
+                testConnState === 'ok'   ? 'border-l-sig-green/50' :
+                testConnState === 'fail' ? 'border-l-sig-red/50'   : 'border-l-wiz-border-mid',
+              )}>
+                {/* Panel header — neutral by default, green on ok, red on fail */}
+                <div className={clsx(
+                  'flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 transition-colors duration-300',
+                  testConnState === 'ok'   ? 'bg-sig-green-dim/20' :
+                  testConnState === 'fail' ? 'bg-sig-red-dim/20'   : 'bg-wiz-raised/30',
+                )}>
+                  {testConnState === 'fail'
+                    ? <WifiOff size={13} className="text-sig-red/80 flex-shrink-0 transition-colors duration-300" />
+                    : <Wifi    size={13} className={clsx('flex-shrink-0 transition-colors duration-300', testConnState === 'ok' ? 'text-sig-green/80' : 'text-wiz-muted/60')} />
+                  }
+                  <div className="flex flex-col gap-0.5">
+                    <h3 className={clsx('font-mono font-semibold text-xs uppercase tracking-widest transition-colors duration-300',
+                      testConnState === 'ok'   ? 'text-sig-green' :
+                      testConnState === 'fail' ? 'text-sig-red'   : 'text-wiz-gold',
+                    )}>
+                      Verify Connection
+                    </h3>
+                    <p className="text-xs text-wiz-muted/60">Confirm all setup steps are complete, then test</p>
+                  </div>
+                </div>
+
+                {/* Panel body */}
+                <div className="px-5 py-4 flex flex-col gap-4">
+
+                  {/* Pre-flight checklist — precise failure targeting via SSH error diagnosis */}
+                  {(() => {
+                    const runnerDown    = testConnMsg === 'runner-unreachable'
+                    // Only diagnose SSH failure when the runner itself is reachable — otherwise
+                    // the SSH error is N/A (we never got to attempt it).
+                    const failTarget    = (runnerReachable === false || runnerDown)
+                                           ? 'both'
+                                           : diagnoseSshFailure(testConnMsg)
+                    const credsFilled   = !!(form.sshUser && form.sshHost && form.sshPort)
+                    const items = [
+                      {
+                        label:    'Runner service reachable',
+                        detail:   runnerPublicIp || '54.144.235.55',
+                        isOk:     runnerReachable === true,
+                        isFailed: runnerReachable === false,
+                      },
+                      {
+                        label:    'SSH credentials entered',
+                        detail:   form.sshUser && form.sshHost ? `${form.sshUser}@${form.sshHost}` : null,
+                        isOk:     testConnState === 'ok' || credsFilled,
+                        isFailed: false, // never mark X — we can confirm credentials directly
+                      },
+                      {
+                        label:    'Port 22 open for runner IP',
+                        detail:   runnerPublicIp || '54.144.235.55',
+                        // Green when test passed OR when error is auth-only (port IS reachable — Permission denied proves TCP connected)
+                        isOk:     testConnState === 'ok' || (runnerReachable === true && testConnState === 'fail' && failTarget === 'key'),
+                        // Red only when error is explicitly a firewall/connectivity issue
+                        isFailed: runnerReachable === true && testConnState === 'fail' && (failTarget === 'firewall' || failTarget === 'both'),
+                      },
+                      {
+                        label:    'Runner key added to ~/.ssh/authorized_keys',
+                        detail:   null,
+                        isOk:     testConnState === 'ok',
+                        // Only show X on key if runner is up and it's an auth error
+                        isFailed: runnerReachable === true && testConnState === 'fail' && (failTarget === 'key' || failTarget === 'both'),
+                      },
+                    ]
+                    return (
+                      <div className="flex flex-col gap-2">
+                        {items.map(({ label, detail, isOk, isFailed }) => (
+                          <div key={label} className="flex items-center gap-2.5 text-xs">
+                            {isOk
+                              ? <Check size={13} className="text-sig-green flex-shrink-0" strokeWidth={2.5} />
+                              : isFailed
+                              ? <X     size={13} className="text-sig-red/70 flex-shrink-0" strokeWidth={2.5} />
+                              : <span className="w-3.5 h-3.5 rounded-full border-2 border-wiz-border/60 flex-shrink-0" />
+                            }
+                            <span className={clsx('transition-colors duration-200',
+                              isOk     ? 'text-wiz-cream/70' :
+                              isFailed ? 'text-sig-red/70'   : 'text-wiz-muted/60',
+                            )}>
+                              {label}
+                              {detail && <span className="font-mono ml-1 opacity-60">({detail})</span>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Divider */}
+                  <div className="border-t border-wiz-border/40" />
+
+                  {/* Test button + result */}
+                  <div className="flex flex-col gap-2">
                     <button
                       type="button"
                       onClick={() => void handleTestConnection()}
                       disabled={!form.sshUser || !form.sshHost || !form.sshPort || testConnState === 'testing'}
                       className={clsx(
-                        'btn-secondary gap-2',
-                        testConnState === 'ok'   && 'border-sig-green/40 text-sig-green hover:border-sig-green/60',
-                        testConnState === 'fail' && 'border-sig-red/40   text-sig-red   hover:border-sig-red/60',
+                        'inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-semibold w-fit',
+                        'transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed',
+                        testConnState === 'ok'
+                          ? 'border-sig-green/50 bg-sig-green-dim text-sig-green hover:border-sig-green/70'
+                          : testConnState === 'fail'
+                          ? 'border-sig-red/50 bg-sig-red-dim text-sig-red hover:border-sig-red/70'
+                          : testConnState === 'testing'
+                          ? 'border-sig-blue/30 bg-sig-blue-dim text-sig-blue'
+                          : 'border-sig-blue/40 bg-sig-blue-dim/60 text-sig-blue hover:border-sig-blue/70 hover:bg-sig-blue-dim',
                       )}
                     >
                       {testConnState === 'testing'
@@ -974,814 +2085,1714 @@ export default function DeployPage() {
                         : testConnState === 'ok'
                         ? <><Wifi    size={13} /> Connection OK</>
                         : testConnState === 'fail'
-                        ? <><WifiOff size={13} /> Connection Failed</>
+                        ? <><WifiOff size={13} /> Retry Test</>
                         : <><Wifi    size={13} /> Test Connection</>
                       }
                     </button>
-                    {testConnMsg && (
-                      <p className={clsx(
-                        'text-xs',
-                        testConnState === 'ok' ? 'text-sig-green' : 'text-sig-red',
+
+                    <p className="text-xs text-wiz-muted/50 leading-relaxed">
+                      {testConnState === 'ok'
+                        ? <span className="text-sig-green">Runner can reach the server successfully.</span>
+                        : testConnState === 'fail'
+                        ? <span className="text-sig-red">
+                            {testConnMsg === 'runner-unreachable'
+                              ? 'Cannot reach the WizardCD runner service. Check that it is running and port 8081 is accessible.'
+                              : testConnMsg}
+                          </span>
+                        : 'Verifies the runner can SSH into your target server using the credentials, firewall rule, and key above.'
+                      }
+                    </p>
+                  </div>
+
+                </div>
+              </div>{/* ── end VERIFY CONNECTION PANEL ── */}
+
+            </div>
+          </>
+        )}
+
+        {/* ─── Step 2: Application ─────────────────────────── */}
+        {step === 2 && (
+          <>
+            <div className="flex flex-col gap-5">
+
+              {/* ── APPLICATION PANEL (JAR upload + app details unified) ── */}
+              <div id="app-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+
+                {/* Header — always shown */}
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    Application
+                  </h3>
+                </div>
+
+                {!form.jarArtifact ? (
+                  /* ── No JAR yet: row layout upload ── */
+                  <div className="divide-y divide-wiz-border/30">
+                    <RowField
+                      label="JAR Artifact"
+                      sublabel="Required"
+                      name="jar-artifact-file"
+                      required
+                      hint="WizardCD reads the manifest to auto-fill app name and entry point."
+                      error={errors.jarArtifact}
+                    >
+                      <CompactUploadZone
+                        accept=".jar"
+                        inputId="jar-artifact-file"
+                        onChange={(f) => void handleJarArtifact(f)}
+                        error={errors.jarArtifact}
+                      />
+                    </RowField>
+                  </div>
+                ) : (
+                  /* ── JAR uploaded: success banner + revealed fields ── */
+                  <div className="animate-fade-in flex flex-col">
+
+                    {/* Success banner */}
+                    <div className="flex items-center justify-between gap-2 px-5 py-3.5 bg-sig-green-dim/15 border-b border-sig-green/20">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Check size={13} className="text-sig-green flex-shrink-0" strokeWidth={2.5} />
+                        <span className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green flex-shrink-0">
+                          JAR Uploaded
+                        </span>
+                        <span className="font-mono text-xs text-wiz-muted/70 truncate">
+                          {form.jarArtifact.name}
+                        </span>
+                        <span className="text-wiz-muted/30 flex-shrink-0">·</span>
+                        <span className="font-mono text-xs text-wiz-muted/50 flex-shrink-0">
+                          {(form.jarArtifact.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                        {manifestParsing && (
+                          <span className="flex items-center gap-1 text-xs text-wiz-muted animate-fade-in flex-shrink-0">
+                            <Loader2 size={11} className="animate-spin" />
+                            Reading manifest…
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          set('jarArtifact', null)
+                          set('jarName', '')
+                          set('appName', '')
+                          set('mainClass', '')
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded border border-sig-blue/40 bg-sig-blue-dim/40 text-sig-blue hover:bg-sig-blue-dim hover:border-sig-blue/60 transition-all duration-150 flex-shrink-0"
+                      >
+                        <Upload size={11} />
+                        Replace
+                      </button>
+                    </div>
+
+                    {/* Revealed fields */}
+                    <div className="divide-y divide-wiz-border/30">
+                      <RowInput
+                        label="App Name"
+                        sublabel="Service identifier"
+                        name="appName"
+                        required
+                        placeholder="my-service"
+                        hint={autoFilledFields.has('appName')
+                          ? '✓ Read from JAR manifest — rename only if the deployment folder name on the server should differ.'
+                          : 'Used for the deployment directory and process name on the server — e.g. my-service creates /deployments/my-service/'}
+                        value={form.appName}
+                        onChange={(e) => set('appName', e.target.value)}
+                        error={errors.appName}
+                      />
+                      <RowInput
+                        label="JAR File"
+                        sublabel="Artifact filename"
+                        name="jarName"
+                        required
+                        placeholder="my-service.jar"
+                        hint="✓ Auto-filled from your upload — only change this if your start scripts expect a fixed name like app.jar"
+                        value={form.jarName}
+                        onChange={(e) => set('jarName', e.target.value)}
+                        error={errors.jarName}
+                      />
+                      <RowInput
+                        label="Entry Point"
+                        sublabel="Main class"
+                        name="mainClass"
+                        required
+                        placeholder="com.example.MyApp"
+                        hint={autoFilledFields.has('mainClass')
+                          ? '✓ Read from JAR manifest — the class the JVM calls to start your application.'
+                          : 'Fully qualified main class — e.g. com.example.MyServiceApplication'}
+                        value={form.mainClass}
+                        onChange={(e) => set('mainClass', e.target.value)}
+                        error={errors.mainClass}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── THIN JAR: Dependencies (shown inline when detected) ── */}
+              {form.jarArtifact && form.jarType === 'thin' && (
+                form.libZip ? (
+                  /* ── Uploaded: success state ── */
+                  <div className="animate-fade-in rounded-xl border border-sig-green/40 border-l-2 border-l-sig-green/60 bg-sig-green-dim/10 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 px-5 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <Check size={13} className="text-sig-green flex-shrink-0" strokeWidth={2.5} />
+                        <span className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
+                          Dependencies Uploaded
+                        </span>
+                        <span className="font-mono text-xs text-wiz-muted/70 truncate max-w-[240px]">
+                          {form.libZip.name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => set('libZip', null)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded border border-sig-blue/40 bg-sig-blue-dim/40 text-sig-blue hover:bg-sig-blue-dim hover:border-sig-blue/60 transition-all duration-150 flex-shrink-0"
+                      >
+                        <Upload size={11} />
+                        Replace
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Not yet uploaded: warning state ── */
+                  <div className="animate-fade-in rounded-xl border border-sig-yellow/40 border-l-2 border-l-sig-yellow/60 bg-sig-yellow-dim/20 overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-sig-yellow/20 bg-sig-yellow-dim/30">
+                      <AlertTriangle size={13} className="text-sig-yellow opacity-80 flex-shrink-0" />
+                      <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-yellow">
+                        Dependencies Required
+                        <span className="ml-1.5 text-sig-red/70 normal-case tracking-normal font-normal">· Required for Thin JAR</span>
+                      </h3>
+                    </div>
+                    <div className="divide-y divide-wiz-border/30">
+                      <RowField
+                        label="Lib ZIP"
+                        sublabel="Dependencies"
+                        name="lib-zip-file"
+                        required
+                        hint={<>JAR files must be at the <span className="font-semibold text-wiz-gray">root</span> of the ZIP — not inside a <span className="font-mono">lib/</span> subfolder.</>}
+                        error={errors.libZip}
+                      >
+                        <CompactUploadZone
+                          accept=".zip"
+                          inputId="lib-zip-file"
+                          onChange={(f) => set('libZip', f)}
+                          error={errors.libZip}
+                        />
+                      </RowField>
+                    </div>
+                  </div>
+                )
+              )}
+
+
+              {/* ── RUNTIME PANEL ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    Runtime
+                  </h3>
+                  <span className="ml-1 text-xs text-wiz-muted/50 font-normal normal-case tracking-normal">· process, port and deploy path</span>
+                </div>
+
+                <div className="divide-y divide-wiz-border/30">
+                  <RowInput
+                    label="Run As"
+                    sublabel="Linux user on server"
+                    name="runAsUser"
+                    required
+                    placeholder="e.g. deploy"
+                    hint="The Linux user that owns the process. Must exist on the target server and have write access to the deployment directory."
+                    value={form.runAsUser}
+                    onChange={(e) => set('runAsUser', e.target.value)}
+                    error={errors.runAsUser}
+                  />
+                  {(() => {
+                    const detectedProfile = portDetection?.profile?.toLowerCase() ?? null
+                    const deployEnv       = form.environment?.toLowerCase() ?? null
+                    const profileMismatch = autoFilledFields.has('serverPort') && detectedProfile && deployEnv && detectedProfile !== deployEnv && !portMismatchDismissed
+                    return (
+                      <RowField
+                        label="Port"
+                        sublabel="Application HTTP port"
+                        name="serverPort"
+                        required
+                        error={errors.serverPort}
+                        hint={profileMismatch ? undefined : autoFilledFields.has('serverPort')
+                          ? <>✓ Read from <span className="font-mono">{portDetection?.source ?? 'JAR config'}</span>{portDetection?.profile ? <> (profile: <span className="font-mono">{portDetection.profile}</span>)</> : ''} — change only if deploying on a different port.</>
+                          : <>Must match <span className="font-mono">server.port</span> in your application config. WizardCD checks this port to confirm the app started successfully.</>
+                        }
+                      >
+                        <input
+                          id="serverPort"
+                          name="serverPort"
+                          type="number"
+                          required
+                          placeholder="e.g. 8080"
+                          className={clsx('wiz-input', errors.serverPort && 'wiz-input-error')}
+                          value={form.serverPort}
+                          onChange={(e) => set('serverPort', e.target.value)}
+                        />
+                        {/* Profile mismatch warning card */}
+                        {profileMismatch && (
+                          <div className="rounded-lg border border-sig-yellow/35 bg-sig-yellow-dim/10 overflow-hidden">
+                            {/* Card header */}
+                            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-sig-yellow/20 bg-sig-yellow-dim/10">
+                              <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0" />
+                              <span className="text-xs font-semibold text-sig-yellow">Profile mismatch detected</span>
+                              <span className="ml-auto flex items-center gap-1.5 font-mono text-2xs">
+                                <span className="px-1.5 py-0.5 rounded bg-sig-yellow/15 border border-sig-yellow/25 text-sig-yellow/80">{detectedProfile}</span>
+                                <span className="text-wiz-muted/40">→</span>
+                                <span className="px-1.5 py-0.5 rounded bg-wiz-raised border border-wiz-border text-wiz-muted/70">{deployEnv}</span>
+                              </span>
+                            </div>
+                            {/* Card body */}
+                            <div className="px-3.5 py-3 flex flex-col gap-3 text-xs">
+                              <p className="text-wiz-muted/80 leading-relaxed">
+                                Port <span className="font-mono font-medium text-wiz-cream">{form.serverPort}</span> was read from{' '}
+                                <span className="font-mono text-wiz-cream/70">{portDetection?.source ?? 'JAR config'}</span>{' '}
+                                (<span className="font-mono text-sig-yellow/80">{detectedProfile}</span> profile).
+                                Each environment has a dedicated SSH key — the wrong profile means the wrong key, and potentially the wrong server.
+                              </p>
+                              {/* Two paths — both fully clickable */}
+                              <div className="flex flex-col gap-2">
+                                {/* Option A: dismiss and proceed */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPortMismatchDismissed(true)}
+                                  className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border border-sig-green/20 bg-sig-green-dim/10 hover:bg-sig-green-dim/20 hover:border-sig-green/35 transition-all duration-150 text-left group"
+                                >
+                                  <Check size={12} className="text-sig-green flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-medium text-wiz-cream/80 group-hover:text-wiz-cream transition-colors duration-150">
+                                      Continuing with {form.environment} — dismiss this warning
+                                    </span>
+                                    <span className="text-wiz-muted/70">
+                                      Confirm port matches <span className="font-mono">server.port</span> in <span className="font-mono">application-{deployEnv}.yml</span>
+                                    </span>
+                                  </div>
+                                </button>
+                                {/* Option B: navigate to Step 1 */}
+                                <button
+                                  type="button"
+                                  onClick={() => { setStep(1); setTimeout(() => document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }}
+                                  className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border border-wiz-gold/20 bg-wiz-gold/5 hover:bg-wiz-gold/10 hover:border-wiz-gold/40 transition-all duration-150 text-left group"
+                                >
+                                  <ArrowLeft size={12} className="text-wiz-gold/70 group-hover:text-wiz-gold flex-shrink-0 mt-0.5 transition-colors duration-150" />
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-medium text-wiz-cream/80 group-hover:text-wiz-cream transition-colors duration-150">
+                                      Meant to deploy {detectedProfile?.toUpperCase()} — go to Step 1
+                                    </span>
+                                    <span className="text-wiz-muted/70">
+                                      Change env, copy the <span className="font-mono">{detectedProfile?.toUpperCase()}</span> SSH key, then re-test the connection.
+                                    </span>
+                                  </div>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </RowField>
+                    )
+                  })()}
+                  <RowInput
+                    label="Deploy Path"
+                    sublabel="Base path on server"
+                    name="targetBasePath"
+                    required
+                    placeholder="/app/home/deploy/deployments"
+                    hint={<>Root directory on the target server where applications are deployed. App lands at <span className="font-mono">{form.targetBasePath.trim() || '<path>'}/{form.appName.trim() || '<appName>'}/</span></>}
+                    value={form.targetBasePath}
+                    onChange={(e) => set('targetBasePath', e.target.value)}
+                    error={errors.targetBasePath}
+                  />
+
+                  {/* Live summary */}
+                  {form.runAsUser && form.serverPort && (
+                    <div className="animate-fade-in flex items-center gap-3 px-5 py-3 bg-wiz-raised/20">
+                      <Check size={12} className="text-wiz-gold/60 flex-shrink-0" />
+                      <span className="font-mono text-xs text-wiz-muted/60">
+                        Process will run as{' '}
+                        <span className="text-wiz-cream">{form.runAsUser}</span>
+                        {' '}on port{' '}
+                        <span className="text-wiz-cream">{form.serverPort}</span>
+                        {form.targetBasePath && (
+                          <>{' '}at <span className="text-wiz-cream">{form.targetBasePath}/{form.appName || '<app>'}</span></>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── JAVA INSTALLATION PANEL ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                {/* Panel header */}
+                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                      Java Installation
+                    </h3>
+                    {detectedJavas !== null && (
+                      <span className={clsx(
+                        'font-mono text-2xs px-2 py-0.5 rounded-full border',
+                        detectedJavas.length > 0
+                          ? 'bg-sig-green-dim/30 border-sig-green/30 text-sig-green'
+                          : 'bg-sig-yellow-dim/30 border-sig-yellow/30 text-sig-yellow',
                       )}>
-                        {testConnMsg}
+                        {detectedJavas.length > 0 ? `${detectedJavas.length} found` : 'None found'}
+                      </span>
+                    )}
+                  </div>
+                  {/* Detect / re-detect / reset controls */}
+                  <div className="flex items-center gap-3">
+                    {detectedJavas !== null ? (
+                      <>
+                        {form.sshHost && form.sshUser && form.sshPort && (
+                          <button
+                            type="button"
+                            disabled={javaDetecting}
+                            onClick={() => void runJavaDetect()}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded border border-sig-blue/40 bg-sig-blue-dim/40 text-sig-blue hover:bg-sig-blue-dim hover:border-sig-blue/60 transition-all duration-150 disabled:opacity-40"
+                          >
+                            {javaDetecting
+                              ? <><Loader2 size={11} className="animate-spin" /> Scanning…</>
+                              : <><Upload size={11} /> Re-detect</>
+                            }
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => { setDetectedJavas(null); setJavaAutoMatched(null); setShowAllJavas(false); set('javaCommand', ''); set('javaVersion', '') }}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded border border-wiz-gold/40 bg-wiz-gold/10 text-wiz-gold hover:bg-wiz-gold/20 hover:border-wiz-gold/60 transition-all duration-150"
+                        >
+                          <X size={11} /> Reset
+                        </button>
+                      </>
+                    ) : javaDetecting ? (
+                      <span className="flex items-center gap-1.5 text-xs text-wiz-muted">
+                        <Loader2 size={11} className="animate-spin" />
+                        Scanning {form.sshHost}…
+                      </span>
+                    ) : jarJavaVersion !== null ? (
+                      /* Body has the check action — nothing needed in header */
+                      null
+                    ) : form.sshHost && form.sshUser && form.sshPort ? (
+                      <button
+                        type="button"
+                        onClick={() => void runJavaDetect()}
+                        className="flex items-center gap-1.5 text-xs font-medium text-wiz-gold/80 hover:text-wiz-gold border border-wiz-gold/30 hover:border-wiz-gold/50 rounded-md px-2.5 py-1 transition-colors duration-150"
+                      >
+                        Detect from {form.sshUser}@{form.sshHost}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStep(1)
+                          setTimeout(() => {
+                            document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                          }, 50)
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-medium text-sig-yellow/90 border border-sig-yellow/40 rounded-md px-3 py-1.5 bg-sig-yellow-dim/20 hover:bg-sig-yellow-dim/40 hover:border-sig-yellow/60 hover:text-sig-yellow transition-all duration-150"
+                      >
+                        <ArrowLeft size={11} className="flex-shrink-0" />
+                        SSH not configured — go to Step 1
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Panel body */}
+                <div className="divide-y divide-wiz-border/30">
+
+                  {/* Pre-detect: JAR version known — unified action card */}
+                  {detectedJavas === null && jarJavaVersion !== null && (
+                    <div className="animate-fade-in px-5 py-4 flex flex-col gap-3">
+
+                      {/* Blue info row — always visible once JAR version is known */}
+                      <div className="flex items-center gap-3 px-4 py-3.5 rounded-lg border border-wiz-gold/25 bg-wiz-gold/5">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-wiz-gold/15 border border-wiz-gold/20 flex items-center justify-center">
+                          <Info size={14} className="text-wiz-gold" />
+                        </div>
+                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-wiz-gold">JAR requires Java {jarJavaVersion}</span>
+                          <span className="text-2xs text-wiz-muted/70">Detected from bytecode — scan server to auto-fill path</span>
+                        </div>
+                        {/* Inline action when SSH is ready */}
+                        {javaDetecting ? (
+                          <div className="flex items-center gap-1.5 text-xs text-wiz-gold/80 flex-shrink-0">
+                            <Loader2 size={12} className="animate-spin" />
+                            Scanning…
+                          </div>
+                        ) : (form.sshHost && form.sshUser && form.sshPort) ? (
+                          <button
+                            type="button"
+                            onClick={() => void runJavaDetect()}
+                            className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md border border-wiz-gold/40 bg-wiz-gold/15 text-wiz-gold hover:bg-wiz-gold/25 hover:border-wiz-gold/60 transition-all duration-150"
+                          >
+                            <Search size={12} />
+                            Scan for Java {jarJavaVersion}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {/* Amber prompt — only when SSH not yet configured */}
+                      {!(form.sshHost && form.sshUser && form.sshPort) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStep(1)
+                            setTimeout(() => {
+                              document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                            }, 50)
+                          }}
+                          className="flex items-center gap-3 px-4 py-3 rounded-lg border border-sig-yellow/30 bg-sig-yellow-dim/10 hover:bg-sig-yellow-dim/20 hover:border-sig-yellow/50 transition-all duration-150 text-left w-full group"
+                        >
+                          <div className="flex-shrink-0 w-7 h-7 rounded-md bg-sig-yellow/10 group-hover:bg-sig-yellow/20 border border-sig-yellow/20 group-hover:border-sig-yellow/40 flex items-center justify-center transition-all duration-150">
+                            <ArrowLeft size={13} className="text-sig-yellow/70 group-hover:text-sig-yellow transition-colors duration-150" />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-semibold text-sig-yellow/80 group-hover:text-sig-yellow transition-colors duration-150">
+                              SSH not configured — go to Step 1
+                            </span>
+                            <span className="text-2xs text-wiz-muted/60 group-hover:text-wiz-muted/80 transition-colors duration-150">
+                              Fill in SSH Target Configuration to enable Java detection.
+                            </span>
+                          </div>
+                        </button>
+                      )}
+
+                    </div>
+                  )}
+
+                  {/* Post-detect: no Java found at all */}
+                  {detectedJavas !== null && detectedJavas.length === 0 && (
+                    <div className="animate-fade-in px-5 py-4">
+                      <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-sig-yellow-dim/20 border border-sig-yellow/20 text-xs">
+                        <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0 mt-0.5" />
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-sig-yellow">No Java found on target server</span>
+                          <span className="text-wiz-muted">
+                            No Java installation detected at standard paths on{' '}
+                            <span className="font-mono text-wiz-cream">{form.sshHost}</span>.
+                            Install a JDK first, then re-detect.
+                          </span>
+                          <pre className="mt-1 font-mono text-wiz-muted/70 text-2xs leading-5">
+                            {'# Install Temurin 21 on Ubuntu/Debian:\napt install temurin-21-jdk'}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Post-detect: installations found */}
+                  {detectedJavas !== null && detectedJavas.length > 0 && (
+                    <div className="animate-fade-in flex flex-col gap-3 px-5 py-4">
+
+                      {/* ── Matched: compact success + collapsible list ── */}
+                      {javaAutoMatched === true && (
+                        <>
+                          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sig-green-dim/20 border border-sig-green/30">
+                            <div className="flex-shrink-0 w-7 h-7 rounded-md bg-sig-green/15 border border-sig-green/25 flex items-center justify-center">
+                              <Check size={13} className="text-sig-green" strokeWidth={2.5} />
+                            </div>
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <span className="text-xs font-semibold text-sig-green">Java {jarJavaVersion} found on server</span>
+                              <span className="text-2xs text-wiz-muted/70">Path and version filled below — edit only if needed</span>
+                            </div>
+                          </div>
+                          {/* Collapsible: other installations on this server */}
+                          <button
+                            type="button"
+                            onClick={() => setShowAllJavas((v) => !v)}
+                            className="flex items-center gap-2 w-full px-1 py-1 group transition-colors duration-150"
+                          >
+                            <ChevronDown
+                              size={12}
+                              className={clsx('flex-shrink-0 text-wiz-muted/50 group-hover:text-wiz-muted/80 transition-all duration-200', showAllJavas && 'rotate-180')}
+                            />
+                            <span className="text-xs text-wiz-muted/60 group-hover:text-wiz-cream/70 transition-colors duration-150">
+                              {showAllJavas
+                                ? 'Hide other installations'
+                                : `${detectedJavas.length - 1} other installation${detectedJavas.length - 1 !== 1 ? 's' : ''} available`
+                              }
+                            </span>
+                            <div className="flex-1 h-px bg-wiz-border/20" />
+                          </button>
+                          {showAllJavas && (
+                            <div className="flex flex-col gap-2">
+                              {detectedJavas.map((javaPath) => {
+                                const ver      = inferJavaVersion(javaPath)
+                                const label    = inferJavaLabel(javaPath)
+                                const selected = form.javaCommand === javaPath
+                                return (
+                                  <button
+                                    key={javaPath}
+                                    type="button"
+                                    onClick={() => { set('javaCommand', javaPath); set('javaVersion', ver !== null ? String(ver) : '') }}
+                                    className={clsx(
+                                      'flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-150',
+                                      selected
+                                        ? 'border-sig-green/50 bg-sig-green-dim/20'
+                                        : 'border-wiz-border hover:border-wiz-border-mid bg-wiz-bg hover:bg-wiz-raised/30',
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      {selected
+                                        ? <Check size={13} className="text-sig-green flex-shrink-0" strokeWidth={2.5} />
+                                        : <span className="w-3.5 h-3.5 rounded-full border-2 border-wiz-border flex-shrink-0" />
+                                      }
+                                      <div className="flex flex-col gap-0.5 min-w-0">
+                                        <span className="font-mono text-xs text-wiz-cream truncate">{label}</span>
+                                        <span className="font-mono text-2xs text-wiz-muted/60 truncate">{javaPath}</span>
+                                      </div>
+                                    </div>
+                                    {ver !== null && (
+                                      <span className={clsx(
+                                        'font-mono text-2xs px-2 py-0.5 rounded-full border flex-shrink-0',
+                                        selected
+                                          ? 'bg-sig-green-dim/30 border-sig-green/30 text-sig-green'
+                                          : 'bg-wiz-raised border-wiz-border text-wiz-muted',
+                                      )}>
+                                        Java {ver}
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* ── Not matched or no JAR version: full tile list ── */}
+                      {javaAutoMatched !== true && (
+                        <>
+                          {javaAutoMatched === false && jarJavaVersion && (
+                            <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-sig-yellow-dim/20 border border-sig-yellow/30 text-xs">
+                              <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0 mt-0.5" />
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-sig-yellow">Java {jarJavaVersion} not found — select the closest version</span>
+                                <span className="text-wiz-muted">
+                                  Your JAR was built with Java {jarJavaVersion} but it wasn't detected on{' '}
+                                  <span className="font-mono text-wiz-cream">{form.sshHost}</span>.
+                                  Select a compatible version below or install Java {jarJavaVersion}.
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          {javaAutoMatched === null && (
+                            <p className="text-xs text-wiz-muted leading-relaxed">
+                              Select the Java installation to use on{' '}
+                              <span className="font-mono text-wiz-cream">{form.sshHost}</span>:
+                            </p>
+                          )}
+                          <div className="flex flex-col gap-2">
+                            {detectedJavas.map((javaPath) => {
+                              const ver      = inferJavaVersion(javaPath)
+                              const label    = inferJavaLabel(javaPath)
+                              const selected = form.javaCommand === javaPath
+                              return (
+                                <button
+                                  key={javaPath}
+                                  type="button"
+                                  onClick={() => { set('javaCommand', javaPath); set('javaVersion', ver !== null ? String(ver) : '') }}
+                                  className={clsx(
+                                    'flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-150',
+                                    selected
+                                      ? 'border-sig-green/50 bg-sig-green-dim/20'
+                                      : 'border-wiz-border hover:border-wiz-border-mid bg-wiz-bg hover:bg-wiz-raised/30',
+                                  )}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    {selected
+                                      ? <Check size={13} className="text-sig-green flex-shrink-0" strokeWidth={2.5} />
+                                      : <span className="w-3.5 h-3.5 rounded-full border-2 border-wiz-border flex-shrink-0" />
+                                    }
+                                    <div className="flex flex-col gap-0.5 min-w-0">
+                                      <span className="font-mono text-xs text-wiz-cream truncate">{label}</span>
+                                      <span className="font-mono text-2xs text-wiz-muted/60 truncate">{javaPath}</span>
+                                    </div>
+                                  </div>
+                                  {ver !== null && (
+                                    <span className={clsx(
+                                      'font-mono text-2xs px-2 py-0.5 rounded-full border flex-shrink-0',
+                                      selected
+                                        ? 'bg-sig-green-dim/30 border-sig-green/30 text-sig-green'
+                                        : 'bg-wiz-raised border-wiz-border text-wiz-muted',
+                                    )}>
+                                      Java {ver}
+                                    </span>
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+
+                    </div>
+                  )}
+
+                  {/* Always visible: Java path + version inputs */}
+                  <RowInput
+                    label="Java Path"
+                    sublabel={javaAutoMatched === true ? 'Override if needed' : 'Binary on server'}
+                    name="javaCommand"
+                    placeholder={jarJavaVersion ? `/usr/lib/jvm/temurin-${jarJavaVersion}/bin/java` : '/usr/lib/jvm/temurin-21/bin/java'}
+                    hint={javaAutoMatched === true
+                      ? 'Auto-filled from server scan. Edit only if you need a different path.'
+                      : detectedJavas !== null && detectedJavas.length > 0
+                        ? 'Select an installation above or type a path manually.'
+                        : 'Absolute path to the Java binary on the target server.'}
+                    value={form.javaCommand}
+                    onChange={(e) => set('javaCommand', e.target.value)}
+                    error={errors.javaCommand}
+                  />
+                  <RowInput
+                    label="Java Version"
+                    sublabel="Major version"
+                    name="javaVersion"
+                    type="number"
+                    placeholder={jarJavaVersion ?? '21'}
+                    hint={jarJavaVersion
+                      ? `JAR requires Java ${jarJavaVersion} — confirmed from bytecode.`
+                      : 'Java major version number — e.g. 25, 21, 17, 11.'}
+                    value={form.javaVersion}
+                    onChange={(e) => set('javaVersion', e.target.value)}
+                    error={errors.javaVersion}
+                  />
+
+                </div>
+              </div>{/* ── end JAVA INSTALLATION PANEL ── */}
+
+            </div>
+          </>
+        )}
+
+        {/* ─── Step 3: Deployment Options ─────────────────────── */}
+        {step === 3 && (
+          <>
+            <div className="flex flex-col gap-5">
+
+
+              {/* ── BACKUP PANEL ── */}
+              <div id="backup-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
+                    Backup
+                  </h3>
+                </div>
+                <div className="divide-y divide-wiz-border/30">
+
+                  {/* Enable backup row */}
+                  <RowField
+                    label="Backup"
+                    sublabel="Pre-deployment"
+                    name="performBackup"
+                    hint="Creates a timestamped archive of the current deployment before overwriting it."
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        role="switch"
+                        aria-checked={form.performBackup}
+                        onClick={() => set('performBackup', !form.performBackup)}
+                        className={clsx(
+                          'relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer',
+                          form.performBackup ? 'bg-sig-green shadow-[0_0_8px_rgba(74,222,128,0.2)]' : 'bg-wiz-border-mid ring-1 ring-wiz-border-strong/50',
+                        )}
+                      >
+                        <span className={clsx(
+                          'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200',
+                          form.performBackup ? 'translate-x-4' : 'translate-x-0',
+                        )} />
+                      </div>
+                    </div>
+                  </RowField>
+
+                  {/* Max backups row — shown only when backup is on */}
+                  {form.performBackup && (
+                    <RowField
+                      label="Max Backups"
+                      sublabel="Retention count"
+                      name="maxBackups"
+                      hint={
+                        form.maxBackups === '1'
+                          ? 'Only the most recent backup is kept.'
+                          : `The ${form.maxBackups} most recent backups are kept. Older ones are automatically removed.`
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        {([1, 2, 3, 4, 5] as const).map((n) => {
+                          const selected = form.maxBackups === n.toString()
+                          return (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => set('maxBackups', n.toString())}
+                              className={clsx(
+                                'w-11 h-11 rounded-lg border font-mono font-bold text-sm',
+                                'transition-all duration-150 flex items-center justify-center',
+                                selected
+                                  ? 'border-sig-green bg-sig-green/10 text-sig-green'
+                                  : 'border-wiz-border bg-wiz-bg text-wiz-gray hover:border-wiz-border-mid hover:text-wiz-cream',
+                              )}
+                              title={`Keep ${n} backup${n === 1 ? '' : 's'}`}
+                            >
+                              {n}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </RowField>
+                  )}
+
+                </div>
+              </div>
+
+
+              {/* ── LOG ROTATION PANEL ── */}
+              <div id="log-rotation-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    Log Rotation
+                  </h3>
+                </div>
+                <div className="divide-y divide-wiz-border/30">
+                  <RowInput
+                    label="Max Log Size"
+                    sublabel="Per-file limit"
+                    name="maxLogSize"
+                    placeholder="10m"
+                    hint="Maximum size per log file before rotation — e.g. 10m, 100m."
+                    value={form.maxLogSize}
+                    onChange={(e) => set('maxLogSize', e.target.value)}
+                  />
+                  <RowInput
+                    label="Max Log Files"
+                    sublabel="Retention count"
+                    name="maxLogFiles"
+                    type="number"
+                    placeholder="10"
+                    hint="Number of rotated log files to keep before the oldest is deleted."
+                    value={form.maxLogFiles}
+                    onChange={(e) => set('maxLogFiles', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* ── SERVER FILES PANEL (Certificates + Additional Directories) ── */}
+              <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/40 bg-wiz-panel overflow-hidden">
+
+                {/* Outer header */}
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                    Server Files
+                  </h3>
+                  <span className="text-wiz-muted/50 text-xs font-normal normal-case tracking-normal">· Optional files to place on the server</span>
+                </div>
+
+                <div className="divide-y divide-wiz-border/30">
+                {/* ── Certificates sub-section ── */}
+                <div id="certs-panel">
+                  <RowField
+                    label="Certificates"
+                    sublabel="Keystore files"
+                    name="hasCerts"
+                    hint={form.hasCerts
+                      ? "Certificate or keystore ZIPs extracted to custom paths — each ZIP deployed independently."
+                      : "Enable if this application requires certificate or keystore files on the server."
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        role="switch"
+                        aria-checked={form.hasCerts}
+                        onClick={() => {
+                          if (form.hasCerts) {
+                            set('hasCerts', false)
+                            set('certUploads', [])
+                          } else {
+                            set('hasCerts', true)
+                            if (form.certUploads.length === 0)
+                              set('certUploads', [{ source: '', targetPath: '', file: null }])
+                          }
+                        }}
+                        className={clsx(
+                          'relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer',
+                          form.hasCerts ? 'bg-sig-blue shadow-[0_0_8px_rgba(96,165,250,0.2)]' : 'bg-wiz-border-mid ring-1 ring-wiz-border-strong/50',
+                        )}
+                      >
+                        <span className={clsx(
+                          'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200',
+                          form.hasCerts ? 'translate-x-4' : 'translate-x-0',
+                        )} />
+                      </div>
+                    </div>
+                  </RowField>
+                  {form.hasCerts && (
+                    <div className="px-5 pb-5 flex flex-col gap-4 border-t border-wiz-border/20">
+                      {form.certUploads.map((cu, idx) => (
+                        <div key={idx} className="rounded-lg border border-wiz-border-strong overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2 bg-wiz-raised border-b border-wiz-border">
+                            <span className="font-mono text-xs text-wiz-muted/70">Certificate {idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => set('certUploads', form.certUploads.filter((_, i) => i !== idx))}
+                              className="btn-icon text-sig-red/60 hover:text-sig-red hover:bg-sig-red-dim"
+                              aria-label="Remove certificate entry"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                          <div className="divide-y divide-wiz-border/30">
+                            <RowField label="Dir Name" sublabel="Folder in ZIP" name={`cert-source-${idx}`} hint="Folder name inside the ZIP that contains your certificate files.">
+                              <input
+                                type="text"
+                                id={`cert-source-${idx}`}
+                                value={cu.source}
+                                placeholder="certs"
+                                onChange={(e) => {
+                                  const next = [...form.certUploads]
+                                  next[idx] = { ...next[idx], source: e.target.value }
+                                  set('certUploads', next)
+                                }}
+                                className="wiz-input"
+                              />
+                            </RowField>
+                            <RowField label="Target Path" sublabel="Destination on server" name={`cert-target-${idx}`} hint="Absolute path on the target server where the certificate files will be placed.">
+                              <input
+                                type="text"
+                                id={`cert-target-${idx}`}
+                                value={cu.targetPath}
+                                placeholder="/opt/certs"
+                                onChange={(e) => {
+                                  const next = [...form.certUploads]
+                                  next[idx] = { ...next[idx], targetPath: e.target.value }
+                                  set('certUploads', next)
+                                }}
+                                className="wiz-input"
+                              />
+                            </RowField>
+                            <RowField label="ZIP File" sublabel="Upload" name={`cert-zip-${idx}`}>
+                              <MiniUpload
+                                value={cu.file}
+                                onChange={(f) => {
+                                  const next = [...form.certUploads]
+                                  next[idx] = { ...next[idx], file: f }
+                                  set('certUploads', next)
+                                }}
+                                accept=".zip"
+                                inputId={`cert-zip-${idx}`}
+                              />
+                            </RowField>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => set('certUploads', [...form.certUploads, { source: '', targetPath: '', file: null }])}
+                        className="flex items-center gap-1.5 text-xs text-sig-blue hover:text-sig-blue/80 transition-colors duration-150 w-fit"
+                      >
+                        <Plus size={13} />
+                        Add certificate path
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Additional Directories sub-section ── */}
+                <div id="extra-dirs-panel">
+                  <RowField
+                    label="Extra Dirs"
+                    sublabel="Server paths"
+                    name="hasExtraDirs"
+                    hint={form.hasExtraDirs
+                      ? "Extra directories transferred to custom absolute paths — deployed independently of the application tarball."
+                      : "Enable if this application requires extra directories to be placed on the server."
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        role="switch"
+                        aria-checked={form.hasExtraDirs}
+                        onClick={() => {
+                          if (form.hasExtraDirs) {
+                            set('hasExtraDirs', false)
+                            set('extraDirs', [])
+                          } else {
+                            set('hasExtraDirs', true)
+                            if (form.extraDirs.length === 0)
+                              set('extraDirs', [{ dirName: '', targetPath: '', file: null }])
+                          }
+                        }}
+                        className={clsx(
+                          'relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer',
+                          form.hasExtraDirs ? 'bg-wiz-gold shadow-[0_0_8px_rgba(217,170,75,0.2)]' : 'bg-wiz-border-mid ring-1 ring-wiz-border-strong/50',
+                        )}
+                      >
+                        <span className={clsx(
+                          'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200',
+                          form.hasExtraDirs ? 'translate-x-4' : 'translate-x-0',
+                        )} />
+                      </div>
+                    </div>
+                  </RowField>
+                  {form.hasExtraDirs && (
+                    <div className="px-5 pb-5 flex flex-col gap-4 border-t border-wiz-border/20">
+                      {form.extraDirs.map((ed, idx) => (
+                        <div key={idx} className="rounded-lg border border-wiz-border-strong overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2 bg-wiz-raised border-b border-wiz-border">
+                            <span className="font-mono text-xs text-wiz-muted/70">Directory {idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => set('extraDirs', form.extraDirs.filter((_, i) => i !== idx))}
+                              className="btn-icon text-sig-red/60 hover:text-sig-red hover:bg-sig-red-dim"
+                              aria-label="Remove directory entry"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                          <div className="divide-y divide-wiz-border/30">
+                            <RowField label="Dir Name" sublabel="Folder in ZIP" name={`extra-dir-name-${idx}`} hint="Folder name inside the ZIP that contains the directory contents.">
+                              <input
+                                type="text"
+                                id={`extra-dir-name-${idx}`}
+                                value={ed.dirName}
+                                placeholder="deploy"
+                                onChange={(e) => {
+                                  const next = [...form.extraDirs]
+                                  next[idx] = { ...next[idx], dirName: e.target.value }
+                                  set('extraDirs', next)
+                                }}
+                                className="wiz-input"
+                              />
+                            </RowField>
+                            <RowField label="Target Path" sublabel="Destination on server" name={`extra-dir-target-${idx}`} hint="Absolute path on the target server where this directory's contents will be placed.">
+                              <input
+                                type="text"
+                                id={`extra-dir-target-${idx}`}
+                                value={ed.targetPath}
+                                placeholder="/opt/apps/my-service/deploy"
+                                onChange={(e) => {
+                                  const next = [...form.extraDirs]
+                                  next[idx] = { ...next[idx], targetPath: e.target.value }
+                                  set('extraDirs', next)
+                                }}
+                                className="wiz-input"
+                              />
+                            </RowField>
+                            <RowField label="ZIP File" sublabel="Upload" name={`extra-dir-zip-${idx}`}>
+                              <MiniUpload
+                                value={ed.file}
+                                onChange={(f) => {
+                                  const next = [...form.extraDirs]
+                                  next[idx] = { ...next[idx], file: f }
+                                  set('extraDirs', next)
+                                }}
+                                accept=".zip"
+                                inputId={`extra-dir-zip-${idx}`}
+                              />
+                            </RowField>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => set('extraDirs', [...form.extraDirs, { dirName: '', targetPath: '', file: null }])}
+                        className="flex items-center gap-1.5 text-xs text-wiz-gold hover:text-wiz-gold/80 transition-colors duration-150 w-fit"
+                      >
+                        <Plus size={13} />
+                        Add directory
+                      </button>
+                    </div>
+                  )}
+                </div>
+                </div>{/* end divide-y */}
+
+              </div>
+
+
+              {/* ── JVM CONFIGURATION PANEL ── */}
+              <div id="jvm-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+                {/* Panel header */}
+                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                      JVM Configuration
+                    </h3>
+                  </div>
+                  {jvmConfigEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setJvmConfigEnabled(false)
+                        set('xms', '')
+                        set('xmx', '')
+                        setHeapSize('')
+                        setActivePreset('medium')
+                        setAdvancedHeap(false)
+                        setAdvancedJvmEnabled(false)
+                        setContainerAware(false)
+                        setAdvancedGcTuning(false)
+                        setMetaspaceSize('')
+                        setThreadStackSize('')
+                      }}
+                      className={clsx(
+                        'flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-all duration-150',
+                        'border-wiz-gold/30 text-wiz-gold/80 bg-wiz-gold/5',
+                        'hover:border-wiz-gold/50 hover:text-wiz-gold hover:bg-wiz-gold/10',
+                      )}
+                    >
+                      ↩ Reset to defaults
+                    </button>
+                  )}
+                </div>
+
+                {/* ── Opt-in gate — shown when JVM config is off ── */}
+                {!jvmConfigEnabled ? (
+                  <div className="p-5 flex flex-col gap-4">
+                    <div className="flex items-start gap-3 px-4 py-3.5 rounded-lg bg-wiz-raised/40 border border-wiz-border/50">
+                      <svg className="w-4 h-4 text-wiz-gold/70 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+                      </svg>
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-xs font-semibold text-wiz-cream">
+                          JVM will use ergonomic defaults
+                        </p>
+                        <p className="text-xs text-wiz-muted/70 leading-relaxed">
+                          Modern JVMs (17+) automatically size the heap based on available server memory and select an appropriate GC strategy. Only adjust these settings if you have specific memory requirements, latency targets, or are running on a resource-constrained server.
+                        </p>
+                        <ul className="text-xs text-wiz-muted/70 list-disc list-inside space-y-0.5 mt-0.5">
+                          <li>No <span className="font-mono">-Xms</span> / <span className="font-mono">-Xmx</span> flags — JVM auto-sizes heap</li>
+                          <li>GC strategy chosen automatically by the runtime</li>
+                          <li>Recommended for most deployments on modern JVMs</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setJvmConfigEnabled(true)}
+                      className={clsx(
+                        'flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border',
+                        'border-wiz-gold/30 bg-wiz-gold/5 text-wiz-gold text-xs font-semibold',
+                        'hover:border-wiz-gold/50 hover:bg-wiz-gold/10 transition-colors w-full',
+                      )}
+                    >
+                      Configure JVM Settings
+                    </button>
+                  </div>
+                ) : (
+
+                <div className="p-5 flex flex-col gap-3">
+
+                  {/* ── PANEL 1: MEMORY (sig-blue) ── */}
+                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                      <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue/70">Memory</span>
+                    </div>
+                    <div className="divide-y divide-wiz-border/20">
+                      <RowField label="Preset" sublabel="Quick-start" name="memPreset">
+                        <div className="flex flex-col gap-2">
+                          <p className="text-2xs text-wiz-muted/60 leading-relaxed">Each preset configures <span className="font-mono text-sig-blue/60">Xms</span> = <span className="font-mono text-sig-blue/60">Xmx</span> and selects a matching GC strategy.</p>
+                          <div className="grid grid-cols-3 gap-2 rounded-lg bg-wiz-bg/60 border border-wiz-border/20 p-2.5">
+                            {JVM_PRESETS.map((preset) => {
+                              const sel = activePreset === preset.id
+                              return (
+                                <button key={preset.id} type="button"
+                                  onClick={() => {
+                                    const u = (preset.heap.endsWith('g') ? 'g' : 'm') as 'm' | 'g'
+                                    setActivePreset(preset.id)
+                                    setHeapSize(heapNum(preset.heap))
+                                    setHeapUnit(u)
+                                    setGcType(preset.gc as GcType)
+                                    setAdvancedHeap(false)
+                                    set('xms', preset.heap)
+                                    set('xmx', preset.heap)
+                                    setContainerAware(false)
+                                  }}
+                                  className={clsx(
+                                    'flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-all',
+                                    sel
+                                      ? 'border-sig-blue bg-sig-blue/15 shadow-[0_0_14px_rgba(96,165,250,0.12)] ring-1 ring-sig-blue/25'
+                                      : 'border-wiz-border-mid bg-wiz-raised hover:border-sig-blue/50 hover:bg-wiz-raised/80',
+                                  )}>
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <span className={clsx('text-xs font-bold font-mono', sel ? 'text-sig-blue' : 'text-wiz-cream')}>{preset.label}</span>
+                                    <span className={clsx('text-2xs font-mono font-bold tabular-nums', sel ? 'text-sig-blue/90' : 'text-wiz-cream/60')}>{preset.heap}</span>
+                                  </div>
+                                  <span className={clsx('text-2xs leading-snug', sel ? 'text-sig-blue/70' : 'text-wiz-muted/80')}>{preset.desc}</span>
+                                </button>
+                              )
+                            })}
+                            {(() => {
+                              const sel = activePreset === 'custom'
+                              return (
+                                <button type="button" onClick={() => setActivePreset('custom')}
+                                  className={clsx(
+                                    'flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-all col-span-2',
+                                    sel
+                                      ? 'border-sig-blue bg-sig-blue/15 shadow-[0_0_14px_rgba(96,165,250,0.12)] ring-1 ring-sig-blue/25'
+                                      : 'border-dashed border-wiz-border-mid bg-wiz-raised hover:border-sig-blue/50 hover:bg-wiz-raised/80',
+                                  )}>
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <span className={clsx('text-xs font-bold font-mono', sel ? 'text-sig-blue' : 'text-wiz-cream')}>Custom</span>
+                                    <span className={clsx('text-2xs font-mono', sel ? 'text-sig-blue/80' : 'text-wiz-cream/50')}>manual Xms / Xmx</span>
+                                  </div>
+                                </button>
+                              )
+                            })()}
+                          </div>
+                        </div>
+                      </RowField>
+
+                      {!containerAware && (<>
+                        {!advancedHeap ? (
+                          <RowField label="Heap Size" sublabel="Xms = Xmx" name="heapSize"
+                            error={errors.xms}
+                            hint="Initial and max heap size e.g. 512m or 2g. Leave blank for JVM ergonomic sizing.">
+                            <div className="flex items-center gap-2">
+                              <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-blue/40 transition-colors w-28">
+                                <input type="number" min="1"
+                                  className="w-full bg-wiz-bg px-3 py-2 text-sm text-wiz-cream font-mono placeholder-wiz-dim/30 outline-none"
+                                  placeholder={heapUnit === 'g' ? '1' : '512'}
+                                  value={heapSize}
+                                  onChange={(e) => {
+                                    setHeapSize(e.target.value)
+                                    const val = e.target.value ? `${e.target.value}${heapUnit}` : ''
+                                    set('xms', val); set('xmx', val)
+                                  }}
+                                />
+                              </div>
+                              <div className="flex rounded-lg overflow-hidden border border-wiz-border/60">
+                                {(['m', 'g'] as const).map((u) => (
+                                  <button key={u} type="button"
+                                    onClick={() => { setHeapUnit(u); if (heapSize) { set('xms', `${heapSize}${u}`); set('xmx', `${heapSize}${u}`) } }}
+                                    className={clsx('px-3 py-2 text-2xs font-mono uppercase transition-colors',
+                                      heapUnit === u ? 'bg-sig-blue/20 text-sig-blue font-semibold' : 'bg-wiz-raised/60 text-wiz-muted hover:text-wiz-cream')}>
+                                    {u === 'm' ? 'MB' : 'GB'}
+                                  </button>
+                                ))}
+                              </div>
+                              {heapSize && (
+                                <span className="text-2xs font-mono text-wiz-muted/50">= {heapSize}{heapUnit}</span>
+                              )}
+                            </div>
+                          </RowField>
+                        ) : (
+                          <>
+                            <RowField label="Heap Min" sublabel="Xms" name="xms" required error={errors.xms}
+                              hint="Initial JVM heap size e.g. 512m or 1g">
+                              <div className="flex items-center gap-2">
+                                <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-blue/40 transition-colors w-28">
+                                  <input type="number" min="1"
+                                    className="w-full bg-wiz-bg px-3 py-2 text-sm text-wiz-cream font-mono placeholder-wiz-dim/30 outline-none"
+                                    placeholder={xmsUnit === 'g' ? '1' : '512'}
+                                    value={heapNum(form.xms)}
+                                    onChange={(e) => { set('xms', e.target.value ? `${e.target.value}${xmsUnit}` : '') }}
+                                  />
+                                </div>
+                                <div className="flex rounded-lg overflow-hidden border border-wiz-border/60">
+                                  {(['m', 'g'] as const).map((u) => (
+                                    <button key={u} type="button"
+                                      onClick={() => { setXmsUnit(u); const n = heapNum(form.xms); if (n) set('xms', `${n}${u}`) }}
+                                      className={clsx('px-3 py-2 text-2xs font-mono uppercase transition-colors',
+                                        xmsUnit === u ? 'bg-sig-blue/20 text-sig-blue font-semibold' : 'bg-wiz-raised/60 text-wiz-muted hover:text-wiz-cream')}>
+                                      {u === 'm' ? 'MB' : 'GB'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </RowField>
+                            <RowField label="Heap Max" sublabel="Xmx" name="xmx"
+                              hint="Max JVM heap size e.g. 1024m or 2g. Must be ≥ Xms.">
+                              <div className="flex items-center gap-2">
+                                <div className={clsx('flex rounded-lg overflow-hidden border transition-colors w-28',
+                                  form.xms && form.xmx && heapMB(form.xms) > heapMB(form.xmx) ? 'border-sig-red/50' : 'border-wiz-border/60 focus-within:border-sig-blue/40')}>
+                                  <input type="number" min="1"
+                                    className="w-full bg-wiz-bg px-3 py-2 text-sm text-wiz-cream font-mono placeholder-wiz-dim/30 outline-none"
+                                    placeholder={xmxUnit === 'g' ? '2' : '2048'}
+                                    value={heapNum(form.xmx)}
+                                    onChange={(e) => { set('xmx', e.target.value ? `${e.target.value}${xmxUnit}` : '') }}
+                                  />
+                                </div>
+                                <div className="flex rounded-lg overflow-hidden border border-wiz-border/60">
+                                  {(['m', 'g'] as const).map((u) => (
+                                    <button key={u} type="button"
+                                      onClick={() => { setXmxUnit(u); const n = heapNum(form.xmx); if (n) set('xmx', `${n}${u}`) }}
+                                      className={clsx('px-3 py-2 text-2xs font-mono uppercase transition-colors',
+                                        xmxUnit === u ? 'bg-sig-blue/20 text-sig-blue font-semibold' : 'bg-wiz-raised/60 text-wiz-muted hover:text-wiz-cream')}>
+                                      {u === 'm' ? 'MB' : 'GB'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {form.xms && form.xmx && heapMB(form.xms) > heapMB(form.xmx) && (
+                                <p className="text-2xs text-sig-red flex items-center gap-1 mt-1">⚠ Heap min exceeds heap max</p>
+                              )}
+                            </RowField>
+                          </>
+                        )}
+                        <RowField label="Independent" sublabel="Xms ≠ Xmx" name="advancedHeap"
+                          hint="Set initial and max heap separately — useful when startup memory needs differ from peak usage.">
+                          <div className="flex items-center gap-2">
+                            <div role="switch" aria-checked={advancedHeap}
+                              onClick={() => {
+                                if (advancedHeap) {
+                                  setAdvancedHeap(false)
+                                  const n = heapNum(form.xmx); const u = (form.xmx.endsWith('g') ? 'g' : 'm') as 'm' | 'g'
+                                  setHeapSize(n); setHeapUnit(u); set('xms', form.xmx)
+                                } else { setAdvancedHeap(true) }
+                              }}
+                              className={clsx('relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer', advancedHeap ? 'bg-sig-blue shadow-[0_0_8px_rgba(96,165,250,0.2)]' : 'bg-wiz-border-mid ring-1 ring-wiz-border-strong/50')}>
+                              <span className={clsx('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200', advancedHeap ? 'translate-x-4' : 'translate-x-0')} />
+                            </div>
+                          </div>
+                        </RowField>
+                      </>
+                    )}
+                    </div>
+                  </div>
+
+                  {/* ── PANEL 2: GARBAGE COLLECTOR (sig-green) ── */}
+                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+                      <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-green/70">Garbage Collector</span>
+                    </div>
+                    <div className="divide-y divide-wiz-border/20">
+                      <RowField label="Collector" sublabel="GC strategy" name="gcType"
+                        hint={GC_OPTIONS.find(o => o.id === gcType)?.desc}>
+                        {(() => {
+                          const jvNum = parseInt(form.javaVersion?.trim() || '', 10)
+                          const hasJv = Number.isFinite(jvNum) && jvNum > 0
+                          return (
+                            <div className="grid grid-cols-4 gap-1.5 rounded-lg bg-wiz-bg/60 border border-wiz-border/20 p-2">
+                              {GC_OPTIONS.map((opt) => {
+                                const incompatible = hasJv && opt.minJava > jvNum
+                                const selected = gcType === opt.id
+                                return (
+                                  <button key={opt.id} type="button"
+                                    onClick={() => {
+                                      setGcType(opt.id)
+                                      if (containerAware) {
+                                        if (opt.id === 'ZGC' || opt.id === 'Shenandoah') setMaxRamPct('65')
+                                        else if (opt.id === 'ParallelGC') setMaxRamPct('75')
+                                        else setMaxRamPct('70')
+                                      }
+                                    }}
+                                    className={clsx('flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border text-center transition-all',
+                                      selected ? 'border-sig-green/60 bg-sig-green/10 ring-1 ring-sig-green/20'
+                                      : incompatible ? 'border-sig-yellow/30 bg-sig-yellow/5 hover:border-sig-yellow/40'
+                                      : 'border-wiz-border/50 bg-wiz-surface/20 hover:border-sig-green/30 hover:bg-wiz-surface/40')}>
+                                    <span className={clsx('text-xs font-bold font-mono',
+                                      selected ? 'text-sig-green' : incompatible ? 'text-sig-yellow/80' : 'text-wiz-cream/90')}>
+                                      {opt.label}
+                                    </span>
+                                    {opt.minJava > 8 && (
+                                      <span className={clsx('text-2xs font-mono px-1 py-0.5 rounded border',
+                                        incompatible ? 'border-sig-yellow/40 bg-sig-yellow/10 text-sig-yellow/80' : 'border-wiz-border/40 bg-wiz-raised/50 text-wiz-muted/70')}>
+                                        {opt.minJava}+
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()}
+                      </RowField>
+
+                      {gcType === 'G1GC' && (
+                        <RowField label="Pause Target" sublabel="G1GC tuning" name="workloadProfile"
+                          hint={WORKLOAD_OPTIONS.find(o => o.id === workloadProfile)?.desc}>
+                          <div className="grid grid-cols-4 gap-1.5 rounded-lg bg-wiz-bg/60 border border-wiz-border/20 p-2">
+                            {WORKLOAD_OPTIONS.map((opt) => {
+                              const selected = workloadProfile === opt.id
+                              return (
+                                <button key={opt.id} type="button" onClick={() => setWorkloadProfile(opt.id)}
+                                  className={clsx('flex flex-col items-center gap-0.5 px-2 py-2.5 rounded-lg border text-center transition-all',
+                                    selected
+                                      ? 'border-sig-green/60 bg-sig-green/10 ring-1 ring-sig-green/20'
+                                      : 'border-wiz-border/50 bg-wiz-surface/20 hover:border-sig-green/30 hover:bg-wiz-surface/40')}>
+                                  <span className={clsx('text-xs font-bold',
+                                    selected ? 'text-sig-green' : 'text-wiz-cream/90')}>
+                                    {opt.label}
+                                  </span>
+                                  <span className={clsx('text-2xs font-mono',
+                                    selected ? 'text-sig-green/60' : 'text-wiz-muted/50')}>
+                                    {opt.id === 'API' ? '200ms' : opt.id === 'HighThroughput' ? '100ms' : '500ms'}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </RowField>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── PANEL 3: CONTAINER (sig-purple) ── */}
+                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-purple/60 border-r-wiz-border-strong overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sig-purple/70 flex-shrink-0" />
+                      <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-purple/70">Container</span>
+                    </div>
+                    <div className="divide-y divide-wiz-border/20">
+                      <RowField label="Container" sublabel="Docker / cgroup" name="containerAware"
+                        hint={containerAware ? 'Active — JVM respects the container memory ceiling. Fixed Xms / Xmx cleared in favour of MaxRAMPercentage.' : 'Enable when the JVM runs inside Docker or a cgroup-limited VM. Tells the JVM to size its heap from the container memory limit, not the host\'s total RAM. Clears any fixed Xms / Xmx.'}>
+                        <div className="flex items-center gap-2">
+                          <div role="switch" aria-checked={containerAware}
+                            onClick={() => { const next = !containerAware; setContainerAware(next); if (next) { set('xms', ''); set('xmx', ''); setHeapSize('') } }}
+                            className={clsx('relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer', containerAware ? 'bg-sig-purple shadow-[0_0_8px_rgba(147,51,234,0.2)]' : 'bg-wiz-border-mid ring-1 ring-wiz-border-strong/50')}>
+                            <span className={clsx('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200', containerAware ? 'translate-x-4' : 'translate-x-0')} />
+                          </div>
+                        </div>
+                      </RowField>
+
+                      {containerAware && (
+                        <RowField label="Max RAM %" sublabel="Heap ceiling" name="maxRamPct"
+                          hint={gcType === 'ZGC' ? 'ZGC reserves native memory for page tables — keep at 60–65% to avoid OOM kills.' : gcType === 'Shenandoah' ? 'Shenandoah needs off-heap space for concurrent structures — 65% recommended.' : gcType === 'ParallelGC' ? 'ParallelGC has minimal native overhead — 75–80% is safe for most containers.' : 'G1GC uses moderate native memory for region metadata — 70% is a safe default.'}>
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-purple/40 w-24">
+                              <input type="number" min="40" max="90" step="5"
+                                className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
+                                placeholder="70.0" value={maxRamPct} onChange={(e) => setMaxRamPct(e.target.value)} />
+                            </div>
+                            <span className="text-xs text-wiz-muted/70">%</span>
+                            {(['60', '65', '70', '75', '80'] as const).map((v) => (
+                              <button key={v} type="button" onClick={() => setMaxRamPct(v)}
+                                className={clsx('px-2 py-1 rounded text-2xs font-mono transition-colors border',
+                                  maxRamPct === v ? 'border-sig-purple/50 bg-sig-purple/10 text-sig-purple' : 'border-wiz-border/40 bg-wiz-surface/30 text-wiz-muted hover:text-wiz-cream')}>
+                                {v}%
+                              </button>
+                            ))}
+                          </div>
+                        </RowField>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── PANEL 4: ADVANCED TUNING (sig-orange) ── */}
+                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-orange/60 border-r-wiz-border-strong overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sig-orange/70 flex-shrink-0" />
+                        <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-orange/70">Advanced Tuning</span>
+                      </div>
+                      <div role="switch" aria-checked={advancedJvmEnabled}
+                        onClick={() => setAdvancedJvmEnabled(v => !v)}
+                        className={clsx('relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer', advancedJvmEnabled ? 'bg-sig-orange shadow-[0_0_8px_rgba(251,146,60,0.2)]' : 'bg-wiz-border-mid ring-1 ring-wiz-border-strong/50')}>
+                        <span className={clsx('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200', advancedJvmEnabled ? 'translate-x-4' : 'translate-x-0')} />
+                      </div>
+                    </div>
+                    {!advancedJvmEnabled ? (
+                      <p className="px-4 py-3 text-xs text-wiz-muted/50 leading-relaxed">
+                        Fine-tune GC pause targets, metaspace limits, and thread stack size. Only enable if you have profiling data or are hitting specific memory issues.
                       </p>
+                    ) : (
+                      <div className="divide-y divide-wiz-border/20">
+                        {gcType === 'G1GC' && (
+                          <RowField label="GC Pause" sublabel="MaxGCPauseMillis" name="gcPause"
+                            hint={`Overrides the ${workloadProfile === 'HighThroughput' ? '100' : workloadProfile === 'Batch' || workloadProfile === 'MemoryIntensive' ? '500' : '200'}ms target set by your Pause Target profile. Only change if GC logs show the current target isn't being met.`}>
+                            <div className="flex items-center gap-2">
+                              <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
+                                <input type="number" min="50" max="5000"
+                                  className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
+                                  placeholder={workloadProfile === 'HighThroughput' ? '100' : workloadProfile === 'Batch' || workloadProfile === 'MemoryIntensive' ? '500' : '200'}
+                                  value={advancedGcTuning ? maxGcPauseMs : ''}
+                                  onChange={(e) => { setAdvancedGcTuning(e.target.value !== ''); setMaxGcPauseMs(e.target.value) }} />
+                              </div>
+                              <span className="text-xs text-wiz-muted/50">ms</span>
+                              {advancedGcTuning && (
+                                <button type="button" onClick={() => { setAdvancedGcTuning(false); setMaxGcPauseMs('200') }}
+                                  className="text-2xs text-wiz-muted/50 hover:text-sig-orange transition-colors">reset</button>
+                              )}
+                            </div>
+                          </RowField>
+                        )}
+
+                        <RowField label="Metaspace" sublabel="MaxMetaspaceSize" name="metaspaceSize"
+                          hint="Caps memory for loaded class metadata. Set if you see metaspace OOM errors — leave blank to let the JVM grow as needed.">
+                          <div className="flex items-center gap-2">
+                            <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
+                              <input type="text" id="metaspaceSize"
+                                className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
+                                placeholder="256m" value={metaspaceSize} onChange={(e) => setMetaspaceSize(e.target.value)} />
+                            </div>
+                          </div>
+                        </RowField>
+
+                        <RowField label="Thread Stack" sublabel="-Xss" name="threadStackSize"
+                          hint="Memory per thread. Lower to 256k for high-thread-count apps to save memory — increase if you hit StackOverflowError.">
+                          <div className="flex items-center gap-2">
+                            <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
+                              <input type="text" id="threadStackSize"
+                                className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
+                                placeholder="512k" value={threadStackSize} onChange={(e) => setThreadStackSize(e.target.value)} />
+                            </div>
+                          </div>
+                        </RowField>
+                      </div>
                     )}
                   </div>
 
-                </div>{/* ── end SSH KEYS panel body ── */}
-              </div>{/* ── end SSH KEYS CONFIGURATION PANEL ── */}
-
-            </div>
-          </>
-        )}
-
-        {/* ─── Step 2: Identity ──────────────────────────────── */}
-        {step === 2 && (
-          <>
-            <StepHeading num="02" label="Application" />
-            <div className="flex flex-col gap-5">
-              <FormField
-                label="APP NAME"
-                name="appName"
-                required
-                placeholder="my-service-ms"
-                hint="Unique application identifier. Typically the Spring Boot service name defined in application.yml (spring.application.name)"
-                value={form.appName}
-                onChange={(e) => set('appName', e.target.value)}
-                error={errors.appName}
-              />
-              <FormField
-                label="MAIN CLASS"
-                name="mainClass"
-                required
-                placeholder="com.example.MyServiceMsApplication"
-                hint="Fully qualified Spring Boot main class used to start the application"
-                value={form.mainClass}
-                onChange={(e) => set('mainClass', e.target.value)}
-                error={errors.mainClass}
-              />
-            </div>
-          </>
-        )}
-
-        {/* ─── Step 3: Java / JVM ────────────────────────────── */}
-        {step === 3 && (
-          <>
-            <StepHeading num="03" label="Java" />
-
-            <div className="flex flex-col gap-5">
-
-              {/* ── JAVA CONFIGURATION PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    Java Configuration
-                  </h3>
-                </div>
-                {/* Panel body */}
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      label="JAVA PATH"
-                      name="javaCommand"
-                      required
-                      placeholder="/usr/lib/jvm/temurin-21/bin/java"
-                      hint="Absolute path to the Java binary on the target server."
-                      value={form.javaCommand}
-                      onChange={(e) => set('javaCommand', e.target.value)}
-                      error={errors.javaCommand}
-                    />
-                    <FormField
-                      label="JAVA VERSION"
-                      name="javaVersion"
-                      required
-                      type="number"
-                      placeholder="21"
-                      hint="Java major version installed on the target server e.g. 21"
-                      value={form.javaVersion}
-                      onChange={(e) => set('javaVersion', e.target.value)}
-                      error={errors.javaVersion}
-                    />
+                  {/* ── PANEL 5 — ADDITIONAL CUSTOM FLAGS (sig-blue) ── */}
+                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue/5 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sig-blue flex-shrink-0" />
+                      <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue">Additional Custom Flags</span>
+                    </div>
+                    <div className="px-5 py-4">
+                      <DynamicList
+                        label="Additional Custom Flags"
+                        name="extraOpts"
+                        values={form.extraOpts}
+                        onChange={(v) => set('extraOpts', v)}
+                        placeholder="-Dmy.property=value"
+                        addLabel="Add flag"
+                        hint="Add custom JVM flags not covered above (e.g. -D, -X, -XX). These are appended to the generated configuration and may override existing settings. Use with caution."
+                        hideLabel
+                      />
+                    </div>
                   </div>
+
+                  {/* ── GENERATED JVM FLAGS (footer) ── */}
+                  {(() => {
+                    const derived = deriveJvmFlags({
+                      xms: form.xms, xmx: form.xmx,
+                      gcType, workloadProfile, containerAware, advancedGcTuning, maxGcPauseMs,
+                      metaspaceSize:   advancedJvmEnabled ? metaspaceSize   : '',
+                      threadStackSize: advancedJvmEnabled ? threadStackSize : '',
+                      javaVersion: form.javaVersion, maxRamPct,
+                    })
+                    const previewFlags = [
+                      form.xms ? `-Xms${form.xms}` : null,
+                      form.xmx ? `-Xmx${form.xmx}` : null,
+                      ...derived.flags,
+                      ...form.extraOpts.filter(Boolean),
+                    ].filter((f): f is string => Boolean(f))
+
+                    // Heap=blue  GC=green  Tuning=yellow  Meta/stack=purple
+                    const flagColor = (flag: string) => {
+                      // ── Heap (blue): memory sizing ──
+                      if (flag.startsWith('-Xms') || flag.startsWith('-Xmx')) return 'text-sig-blue'
+                      // ── Meta / stack (purple) ──
+                      if (flag.startsWith('-Xss') || flag.startsWith('-XX:MaxMetaspace') || flag.startsWith('-XX:Metaspace')) return 'text-sig-purple'
+                      // ── GC (green): collector selection only ──
+                      if (flag === '-XX:+UseG1GC' || flag === '-XX:+UseParallelGC'
+                        || flag === '-XX:+UseZGC' || flag === '-XX:+UseShenandoahGC') return 'text-sig-green'
+                      // ── Tuning (yellow): pause targets, workload flags, container ──
+                      if (flag.startsWith('-XX:MaxGCPause') || flag.startsWith('-XX:+AlwaysPreTouch')
+                        || flag.startsWith('-XX:+ParallelRefProc') || flag.startsWith('-XX:+UseContainerSupport')
+                        || flag.startsWith('-XX:MaxRAMPercentage')) return 'text-sig-yellow'
+                      // ── Fallback ──
+                      return 'text-wiz-cream/70'
+                    }
+
+                    return (
+                      <div className="border-t border-wiz-border/30 pt-4 mt-1 flex flex-col gap-3">
+                        <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-wiz-gold/70">Generated JVM Flags</span>
+
+                        {derived.errors.length > 0 && derived.errors.map((err, i) => (
+                          <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-md border border-sig-red/30 bg-sig-red/5 text-2xs text-sig-red leading-snug">
+                            <span className="flex-shrink-0">✕</span><span>{err}</span>
+                          </div>
+                        ))}
+                        {derived.warnings.length > 0 && derived.warnings.map((warn, i) => (
+                          <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-md border border-sig-yellow/30 bg-sig-yellow/5 text-2xs text-sig-yellow leading-snug">
+                            <span className="flex-shrink-0">⚠</span><span>{warn}</span>
+                          </div>
+                        ))}
+
+                        {previewFlags.length > 0 ? (
+                          <div className="rounded-lg bg-wiz-bg/60 border border-wiz-border/20 px-4 py-3">
+                            <code className="text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                              {previewFlags.map((flag, i) => (
+                                <span key={i}>
+                                  {i > 0 && ' '}
+                                  <span className={flagColor(flag)}>{flag}</span>
+                                </span>
+                              ))}
+                            </code>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-wiz-muted/40 italic">No flags configured — JVM will use ergonomic defaults</p>
+                        )}
+
+                        {previewFlags.length > 0 && (
+                          <div className="flex items-center gap-4 text-2xs text-wiz-muted/50">
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-px bg-sig-blue" />Heap</span>
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-px bg-sig-green" />GC</span>
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-px bg-sig-yellow" />Tuning</span>
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-px bg-sig-purple" />Meta / stack</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
                 </div>
+                )} {/* end jvmConfigEnabled */}
               </div>
 
-              {/* ── JVM CONFIGURATION PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    JVM Configuration
-                  </h3>
-                </div>
-                {/* Panel body */}
-                <div className="p-5 flex flex-col gap-5">
-                  <div className="grid grid-cols-3 gap-4">
-                    <FormField
-                      label="XMS (HEAP MIN)"
-                      name="xms"
-                      required
-                      placeholder="512m"
-                      hint="Initial JVM heap size e.g. 512m or 1g"
-                      value={form.xms}
-                      onChange={(e) => set('xms', e.target.value)}
-                      error={errors.xms}
-                    />
-                    <FormField
-                      label="XMX (HEAP MAX)"
-                      name="xmx"
-                      required
-                      placeholder="2048m"
-                      hint="Max JVM heap size e.g. 1024m or 1g. Must be greater than Xms."
-                      value={form.xmx}
-                      onChange={(e) => set('xmx', e.target.value)}
-                      error={errors.xmx}
-                    />
-                    <FormField
-                      label="NEW RATIO"
-                      name="newRatio"
-                      placeholder="3"
-                      hint="Ratio of Old to Young generation heap. Example: 3"
-                      value={form.newRatio}
-                      onChange={(e) => set('newRatio', e.target.value)}
-                    />
-                  </div>
-                  <DynamicList
-                    label="EXTRA JVM OPTIONS"
-                    name="extraOpts"
-                    values={form.extraOpts}
-                    onChange={(v) => set('extraOpts', v)}
-                    placeholder="-Dspring.profiles.active=uat"
-                    addLabel="Add JVM option"
-                    hint="Each entry becomes a separate argument (e.g. -Dprop=value)"
-                  />
-                </div>
-              </div>
+
 
             </div>
           </>
         )}
 
-        {/* ─── Step 4: Runtime ───────────────────────────────── */}
+        {/* ─── Step 4: Review & Deploy ──────────────────────────── */}
         {step === 4 && (
           <>
-            <StepHeading num="04" label="Process" />
-            <div className="flex flex-col gap-5">
-              {/* ── PROCESS CONFIGURATION PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    Process Configuration
-                  </h3>
-                </div>
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      label="RUN AS USER"
-                      name="runAsUser"
-                      required
-                      placeholder="appuser"
-                      hint="Linux user that runs the JVM process on the target server"
-                      value={form.runAsUser}
-                      onChange={(e) => set('runAsUser', e.target.value)}
-                      error={errors.runAsUser}
-                    />
-                    <FormField
-                      label="SERVER PORT"
-                      name="serverPort"
-                      required
-                      type="number"
-                      placeholder="8080"
-                      hint="Port the application listens on (must match server.port in application.yml)"
-                      value={form.serverPort}
-                      onChange={(e) => set('serverPort', e.target.value)}
-                      error={errors.serverPort}
-                    />
-                    <FormField
-                      label="MAX LOG SIZE"
-                      name="maxLogSize"
-                      placeholder="10m"
-                      hint="Max size per log file before rotation (e.g. 10m, 100m)"
-                      value={form.maxLogSize}
-                      onChange={(e) => set('maxLogSize', e.target.value)}
-                    />
-                    <FormField
-                      label="MAX LOG FILES"
-                      name="maxLogFiles"
-                      type="number"
-                      placeholder="10"
-                      hint="Number of rotated log files to keep"
-                      value={form.maxLogFiles}
-                      onChange={(e) => set('maxLogFiles', e.target.value)}
-                    />
+            <div className="flex flex-col gap-4">
+
+              {/* ── Info banner (top) ── */}
+              {form.environment.toUpperCase() === 'PROD' ? (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-sig-purple/30 bg-sig-purple-dim/30">
+                  <AlertTriangle size={16} className="text-sig-purple flex-shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium text-sig-purple">
+                      You are deploying to <span className="font-bold">PRODUCTION</span>.
+                    </span>
+                    <p className="text-xs text-sig-purple/60 mt-0.5">Verify all details below before proceeding.</p>
                   </div>
                 </div>
-              </div>
-              {/* ── JAR TYPE PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    JAR Type
-                  </h3>
-                </div>
-                <div className="p-5 flex flex-col gap-4">
-                  {/* Two-card selector */}
-                  <div className="grid grid-cols-2 gap-3">
-
-                    {/* Fat JAR card */}
-                    <button
-                      type="button"
-                      onClick={() => set('jarType', 'fat')}
-                      className={clsx(
-                        'flex flex-col gap-2.5 p-4 rounded-xl border text-left transition-all duration-150',
-                        form.jarType === 'fat'
-                          ? 'border-wiz-gold/50 bg-wiz-gold/5 shadow-gold-sm'
-                          : 'border-wiz-border bg-wiz-bg hover:border-wiz-border-mid hover:bg-wiz-surface',
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={clsx(
-                          'w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
-                          form.jarType === 'fat' ? 'border-wiz-gold' : 'border-wiz-muted',
-                        )}>
-                          {form.jarType === 'fat' && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold" />
-                          )}
-                        </span>
-                        <span className={clsx(
-                          'font-mono font-bold text-xs uppercase tracking-wider',
-                          form.jarType === 'fat' ? 'text-wiz-gold' : 'text-wiz-gray',
-                        )}>
-                          Fat JAR
-                        </span>
-                      </div>
-                      <p className="text-xs text-wiz-muted leading-relaxed">
-                        All dependencies bundled inside the JAR.
-                        Upload a <span className="font-mono text-wiz-cream">.jar</span> file in Step 6.
-                      </p>
-                    </button>
-
-                    {/* Thin JAR card */}
-                    <button
-                      type="button"
-                      onClick={() => set('jarType', 'thin')}
-                      className={clsx(
-                        'flex flex-col gap-2.5 p-4 rounded-xl border text-left transition-all duration-150',
-                        form.jarType === 'thin'
-                          ? 'border-wiz-gold/50 bg-wiz-gold/5 shadow-gold-sm'
-                          : 'border-wiz-border bg-wiz-bg hover:border-wiz-border-mid hover:bg-wiz-surface',
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={clsx(
-                          'w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
-                          form.jarType === 'thin' ? 'border-wiz-gold' : 'border-wiz-muted',
-                        )}>
-                          {form.jarType === 'thin' && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold" />
-                          )}
-                        </span>
-                        <span className={clsx(
-                          'font-mono font-bold text-xs uppercase tracking-wider',
-                          form.jarType === 'thin' ? 'text-wiz-gold' : 'text-wiz-gray',
-                        )}>
-                          Thin JAR
-                        </span>
-                      </div>
-                      <p className="text-xs text-wiz-muted leading-relaxed">
-                        App JAR + separate <span className="font-mono text-wiz-cream">lib/</span> directory.
-                        Upload both files separately in Step 6.
-                      </p>
-                    </button>
-
-                  </div>
-
-                  {/* Thin JAR: hint + CTA to Library Dependencies panel in File Uploads */}
-                  {form.jarType === 'thin' && (
-                    <div className="animate-fade-in rounded-lg bg-wiz-raised/40 border border-wiz-border/60 px-4 py-3 flex items-start justify-between gap-4">
-                      <p className="text-xs text-wiz-muted leading-relaxed">
-                        <span className="font-semibold text-wiz-gray">Thin JAR: </span>
-                        Pack your dependency JARs into a{' '}
-                        <span className="font-mono text-wiz-cream">.zip</span>{' '}
-                        with the JAR files at the root — not inside a{' '}
-                        <span className="font-mono text-wiz-cream">lib/</span>{' '}
-                        subfolder. Upload both the app JAR and this ZIP in File Uploads.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => goToAndScroll(6, 'lib-deps-panel')}
-                        className="flex-shrink-0 inline-flex items-center gap-1 font-mono text-xs
-                                   text-wiz-gold hover:text-wiz-cream transition-colors duration-150 whitespace-nowrap"
-                      >
-                        File Uploads <ArrowRight size={11} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ── CERTIFICATE PATHS CONFIG PANEL (Step 4 — config only, uploads in Step 6) ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/40 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/30">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
-                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
-                      Certificate Paths
-                      <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => goToAndScroll(6, 'cert-files-panel')}
-                    className="flex-shrink-0 inline-flex items-center gap-1 font-mono text-xs
-                               text-sig-blue hover:text-sig-blue/70 transition-colors duration-150 whitespace-nowrap"
-                  >
-                    Upload ZIPs <ArrowRight size={11} />
-                  </button>
-                </div>
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-xs text-wiz-muted leading-relaxed">
-                    Define cert / keystore directories and their absolute target paths on the server.
-                    Each ZIP is transferred independently of the application tarball.
-                    Upload the ZIP files in the File Uploads step.
-                  </p>
-
-                  {form.certUploads.map((cu, idx) => (
-                    <div key={idx} className="flex items-end gap-2">
-                      <div className="grid grid-cols-2 gap-2 flex-1">
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            Dir name (in ZIP)
-                          </label>
-                          <input
-                            type="text"
-                            value={cu.source}
-                            placeholder="certs"
-                            onChange={(e) => {
-                              const next = [...form.certUploads]
-                              next[idx] = { ...next[idx], source: e.target.value }
-                              set('certUploads', next)
-                            }}
-                            className="wiz-input"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            Target path on server
-                          </label>
-                          <input
-                            type="text"
-                            value={cu.targetPath}
-                            placeholder="/opt/certs"
-                            onChange={(e) => {
-                              const next = [...form.certUploads]
-                              next[idx] = { ...next[idx], targetPath: e.target.value }
-                              set('certUploads', next)
-                            }}
-                            className="wiz-input"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => set('certUploads', form.certUploads.filter((_, i) => i !== idx))}
-                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
-                        aria-label="Remove certificate entry"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => set('certUploads', [...form.certUploads, { source: '', targetPath: '', file: null }])}
-                    className="flex items-center gap-1.5 text-xs text-sig-blue hover:text-sig-blue/80
-                               transition-colors duration-150 w-fit"
-                  >
-                    <Plus size={13} />
-                    Add certificate path
-                  </button>
-                </div>
-              </div>
-
-              {/* ── ADDITIONAL DIRECTORIES CONFIG PANEL (Step 4 — config only, uploads in Step 6) ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/40 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/60 flex-shrink-0" />
-                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                      Additional Directories
-                      <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => goToAndScroll(6, 'extra-dirs-panel')}
-                    className="flex-shrink-0 inline-flex items-center gap-1 font-mono text-xs
-                               text-wiz-gold hover:text-wiz-cream transition-colors duration-150 whitespace-nowrap"
-                  >
-                    Upload ZIPs <ArrowRight size={11} />
-                  </button>
-                </div>
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-xs text-wiz-muted leading-relaxed">
-                    Define extra directories and their absolute target paths on the server.
-                    Each ZIP is transferred independently of the application tarball.
-                    Upload the ZIP files in the File Uploads step.
-                  </p>
-
-                  {form.extraDirs.map((ed, idx) => (
-                    <div key={idx} className="flex items-end gap-2">
-                      <div className="grid grid-cols-2 gap-2 flex-1">
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            Directory name
-                          </label>
-                          <input
-                            type="text"
-                            value={ed.dirName}
-                            placeholder="deploy"
-                            onChange={(e) => {
-                              const next = [...form.extraDirs]
-                              next[idx] = { ...next[idx], dirName: e.target.value }
-                              set('extraDirs', next)
-                            }}
-                            className="wiz-input"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            Target path on server
-                          </label>
-                          <input
-                            type="text"
-                            value={ed.targetPath}
-                            placeholder="/opt/apps/my-service/deploy"
-                            onChange={(e) => {
-                              const next = [...form.extraDirs]
-                              next[idx] = { ...next[idx], targetPath: e.target.value }
-                              set('extraDirs', next)
-                            }}
-                            className="wiz-input"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => set('extraDirs', form.extraDirs.filter((_, i) => i !== idx))}
-                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
-                        aria-label="Remove directory entry"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => set('extraDirs', [...form.extraDirs, { dirName: '', targetPath: '', file: null }])}
-                    className="flex items-center gap-1.5 text-xs text-wiz-gold hover:text-wiz-gold/80
-                               transition-colors duration-150 w-fit"
-                  >
-                    <Plus size={13} />
-                    Add directory
-                  </button>
-                </div>
-              </div>
-
-            </div>
-          </>
-        )}
-
-        {/* ─── Step 5: Backup ────────────────────────────────── */}
-        {step === 5 && (
-          <>
-            <StepHeading num="05" label="Backup" />
-            <div className="flex flex-col gap-5">
-              {/* Styled checkbox matching mockup */}
-              <label className="flex items-center gap-3 cursor-pointer group w-fit">
-                <div
-                  onClick={() => set('performBackup', !form.performBackup)}
-                  className={clsx(
-                    'w-5 h-5 rounded flex items-center justify-center flex-shrink-0',
-                    'border-2 transition-all duration-150 cursor-pointer',
-                    form.performBackup
-                      ? 'bg-wiz-gold border-wiz-gold'
-                      : 'bg-wiz-bg border-wiz-border group-hover:border-wiz-border-mid',
-                  )}
-                >
-                  {form.performBackup && <Check size={12} className="text-wiz-bg" strokeWidth={3} />}
-                </div>
-                <span className="text-base font-semibold text-wiz-cream">
-                  Enable pre-deployment backup
-                </span>
-              </label>
-
-              {form.performBackup && (
-                <div className="animate-fade-in flex flex-col gap-2">
-                  {/* Label — same style as section-label */}
-                  <p className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                    Max Backups to Retain
-                  </p>
-
-                  {/* Tile picker — 1 through 5 only, no free-text entry */}
-                  <div className="flex items-center gap-2">
-                    {([1, 2, 3, 4, 5] as const).map((n) => {
-                      const selected = form.maxBackups === n.toString()
-                      return (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => set('maxBackups', n.toString())}
-                          className={clsx(
-                            'w-12 h-12 rounded-lg border font-mono font-bold text-base',
-                            'transition-all duration-150 flex items-center justify-center',
-                            selected
-                              ? 'border-wiz-gold bg-wiz-gold/10 text-wiz-gold shadow-gold-sm'
-                              : 'border-wiz-border bg-wiz-bg text-wiz-gray hover:border-wiz-border-mid hover:text-wiz-cream',
-                          )}
-                          title={`Keep ${n} backup${n === 1 ? '' : 's'}`}
-                        >
-                          {n}
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  {/* Contextual hint */}
-                  <p className="text-xs text-wiz-muted">
-                    {form.maxBackups === '1'
-                      ? 'Only the most recent backup is kept.'
-                      : `The ${form.maxBackups} most recent backups are kept. Older ones are automatically removed.`}
-                  </p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* ─── Step 6: File Uploads ──────────────────────────── */}
-        {step === 6 && (
-          <>
-            <StepHeading num="06" label="File Uploads" />
-            <div className="flex flex-col gap-5">
-
-              {/* ── APPLICATION JAR PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    Application JAR
-                    <span className="ml-1.5 text-sig-red/70 normal-case tracking-normal font-normal">· Required</span>
-                  </h3>
-                </div>
-                <div className="p-5 flex flex-col gap-4">
-                  <UploadZone
-                    value={form.jarArtifact}
-                    onChange={handleJarArtifact}
-                    error={errors.jarArtifact}
-                    accept=".jar"
-                    inputId="jar-artifact-file"
-                  />
-                  <FormField
-                    label="JAR NAME"
-                    name="jarName"
-                    required
-                    placeholder="my-service-1.0.0.jar"
-                    hint="Name of the main application JAR. Auto-filled from the uploaded filename; override if the deployed filename should differ."
-                    value={form.jarName}
-                    onChange={(e) => set('jarName', e.target.value)}
-                    error={errors.jarName}
-                  />
-                </div>
-              </div>
-
-              {/* ── LIBRARY DEPENDENCIES PANEL ── (thin JAR mode only) */}
-              {form.jarType === 'thin' && (
-                <div id="lib-deps-panel" className="animate-fade-in rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                  <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                      Library Dependencies
-                      <span className="ml-1.5 text-sig-red/70 normal-case tracking-normal font-normal">· Required</span>
-                    </h3>
-                  </div>
-                  <div className="p-5 flex flex-col gap-4">
-                    <p className="text-xs text-wiz-muted leading-relaxed">
-                      Upload a <span className="font-mono text-wiz-cream">.zip</span> containing your dependency JARs.
-                      JAR files must be at the <span className="font-semibold text-wiz-gray">root</span> of the ZIP —
-                      not inside a <span className="font-mono text-wiz-cream">lib/</span> subfolder.
-                      The runner extracts the ZIP contents into{' '}
-                      <span className="font-mono text-wiz-cream">lib/</span> on the target server.
-                    </p>
-                    <UploadZone
-                      value={form.libZip}
-                      onChange={(f) => set('libZip', f)}
-                      error={errors.libZip}
-                      accept=".zip"
-                      inputId="lib-zip-file"
-                    />
+              ) : (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-wiz-border/40 bg-wiz-surface/40">
+                  <Info size={15} className="text-wiz-gold/70 flex-shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium text-wiz-cream/90">Ready to deploy</span>
+                    <p className="text-xs text-wiz-muted/50 mt-0.5">Review your configuration below, then click <span className="text-wiz-cream font-medium">Deploy</span> to begin. Click <span className="text-wiz-cream font-medium">Edit</span> on any section to make changes.</p>
                   </div>
                 </div>
               )}
 
-              {/* ── CERTIFICATE FILES PANEL ── */}
-              <div id="cert-files-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/40 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
-                    Certificate Files
-                    <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
-                  </h3>
+              {/* ── Target Server panel (sig-green) ── */}
+              <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-green/5 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-green flex-shrink-0" />
+                  <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-green flex-1">Target Server</span>
+                  <button type="button" onClick={() => { setStep(1); setTimeout(() => document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-sig-green/30 bg-sig-green-dim/20 text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
                 </div>
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-xs text-wiz-muted leading-relaxed">
-                    Upload cert or keystore ZIPs that must live at a custom server path outside
-                    the application directory (e.g.{' '}
-                    <span className="font-mono text-wiz-cream">/opt/certs</span>).
-                    Each ZIP is extracted to its target path independently.
-                  </p>
+                <div className="px-4 py-2.5 flex flex-col gap-0">
+                  <ReviewRow label="Environment" value={form.environment.toUpperCase()} badge />
+                  <ReviewRow label="SSH Target" value={`${form.sshUser}@${form.sshHost}:${form.sshPort}`} mono />
+                  <ReviewRow label="Install Path" value={`${form.targetBasePath}/${form.appName || '<appName>'}`} mono />
+                  <ReviewRow label="Java Binary" value={form.javaCommand} mono />
 
-                  {form.certUploads.map((cu, idx) => (
-                    <div key={idx} className="flex items-end gap-2">
-                      <div className="flex flex-col gap-2 flex-1">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="flex flex-col gap-1">
-                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                              Dir name (in ZIP)
-                            </label>
-                            <input
-                              type="text"
-                              value={cu.source}
-                              placeholder="certs"
-                              onChange={(e) => {
-                                const next = [...form.certUploads]
-                                next[idx] = { ...next[idx], source: e.target.value }
-                                set('certUploads', next)
-                              }}
-                              className="wiz-input"
-                            />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                              Target path on server
-                            </label>
-                            <input
-                              type="text"
-                              value={cu.targetPath}
-                              placeholder="/opt/certs"
-                              onChange={(e) => {
-                                const next = [...form.certUploads]
-                                next[idx] = { ...next[idx], targetPath: e.target.value }
-                                set('certUploads', next)
-                              }}
-                              className="wiz-input"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            ZIP file
-                          </label>
-                          <MiniUpload
-                            value={cu.file}
-                            onChange={(f) => {
-                              const next = [...form.certUploads]
-                              next[idx] = { ...next[idx], file: f }
-                              set('certUploads', next)
-                            }}
-                            accept=".zip"
-                            inputId={`cert-zip-${idx}`}
-                          />
-                        </div>
+                  {/* Certificates (inline in target server) */}
+                  {form.hasCerts && form.certUploads.filter(c => c.source.trim() && c.targetPath.trim() && c.file).length > 0 && (
+                    <>
+                      <div className="border-t border-wiz-border/20 mt-2 pt-2 flex items-center justify-between">
+                        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-wiz-muted/40">Certificates</span>
+                        <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('certs-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-sig-green/30 bg-sig-green-dim/20 text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => set('certUploads', form.certUploads.filter((_, i) => i !== idx))}
-                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
-                        aria-label="Remove certificate entry"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
+                      {form.certUploads
+                        .filter(c => c.source.trim() && c.targetPath.trim() && c.file)
+                        .map((c, i) => (
+                          <ReviewRow key={`cert-${i}`} label={c.source} value={c.targetPath} mono />
+                        ))}
+                    </>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => set('certUploads', [...form.certUploads, { source: '', targetPath: '', file: null }])}
-                    className="flex items-center gap-1.5 text-xs text-sig-blue hover:text-sig-blue/80
-                               transition-colors duration-150 w-fit"
-                  >
-                    <Plus size={13} />
-                    Add certificate path
-                  </button>
+                  {/* Extra Directories (inline in target server) */}
+                  {form.hasExtraDirs && form.extraDirs.filter(d => d.dirName.trim() && d.targetPath.trim() && d.file).length > 0 && (
+                    <>
+                      <div className="border-t border-wiz-border/20 mt-2 pt-2 flex items-center justify-between">
+                        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-wiz-muted/40">Additional Directories</span>
+                        <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('extra-dirs-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-sig-green/30 bg-sig-green-dim/20 text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
+                      </div>
+                      {form.extraDirs
+                        .filter(d => d.dirName.trim() && d.targetPath.trim() && d.file)
+                        .map((d, i) => (
+                          <ReviewRow key={`dir-${i}`} label={d.dirName} value={d.targetPath} mono />
+                        ))}
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* ── ADDITIONAL DIRECTORIES PANEL ── */}
-              <div id="extra-dirs-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/40 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/60 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                    Additional Directories
-                    <span className="ml-1.5 text-wiz-muted/60 normal-case tracking-normal font-normal">· Optional</span>
-                  </h3>
+              {/* ── Application panel (sig-blue) ── */}
+              <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue/5 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue flex-shrink-0" />
+                  <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue flex-1">Application</span>
+                  <button type="button" onClick={() => { setStep(2); setTimeout(() => document.getElementById('app-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-sig-blue/30 bg-sig-blue-dim/20 text-sig-blue/70 hover:text-sig-blue hover:border-sig-blue/50 hover:bg-sig-blue-dim/40 transition-all duration-150">Edit</button>
                 </div>
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-xs text-wiz-muted leading-relaxed">
-                    Upload extra directories that must land at a custom absolute path on the server.
-                    Each ZIP is transferred to its configured target path independently of the application tarball.
-                  </p>
-
-                  {form.extraDirs.map((ed, idx) => (
-                    <div key={idx} className="flex items-end gap-2">
-                      <div className="flex flex-col gap-2 flex-1">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="flex flex-col gap-1">
-                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                              Directory name
-                            </label>
-                            <input
-                              type="text"
-                              value={ed.dirName}
-                              placeholder="deploy"
-                              onChange={(e) => {
-                                const next = [...form.extraDirs]
-                                next[idx] = { ...next[idx], dirName: e.target.value }
-                                set('extraDirs', next)
-                              }}
-                              className="wiz-input"
-                            />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                              Target path on server
-                            </label>
-                            <input
-                              type="text"
-                              value={ed.targetPath}
-                              placeholder="/opt/apps/my-service/deploy"
-                              onChange={(e) => {
-                                const next = [...form.extraDirs]
-                                next[idx] = { ...next[idx], targetPath: e.target.value }
-                                set('extraDirs', next)
-                              }}
-                              className="wiz-input"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted">
-                            ZIP file
-                          </label>
-                          <MiniUpload
-                            value={ed.file}
-                            onChange={(f) => {
-                              const next = [...form.extraDirs]
-                              next[idx] = { ...next[idx], file: f }
-                              set('extraDirs', next)
-                            }}
-                            accept=".zip"
-                            inputId={`extra-dir-zip-${idx}`}
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => set('extraDirs', form.extraDirs.filter((_, i) => i !== idx))}
-                        className="btn-icon flex-shrink-0 mb-0 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
-                        aria-label="Remove directory entry"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => set('extraDirs', [...form.extraDirs, { dirName: '', targetPath: '', file: null }])}
-                    className="flex items-center gap-1.5 text-xs text-wiz-gold hover:text-wiz-gold/80
-                               transition-colors duration-150 w-fit"
-                  >
-                    <Plus size={13} />
-                    Add directory
-                  </button>
+                <div className="px-4 py-2.5 flex flex-col gap-0">
+                  <ReviewRow label="Application" value={form.appName} />
+                  <ReviewRow label="JAR File" value={form.jarName || form.jarArtifact?.name || '—'} mono />
+                  <ReviewRow label="JAR Type" value={form.jarType === 'fat' ? 'Fat JAR (self-contained)' : 'Thin JAR (external lib/)'} />
+                  <ReviewRow label="Main Class" value={form.mainClass} mono />
+                  <ReviewRow label="Server Port" value={form.serverPort} />
+                  <ReviewRow label="Run As User" value={form.runAsUser} />
                 </div>
               </div>
+
+              {/* ── Deployment Options panel (wiz-gold) ── */}
+              <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-wiz-gold/60 border-r-wiz-border-strong overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-wiz-gold/5 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold flex-shrink-0" />
+                  <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-wiz-gold flex-1">Deployment Options</span>
+                  <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('backup-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-wiz-gold/30 bg-wiz-gold/10 text-wiz-gold/70 hover:text-wiz-gold hover:border-wiz-gold/50 hover:bg-wiz-gold/20 transition-all duration-150">Edit</button>
+                </div>
+                <div className="px-4 py-2.5 flex flex-col gap-0">
+                  <ReviewRow label="Backup" value={form.performBackup ? `Enabled — keep ${form.maxBackups} release${parseInt(form.maxBackups) !== 1 ? 's' : ''}` : 'Disabled'} />
+                  <ReviewRow label="Log Rotation" value={`${form.maxLogSize} per file, ${form.maxLogFiles} files max`} />
+                  {!jvmConfigEnabled ? (
+                    <ReviewRow label="JVM" value="Ergonomic defaults — no custom flags" />
+                  ) : (
+                    <>
+                      {form.xms && (
+                        <ReviewRow label="Heap" value={`${form.xms} (min) — ${form.xmx} (max)`} />
+                      )}
+                      {(() => {
+                        const derived = deriveJvmFlags({
+                          xms: form.xms, xmx: form.xmx,
+                          gcType, workloadProfile, containerAware, advancedGcTuning, maxGcPauseMs,
+                          metaspaceSize:   advancedJvmEnabled ? metaspaceSize   : '',
+                          threadStackSize: advancedJvmEnabled ? threadStackSize : '',
+                          javaVersion: form.javaVersion,
+                          maxRamPct,
+                        })
+                        const allFlags = [
+                          form.xms ? `-Xms${form.xms}` : null,
+                          form.xmx ? `-Xmx${form.xmx}` : null,
+                          ...derived.flags,
+                          ...form.extraOpts.filter(Boolean),
+                        ].filter((f): f is string => Boolean(f))
+
+                        if (allFlags.length === 0) return null
+
+                        return (
+                          <ReviewRow label="JVM Flags" value={allFlags.join('  ')} mono />
+                        )
+                      })()}
+                    </>
+                  )}
+                </div>
+              </div>
+
 
             </div>
           </>
         )}
+
       </div>
+      </div> {/* end isolate wrapper */}
 
       {/* ── Navigation buttons ── */}
-      <div className="flex items-center justify-between">
+      <div className="max-w-3xl flex items-center justify-between pb-6">
         {/* Prev */}
         <div>
           {step > 1 && (
@@ -1792,13 +3803,14 @@ export default function DeployPage() {
           )}
         </div>
 
-        {/* Next / Submit */}
+        {/* Next / Deploy */}
         <div className="flex flex-col items-end gap-1.5">
-          {step < 6 ? (
+          {step < 4 ? (
             <button
               type="button"
               onClick={handleNext}
-              className="btn-secondary gap-2"
+              disabled={false}
+              className="btn-secondary gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Next
               <ArrowRight size={13} />
@@ -1810,13 +3822,16 @@ export default function DeployPage() {
               disabled={submitting}
               className={clsx('btn-primary gap-2', submitting && 'animate-pulse')}
             >
-              <Rocket size={14} />
-              {submitting ? 'Deploying…' : 'Submit Deployment →'}
+              <Wand2 size={14} />
+              {submitting ? 'Deploying…' : 'Deploy →'}
             </button>
           )}
         </div>
       </div>
 
-    </div>
+      </> /* end of non-uploading fragment */
+    )} {/* end of uploadProgress ternary */}
+
+    </> /* end root fragment */
   )
 }

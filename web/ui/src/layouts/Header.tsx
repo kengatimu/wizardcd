@@ -1,6 +1,10 @@
+import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, Settings2, Sun, Moon } from 'lucide-react'
+import { Bell, Sun, Moon } from 'lucide-react'
+import clsx from 'clsx'
 import { useTheme } from '../context/ThemeContext'
+import { useNotifications } from '../hooks/useNotifications'
+import NotificationDropdown from '../components/NotificationDropdown'
 
 const ENV_STYLE: Record<string, string> = {
   SIT:  'bg-sig-blue-dim   text-sig-blue   border border-sig-blue/20',
@@ -19,15 +23,29 @@ export default function Header() {
   const envStyle   = ENV_STYLE[activeEnv]   ?? ENV_STYLE['SIT']
   const envTooltip = ENV_TOOLTIP[activeEnv] ?? ENV_TOOLTIP['SIT']
 
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearAll,
+  } = useNotifications()
+
+  const [showNotifs, setShowNotifs] = useState(false)
+
+  const toggleNotifs = useCallback(() => {
+    setShowNotifs((prev) => !prev)
+  }, [])
+
+  const closeNotifs = useCallback(() => {
+    setShowNotifs(false)
+  }, [])
+
   return (
-    /*
-     * h-28 matches the Sidebar logo area exactly so both border-b lines
-     * appear as a single continuous horizontal rule across the full width.
-     */
     <header className="h-28 flex-shrink-0 flex items-center justify-between
                         px-6 bg-wiz-surface border-b border-wiz-border">
 
-      {/* Left: permanent slogan only — page context comes from each page's own H1 */}
+      {/* Left: permanent slogan */}
       <p className="font-mono text-xs tracking-[0.18em] uppercase text-wiz-gold/90 select-none">
         One Config. One Command. Continuous Magic.
       </p>
@@ -35,19 +53,16 @@ export default function Header() {
       {/* Right: controls */}
       <div className="flex items-center gap-2">
 
-        {/* Environment badge — clicking goes to Settings where the API URL is configured.
-            Change the active environment by setting VITE_APP_ENV=UAT or VITE_APP_ENV=PROD
-            in your .env file and restarting the dev server. */}
+        {/* Environment badge */}
         <Link
-          to="/settings"
+          to="/deploy"
           className={`inline-flex items-center gap-1.5 font-mono text-xs
                       font-semibold tracking-wider px-2.5 py-1 rounded-md
                       transition-opacity duration-150 hover:opacity-80 ${envStyle}`}
-          title={envTooltip}
+          title="Go to deployment — change environment in Step 1"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
           {activeEnv}
-          <Settings2 size={10} className="opacity-70" />
         </Link>
 
         <div className="w-px h-4 bg-wiz-border mx-1" />
@@ -65,9 +80,43 @@ export default function Header() {
           }
         </button>
 
-        <button type="button" className="btn-icon h-8 w-8" title="Notifications">
-          <Bell size={14} className="text-wiz-muted" />
-        </button>
+        {/* Notification bell */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={toggleNotifs}
+            className={clsx(
+              'btn-icon h-8 w-8 relative',
+              showNotifs && 'bg-wiz-raised',
+            )}
+            title="Notifications"
+          >
+            <Bell size={14} className={clsx(
+              showNotifs ? 'text-wiz-gold' : 'text-wiz-muted',
+            )} />
+
+            {/* Unread badge */}
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1
+                               flex items-center justify-center rounded-full
+                               bg-sig-red text-white text-[9px] font-bold leading-none
+                               border-2 border-wiz-surface">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Dropdown */}
+          {showNotifs && (
+            <NotificationDropdown
+              notifications={notifications}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+              onClearAll={clearAll}
+              onClose={closeNotifs}
+            />
+          )}
+        </div>
 
       </div>
 

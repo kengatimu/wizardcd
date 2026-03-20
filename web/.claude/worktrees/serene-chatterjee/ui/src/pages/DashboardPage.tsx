@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, RefreshCw, Eye, StopCircle, Activity } from 'lucide-react'
+import { AlertCircle, RefreshCw, StopCircle, Activity } from 'lucide-react'
 import { fetchDashboardSummary, fetchJobs, abortJob } from '../api/jobs'
 import type { DashboardSummary } from '../types/DashboardSummary'
 import type { JobSummary } from '../types/JobSummary'
@@ -41,7 +41,7 @@ function MetricCard({ label, value, sub, accent, trend }: MetricCardProps) {
 function SkeletonRow() {
   return (
     <tr>
-      {Array.from({ length: 7 }).map((_, i) => (
+      {Array.from({ length: 8 }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div className="skeleton h-4 rounded w-3/4" />
         </td>
@@ -69,8 +69,23 @@ function formatTime(iso: string): string {
   }
 }
 
-function truncateId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) + '…' : id
+const TERMINAL_STATUSES = new Set(['SUCCESS', 'FAILED', 'ABORTED'])
+
+function formatDuration(createdAt: string, completedAt?: string, lifecycleStatus?: string): string {
+  const start = new Date(createdAt).getTime()
+  if (!start) return '—'
+  const end = completedAt
+    ? new Date(completedAt).getTime()
+    : TERMINAL_STATUSES.has(lifecycleStatus ?? '') ? null : Date.now()
+  if (end === null) return '—'
+  const ms = end - start
+  if (ms < 0) return '—'
+  if (ms < 1000) return `${ms}ms`
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const rem = s % 60
+  return rem > 0 ? `${m}m ${rem}s` : `${m}m`
 }
 
 // ── Main Page ────────────────────────────────────────────────────
@@ -107,7 +122,7 @@ export default function DashboardPage() {
   const handleAbort = async (jobId: string) => {
     try {
       await abortJob(jobId)
-      toast.success(`Abort requested for job ${truncateId(jobId)}`)
+      toast.success(`Abort requested for job ${jobId.slice(0, 8)}…`)
       void refetchJobs()
     } catch {
       toast.error('Failed to abort job.')
@@ -183,13 +198,14 @@ export default function DashboardPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-wiz-border bg-wiz-panel/50">
-                <th className="text-left px-4 py-3 section-label font-semibold">Job ID</th>
-                <th className="text-left px-4 py-3 section-label font-semibold">Application</th>
-                <th className="text-left px-4 py-3 section-label font-semibold">Environment</th>
-                <th className="text-left px-4 py-3 section-label font-semibold">Lifecycle</th>
-                <th className="text-left px-4 py-3 section-label font-semibold">Execution</th>
-                <th className="text-left px-4 py-3 section-label font-semibold">Created</th>
-                <th className="text-right px-4 py-3 section-label font-semibold">Actions</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap w-[140px]">Job ID</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap">Application</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap w-[72px]">Env</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap">Lifecycle</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap">Execution</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap">Created</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap">Completed</th>
+                <th className="text-left px-4 py-3 section-label font-semibold whitespace-nowrap w-[90px]">Duration</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-wiz-border/40">
@@ -200,81 +216,86 @@ export default function DashboardPage() {
                   <SkeletonRow />
                 </>
               ) : jobs && jobs.length > 0 ? (
-                jobs.map((job) => (
-                  <tr
-                    key={job.jobId}
-                    className="hover:bg-wiz-surface/50 transition-colors duration-100"
-                  >
-                    {/* Job ID */}
-                    <td className="px-4 py-3">
-                      <span
-                        className="font-mono text-xs text-wiz-gold/90 cursor-pointer hover:text-wiz-gold"
-                        title={job.jobId}
-                        onClick={() => navigate(`/jobs/${job.jobId}`)}
-                      >
-                        {truncateId(job.jobId)}
-                      </span>
-                    </td>
-
-                    {/* App name */}
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-wiz-cream">
-                        {job.appName}
-                      </span>
-                    </td>
-
-                    {/* Environment */}
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-wiz-muted uppercase tracking-wider">
-                        {job.environment}
-                      </span>
-                    </td>
-
-                    {/* Lifecycle */}
-                    <td className="px-4 py-3">
-                      <StatusBadge status={job.lifecycleStatus} pulse />
-                    </td>
-
-                    {/* Execution */}
-                    <td className="px-4 py-3">
-                      <StatusBadge status={job.executionStatus} />
-                    </td>
-
-                    {/* Created at */}
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-wiz-muted">
-                        {formatTime(job.createdAt)}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/jobs/${job.jobId}`)}
-                          className="btn-icon h-7 w-7"
-                          title="View details"
+                jobs.map((job) => {
+                  const isActive = job.lifecycleStatus === 'RUNNING' || job.lifecycleStatus === 'VALIDATING' || job.lifecycleStatus === 'PREPARING_WORKSPACE'
+                  return (
+                    <tr
+                      key={job.jobId}
+                      onClick={() => navigate(`/jobs/${job.jobId}`)}
+                      className="hover:bg-wiz-surface/50 transition-colors duration-100 cursor-pointer"
+                    >
+                      {/* Job ID */}
+                      <td className="px-4 py-3">
+                        <span
+                          className="font-mono text-xs text-wiz-gold/90"
+                          title={job.jobId}
                         >
-                          <Eye size={13} />
-                        </button>
-                        {(job.lifecycleStatus === 'RUNNING' || job.lifecycleStatus === 'VALIDATING' || job.lifecycleStatus === 'PREPARING_WORKSPACE') && (
-                          <button
-                            type="button"
-                            onClick={() => void handleAbort(job.jobId)}
-                            className="btn-icon h-7 w-7 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim"
-                            title="Abort job"
-                          >
-                            <StopCircle size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {job.jobId.slice(0, 12)}…
+                        </span>
+                      </td>
+
+                      {/* App name */}
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-wiz-cream truncate block max-w-[200px]">
+                          {job.appName}
+                        </span>
+                      </td>
+
+                      {/* Environment */}
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-wiz-muted uppercase tracking-wider">
+                          {job.environment}
+                        </span>
+                      </td>
+
+                      {/* Lifecycle */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <StatusBadge status={job.lifecycleStatus} pulse />
+                      </td>
+
+                      {/* Execution */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <StatusBadge status={job.executionStatus} />
+                      </td>
+
+                      {/* Created at */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="font-mono text-xs text-wiz-muted">
+                          {formatTime(job.createdAt)}
+                        </span>
+                      </td>
+
+                      {/* Completed at */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="font-mono text-xs text-wiz-muted">
+                          {job.completedAt ? formatTime(job.completedAt) : '—'}
+                        </span>
+                      </td>
+
+                      {/* Duration + Abort */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-wiz-muted">
+                            {formatDuration(job.createdAt, job.completedAt, job.lifecycleStatus)}
+                          </span>
+                          {isActive && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); void handleAbort(job.jobId) }}
+                              className="btn-icon h-6 w-6 text-sig-red/70 hover:text-sig-red hover:bg-sig-red-dim flex-shrink-0"
+                              title="Abort job"
+                            >
+                              <StopCircle size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center">
+                  <td colSpan={8} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Activity size={32} className="text-wiz-muted" />
                       <p className="text-wiz-muted text-sm">No deployments yet.</p>

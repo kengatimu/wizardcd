@@ -2,4 +2,8 @@ spring:
   application:
     name: runner-service-ms
   profiles:
-    active: uat
+    active: sit
+  servlet:
+    multipart:
+      max-file-size: 500MB      # single file limit (JAR + lib ZIPs can be large)
+      max-request-size: 512MB   # total request limit (all parts combined)

@@ -21,6 +21,7 @@ export async function submitJob(
   libZip?: File,
   certZips?: File[],
   extraZips?: File[],
+  onUploadProgress?: (loaded: number, total: number) => void,
 ): Promise<JobResponse> {
   const formData = new FormData()
 
@@ -44,7 +45,17 @@ export async function submitJob(
   // Append one entry per extra directory ZIP
   extraZips?.forEach((f) => formData.append('extraZips', f, f.name))
 
-  const { data } = await apiClient.post<JobResponse>('/jobs', formData)
+  // timeout: 0 disables axios's default 30s global timeout for this call only.
+  // Large deployments (fat JARs + lib ZIPs) can easily exceed 30 s in upload time;
+  // the browser's own TCP-layer timeout is sufficient as the backstop.
+  const { data } = await apiClient.post<JobResponse>('/jobs', formData, {
+    timeout: 0,
+    onUploadProgress: (e) => {
+      if (onUploadProgress && e.total) {
+        onUploadProgress(e.loaded, e.total)
+      }
+    },
+  })
   return data
 }
 
@@ -113,8 +124,10 @@ export async function fetchRunnerPublicKeys(): Promise<Record<string, string>> {
 }
 
 export interface SshTestResult {
-  success: boolean
-  message: string
+  success:            boolean
+  message:            string
+  /** Java binary paths found on the target server. Empty array if none or detection failed. */
+  javaInstallations:  string[]
 }
 
 /**

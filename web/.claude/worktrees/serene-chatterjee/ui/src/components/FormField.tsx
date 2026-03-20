@@ -15,7 +15,7 @@ interface FieldWrapperProps {
 export function FieldWrapper({ label, name, error, hint, required, children }: FieldWrapperProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={name} className="flex items-center gap-1 text-xs font-medium text-wiz-gray">
+      <label htmlFor={name} className="flex items-center gap-1 text-sm font-medium text-wiz-gray">
         {label}
         {required && <span className="text-wiz-gold ml-0.5">*</span>}
       </label>
@@ -24,7 +24,7 @@ export function FieldWrapper({ label, name, error, hint, required, children }: F
         <p className="text-xs text-sig-red">{error}</p>
       )}
       {hint && !error && (
-        <p className="text-xs text-wiz-muted">{hint}</p>
+        <p className="text-xs text-wiz-gray">{hint}</p>
       )}
     </div>
   )

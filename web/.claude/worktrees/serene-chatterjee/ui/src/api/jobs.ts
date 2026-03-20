@@ -7,11 +7,21 @@ import type { JobLifecycleStatus } from '../types/enums'
 
 /**
  * Submit a new deployment job.
- * Sends a multipart/form-data request with the JSON config and JAR artifact.
+ *
+ * Sends a multipart/form-data request with:
+ *   - request      JSON config part
+ *   - jarArtifact  the application JAR (required)
+ *   - libZip       lib/ dependencies ZIP (thin JAR mode only, optional)
+ *   - certZips     one ZIP per certificate/keystore path entry (optional)
+ *   - extraZips    one ZIP per additional directory entry (optional)
  */
 export async function submitJob(
   request: DeploymentRequest,
-  artifact: File,
+  jarArtifact: File,
+  libZip?: File,
+  certZips?: File[],
+  extraZips?: File[],
+  onUploadProgress?: (loaded: number, total: number) => void,
 ): Promise<JobResponse> {
   const formData = new FormData()
 
@@ -21,10 +31,31 @@ export async function submitJob(
     new Blob([JSON.stringify(request)], { type: 'application/json' }),
   )
 
-  // Append the JAR artifact
-  formData.append('artifact', artifact, artifact.name)
+  // Append the JAR artifact (always required)
+  formData.append('jarArtifact', jarArtifact, jarArtifact.name)
 
-  const { data } = await apiClient.post<JobResponse>('/jobs', formData)
+  // Append lib/ ZIP (thin JAR mode)
+  if (libZip) {
+    formData.append('libZip', libZip, libZip.name)
+  }
+
+  // Append one entry per certificate path ZIP
+  certZips?.forEach((f) => formData.append('certZips', f, f.name))
+
+  // Append one entry per extra directory ZIP
+  extraZips?.forEach((f) => formData.append('extraZips', f, f.name))
+
+  // timeout: 0 disables axios's default 30s global timeout for this call only.
+  // Large deployments (fat JARs + lib ZIPs) can easily exceed 30 s in upload time;
+  // the browser's own TCP-layer timeout is sufficient as the backstop.
+  const { data } = await apiClient.post<JobResponse>('/jobs', formData, {
+    timeout: 0,
+    onUploadProgress: (e) => {
+      if (onUploadProgress && e.total) {
+        onUploadProgress(e.loaded, e.total)
+      }
+    },
+  })
   return data
 }
 
@@ -70,6 +101,16 @@ export async function abortJob(jobId: string): Promise<string> {
  */
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   const { data } = await apiClient.get<DashboardSummary>('/jobs/summary')
+  return data
+}
+
+/**
+ * Fetch runner metadata (public IP detected at startup).
+ * The UI uses the public IP to show the customer what IP to whitelist in their firewall.
+ * Returns an empty string for publicIp if auto-detection failed.
+ */
+export async function fetchRunnerInfo(): Promise<{ publicIp: string }> {
+  const { data } = await apiClient.get<{ publicIp: string }>('/runner/info')
   return data
 }
 
