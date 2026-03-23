@@ -94,11 +94,13 @@ public class JobQueryServiceImpl implements JobQueryService {
                         meta.getCreatedAt(),
                         currentLifecycle,
                         execState,
-                        completedAt
+                        completedAt,
+                        meta.getJobType()
                 ));
 
             } catch (Exception e) {
-                log.warn("Failed to process job directory: {}", jobDir.getName(), e);
+                // Log corrupted/incomplete job dirs at debug to avoid spamming on every poll cycle
+                log.debug("Skipping corrupted job directory {}: {}", jobDir.getName(), e.getMessage());
             }
         }
 

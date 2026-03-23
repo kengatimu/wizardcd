@@ -1,5 +1,6 @@
 package com.ebb.wizardcd.runner.service.impl;
 
+import com.ebb.wizardcd.runner.dto.PreflightResult;
 import com.ebb.wizardcd.runner.dto.SshTestResult;
 import com.ebb.wizardcd.runner.service.SshKeyService;
 import org.slf4j.Logger;
@@ -118,6 +119,177 @@ public class SshKeyServiceImpl implements SshKeyService {
             log.error("SSH test connection failed for {}@{}:{} [env={}]: {}",
                     sshUser, sshHost, sshPort, environment, e.getMessage());
             return new SshTestResult(false, "Connection failed: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public PreflightResult runPreflight(String sshUser, String sshHost, int sshPort,
+                                         String environment, String targetBasePath, String appName) {
+        try {
+            ensureKeyExists(environment);
+            String keyPath = resolveKeyPath(environment);
+
+            // Build the app deployment path
+            String appPath = targetBasePath + "/" + appName;
+            String lastSuccessfulDir = appPath + "/backup/last-successful";
+            String lastSuccessfulFile = lastSuccessfulDir + "/latest.tar.gz";
+            String releasesDir = appPath + "/backup/releases";
+
+            // Single SSH command that checks everything at once:
+            //   1. Write permissions — mirrors application-deployment.sh create_dir() logic:
+            //      - If appPath exists: check writable
+            //      - If basePath exists but appPath doesn't: check basePath writable (can create appPath)
+            //      - If neither exists: walk up to nearest existing parent, check writable OR sudo mkdir
+            //   2. Disk space (df -h on nearest existing path)
+            //   3. Backup existence + timestamp
+            String checkScript = String.join("; ",
+                    // Permissions: thorough check matching application-deployment.sh create_dir() behavior
+                    // Check 3 levels: appPath, basePath, nearest existing parent
+                    // Also tests sudo mkdir capability (application-deployment.sh falls back to sudo)
+                    "APP_PATH='" + appPath + "'; " +
+                    "BASE_PATH='" + targetBasePath + "'; " +
+                    "if [ -d \"$APP_PATH\" ] && [ -w \"$APP_PATH\" ]; then " +
+                    "  echo 'PERM:WRITABLE:existing'; " +
+                    "elif [ -d \"$BASE_PATH\" ] && [ -w \"$BASE_PATH\" ]; then " +
+                    "  echo 'PERM:WRITABLE:parent_writable'; " +
+                    "elif [ -d \"$BASE_PATH\" ] && sudo -n mkdir -p \"$APP_PATH\" 2>/dev/null; then " +
+                    // sudo mkdir succeeded — clean up the test dir
+                    "  sudo -n rmdir \"$APP_PATH\" 2>/dev/null; " +
+                    "  echo 'PERM:WRITABLE:sudo_available'; " +
+                    "elif [ ! -d \"$BASE_PATH\" ]; then " +
+                    // basePath doesn't exist — walk up to nearest existing parent
+                    "  CHECK_DIR=\"$BASE_PATH\"; " +
+                    "  while [ ! -d \"$CHECK_DIR\" ] && [ \"$CHECK_DIR\" != '/' ]; do CHECK_DIR=$(dirname \"$CHECK_DIR\"); done; " +
+                    "  if [ -w \"$CHECK_DIR\" ]; then echo 'PERM:WRITABLE:parent_chain'; " +
+                    "  elif sudo -n mkdir -p \"$BASE_PATH\" 2>/dev/null; then " +
+                    "    sudo -n rmdir \"$BASE_PATH\" 2>/dev/null; " +
+                    "    echo 'PERM:WRITABLE:sudo_available'; " +
+                    "  else echo 'PERM:NOT_WRITABLE'; fi; " +
+                    "else echo 'PERM:NOT_WRITABLE'; fi",
+
+                    // Disk space: df on basePath or nearest existing parent
+                    "DF_PATH='" + targetBasePath + "'; " +
+                    "while [ ! -d \"$DF_PATH\" ] && [ \"$DF_PATH\" != '/' ]; do DF_PATH=$(dirname \"$DF_PATH\"); done; " +
+                    "df -h \"$DF_PATH\" 2>/dev/null | awk 'NR==2{print \"DISK:\" $4 \":\" $5}' || echo 'DISK:unknown:unknown'",
+
+                    // Backup: check both backup locations (last-successful preferred, then releases)
+                    // 1. last-successful/latest.tar.gz — protected rollback copy (created after successful deploy)
+                    // 2. backup/releases/*.tar.gz — rotated release backups (created before each deploy)
+                    "LAST_SUCCESSFUL='" + lastSuccessfulFile + "'; " +
+                    "RELEASES_DIR='" + releasesDir + "'; " +
+                    "if [ -f \"$LAST_SUCCESSFUL\" ]; then " +
+                    "  echo \"BACKUP:LAST_SUCCESSFUL:$(stat -c '%Y' \"$LAST_SUCCESSFUL\" 2>/dev/null || stat -f '%m' \"$LAST_SUCCESSFUL\" 2>/dev/null):" + lastSuccessfulDir + "\"; " +
+                    "fi; " +
+                    // Also check releases dir — count files and get latest timestamp
+                    "if [ -d \"$RELEASES_DIR\" ]; then " +
+                    "  RELEASE_COUNT=$(ls -1 \"$RELEASES_DIR\"/*.tar.gz 2>/dev/null | wc -l); " +
+                    "  if [ \"$RELEASE_COUNT\" -gt 0 ]; then " +
+                    "    LATEST_RELEASE=$(ls -1t \"$RELEASES_DIR\"/*.tar.gz 2>/dev/null | head -1); " +
+                    "    echo \"BACKUP:RELEASES:${RELEASE_COUNT}:$(stat -c '%Y' \"$LATEST_RELEASE\" 2>/dev/null || stat -f '%m' \"$LATEST_RELEASE\" 2>/dev/null):" + releasesDir + "\"; " +
+                    "  else echo 'BACKUP:RELEASES:0'; fi; " +
+                    "else echo 'BACKUP:RELEASES:0'; fi; " +
+                    // If neither exists
+                    "if [ ! -f \"$LAST_SUCCESSFUL\" ] && { [ ! -d \"$RELEASES_DIR\" ] || [ $(ls -1 \"$RELEASES_DIR\"/*.tar.gz 2>/dev/null | wc -l) -eq 0 ]; }; then " +
+                    "  echo 'BACKUP:NONE'; " +
+                    "fi"
+            );
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    "ssh",
+                    "-i", keyPath,
+                    "-o", "BatchMode=yes",
+                    "-o", "StrictHostKeyChecking=accept-new",
+                    "-o", "ConnectTimeout=" + SSH_CONNECT_TIMEOUT_SECONDS,
+                    "-p", String.valueOf(sshPort),
+                    sshUser + "@" + sshHost,
+                    checkScript
+            );
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes()).trim();
+            boolean finished = process.waitFor(SSH_PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            if (!finished) {
+                process.destroyForcibly();
+                return PreflightResult.unreachable("Connection timed out after " + SSH_CONNECT_TIMEOUT_SECONDS + " seconds.");
+            }
+
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                return PreflightResult.unreachable("SSH connection failed (exit " + exitCode + "): " + output);
+            }
+
+            // Parse results
+            boolean writable = false;
+            String diskAvail = null;
+            String diskUsed = null;
+            boolean lastSuccessfulExists = false;
+            String lastSuccessfulTs = null;
+            String lastSuccessfulPath = null;
+            int releaseCount = 0;
+            String latestReleaseTs = null;
+            String releasesPath = null;
+
+            for (String line : output.split("\n")) {
+                line = line.trim();
+                if (line.startsWith("PERM:WRITABLE")) {
+                    writable = true;
+                } else if (line.startsWith("PERM:NOT_WRITABLE")) {
+                    writable = false;
+                } else if (line.startsWith("DISK:")) {
+                    String[] parts = line.substring(5).split(":");
+                    if (parts.length >= 2) {
+                        diskAvail = parts[0];
+                        diskUsed = parts[1];
+                    }
+                } else if (line.startsWith("BACKUP:LAST_SUCCESSFUL:")) {
+                    lastSuccessfulExists = true;
+                    String rest = line.substring("BACKUP:LAST_SUCCESSFUL:".length());
+                    String[] parts = rest.split(":", 2);
+                    if (parts.length >= 1) lastSuccessfulTs = parseEpochToIso(parts[0]);
+                    if (parts.length >= 2) lastSuccessfulPath = parts[1];
+                } else if (line.startsWith("BACKUP:RELEASES:")) {
+                    String rest = line.substring("BACKUP:RELEASES:".length());
+                    String[] parts = rest.split(":", 3);
+                    if (parts.length >= 1) {
+                        try { releaseCount = Integer.parseInt(parts[0].trim()); } catch (NumberFormatException ignored) {}
+                    }
+                    if (parts.length >= 2) latestReleaseTs = parseEpochToIso(parts[1]);
+                    if (parts.length >= 3) releasesPath = parts[2];
+                }
+            }
+
+            String msg = writable ? "Target server ready for deployment." : "Write permission denied on " + targetBasePath;
+
+            PreflightResult result = new PreflightResult();
+            result.setTargetReachable(true);
+            result.setWritable(writable);
+            result.setDiskAvailable(diskAvail);
+            result.setDiskUsedPercent(diskUsed);
+            result.setLastSuccessfulExists(lastSuccessfulExists);
+            result.setLastSuccessfulTimestamp(lastSuccessfulTs);
+            result.setLastSuccessfulPath(lastSuccessfulPath != null ? lastSuccessfulPath : lastSuccessfulDir);
+            result.setReleaseBackupCount(releaseCount);
+            result.setLatestReleaseTimestamp(latestReleaseTs);
+            result.setReleasesPath(releasesPath != null ? releasesPath : releasesDir);
+            result.setMessage(msg);
+            return result;
+
+        } catch (Exception e) {
+            log.error("Preflight check failed for {}@{}:{}: {}", sshUser, sshHost, sshPort, e.getMessage());
+            return PreflightResult.unreachable("Preflight check failed: " + e.getMessage());
+        }
+    }
+
+    /** Parse epoch seconds string to ISO instant string. Returns raw value on failure. */
+    private static String parseEpochToIso(String epochStr) {
+        if (epochStr == null || epochStr.isBlank()) return null;
+        try {
+            long epoch = Long.parseLong(epochStr.trim());
+            return java.time.Instant.ofEpochSecond(epoch).toString();
+        } catch (NumberFormatException e) {
+            return epochStr.trim();
         }
     }
 

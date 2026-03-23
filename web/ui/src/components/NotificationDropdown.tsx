@@ -1,35 +1,61 @@
 import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, XCircle, StopCircle, Inbox } from 'lucide-react'
+import { CheckCircle2, XCircle, StopCircle, Inbox, RotateCcw, RefreshCw, Rocket } from 'lucide-react'
 import clsx from 'clsx'
-import type { Notification } from '../hooks/useNotifications'
+import type { Notification, JobType } from '../hooks/useNotifications'
 
-// ── Status config ─────────────────────────────────────────────────
+// ── Notification label matrix ────────────────────────────────────
 
-const STATUS_META: Record<string, {
-  icon:    typeof CheckCircle2
-  color:   string
-  label:   string
-  bg:      string
+type StatusKey = 'SUCCESS' | 'FAILED' | 'ABORTED'
+
+const LABELS: Record<JobType, Record<StatusKey, string>> = {
+  deploy: {
+    SUCCESS: 'Deployed successfully',
+    FAILED:  'Deployment failed',
+    ABORTED: 'Deployment aborted',
+  },
+  redeploy: {
+    SUCCESS: 'Re-deployed successfully',
+    FAILED:  'Re-deployment failed',
+    ABORTED: 'Re-deployment aborted',
+  },
+  rollback: {
+    SUCCESS: 'Rolled back successfully',
+    FAILED:  'Rollback failed',
+    ABORTED: 'Rollback aborted',
+  },
+}
+
+// ── Status styling ───────────────────────────────────────────────
+
+const STATUS_STYLE: Record<StatusKey, {
+  icon:  typeof CheckCircle2
+  color: string
+  bg:    string
 }> = {
   SUCCESS: {
     icon:  CheckCircle2,
     color: 'text-sig-green',
-    label: 'Deployed successfully',
     bg:    'bg-sig-green-dim/40',
   },
   FAILED: {
     icon:  XCircle,
     color: 'text-sig-red',
-    label: 'Deployment failed',
     bg:    'bg-sig-red-dim/40',
   },
   ABORTED: {
     icon:  StopCircle,
     color: 'text-sig-orange',
-    label: 'Deployment aborted',
     bg:    'bg-sig-orange-dim/40',
   },
+}
+
+// ── Job type icon (subtle, secondary) ────────────────────────────
+
+const JOB_TYPE_META: Record<JobType, { icon: typeof Rocket; label: string }> = {
+  deploy:   { icon: Rocket,    label: 'New deploy' },
+  redeploy: { icon: RefreshCw, label: 'Re-deploy' },
+  rollback: { icon: RotateCcw, label: 'Rollback' },
 }
 
 const ENV_DOT: Record<string, string> = {
@@ -148,9 +174,13 @@ export default function NotificationDropdown({
           </div>
         ) : (
           notifications.map((notif) => {
-            const meta = STATUS_META[notif.status] ?? STATUS_META.FAILED
-            const Icon = meta.icon
+            const style = STATUS_STYLE[notif.status] ?? STATUS_STYLE.FAILED
+            const Icon = style.icon
             const envDot = ENV_DOT[notif.environment.toUpperCase()] ?? 'bg-wiz-muted'
+            const jobType: JobType = notif.jobType ?? 'deploy'
+            const label = LABELS[jobType]?.[notif.status] ?? LABELS.deploy[notif.status]
+            const typeMeta = JOB_TYPE_META[jobType]
+            const TypeIcon = typeMeta.icon
 
             return (
               <button
@@ -171,9 +201,9 @@ export default function NotificationDropdown({
                 {/* Status icon */}
                 <div className={clsx(
                   'flex-shrink-0 mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center',
-                  meta.bg,
+                  style.bg,
                 )}>
-                  <Icon size={14} className={meta.color} />
+                  <Icon size={14} className={style.color} />
                 </div>
 
                 {/* Content */}
@@ -187,12 +217,19 @@ export default function NotificationDropdown({
                       {notif.environment}
                     </span>
                   </div>
-                  <p className={clsx('text-xs mt-0.5', meta.color)}>
-                    {meta.label}
+                  <p className={clsx('text-xs mt-0.5', style.color)}>
+                    {label}
                   </p>
-                  <p className="text-[10px] text-wiz-muted/40 mt-1">
-                    {timeAgo(notif.timestamp)}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 text-wiz-muted/35">
+                      <TypeIcon size={10} />
+                      <span className="text-[10px]">{typeMeta.label}</span>
+                    </div>
+                    <span className="text-wiz-muted/20">·</span>
+                    <span className="text-[10px] text-wiz-muted/40">
+                      {timeAgo(notif.timestamp)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Unread dot */}

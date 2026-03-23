@@ -1,5 +1,8 @@
 package com.ebb.wizardcd.runner.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Instant;
 
 // Immutable job identity snapshot
@@ -20,12 +23,28 @@ public class JobMetadata {
     // Creation timestamp
     private final Instant createdAt;
 
-    public JobMetadata(String jobId, String requestedBy, String application, String environment, Instant createdAt) {
+    // Job type: "deploy", "redeploy", or "rollback" (null defaults to "deploy" for backward compat)
+    private final String jobType;
+
+    @JsonCreator
+    public JobMetadata(
+            @JsonProperty("jobId") String jobId,
+            @JsonProperty("requestedBy") String requestedBy,
+            @JsonProperty("application") String application,
+            @JsonProperty("environment") String environment,
+            @JsonProperty("createdAt") Instant createdAt,
+            @JsonProperty("jobType") String jobType) {
         this.jobId = jobId;
         this.requestedBy = requestedBy;
         this.application = application;
         this.environment = environment;
         this.createdAt = createdAt;
+        this.jobType = jobType;
+    }
+
+    // Convenience constructor for backward compat (defaults to "deploy")
+    public JobMetadata(String jobId, String requestedBy, String application, String environment, Instant createdAt) {
+        this(jobId, requestedBy, application, environment, createdAt, "deploy");
     }
 
     public String getJobId() {
@@ -46,5 +65,10 @@ public class JobMetadata {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    // Returns "deploy", "redeploy", or "rollback"; defaults to "deploy" for old metadata without this field
+    public String getJobType() {
+        return jobType != null ? jobType : "deploy";
     }
 }

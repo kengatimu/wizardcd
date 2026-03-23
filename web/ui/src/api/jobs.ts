@@ -169,6 +169,57 @@ export async function rollbackJob(originalJobId: string): Promise<JobResponse> {
   return data
 }
 
+/**
+ * Rollback preflight: checks if a last-successful backup exists on the target
+ * and returns backup details (size, date) for the confirmation modal.
+ */
+export interface RollbackPreflightResult {
+  available:   boolean
+  backupSize?: string
+  backupDate?: string
+  backupPath?: string
+  targetHost?: string
+  reason?:     string
+}
+
+export async function rollbackPreflight(jobId: string): Promise<RollbackPreflightResult> {
+  const { data } = await apiClient.get<RollbackPreflightResult>(`/jobs/${jobId}/rollback/preflight`)
+  return data
+}
+
+// ── Pre-flight check ──────────────────────────────────────────────────
+
+export interface PreflightResult {
+  targetReachable:        boolean
+  writable:               boolean
+  diskAvailable:          string | null    // e.g. "12G"
+  diskUsedPercent:        string | null    // e.g. "45%"
+  // Last-successful backup (protected, never rotated — for safe rollback)
+  lastSuccessfulExists:   boolean
+  lastSuccessfulTimestamp: string | null
+  lastSuccessfulPath:     string | null
+  // Release backups (rotated by maxBackups)
+  releaseBackupCount:     number
+  latestReleaseTimestamp: string | null
+  releasesPath:           string | null
+  message:                string | null
+}
+
+/**
+ * Run pre-flight checks on the target server: permissions, disk space, backup status.
+ */
+export async function runPreflight(params: {
+  sshUser:        string
+  sshHost:        string
+  sshPort:        number
+  environment:    string
+  targetBasePath: string
+  appName:        string
+}): Promise<PreflightResult> {
+  const { data } = await apiClient.post<PreflightResult>('/ssh/preflight', params)
+  return data
+}
+
 export interface SshTestResult {
   success:            boolean
   message:            string

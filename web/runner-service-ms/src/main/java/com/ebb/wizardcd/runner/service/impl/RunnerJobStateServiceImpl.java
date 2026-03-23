@@ -25,6 +25,9 @@ public class RunnerJobStateServiceImpl implements RunnerJobStateService {
 
     private static final Logger log = LoggerFactory.getLogger(RunnerJobStateServiceImpl.class);
 
+    // Log fsync warning only once — avoid flooding logs on every state write
+    private volatile boolean fsyncWarningLogged = false;
+
     // Base directory where all job workspaces live
     private final String workspaceRoot;
 
@@ -78,7 +81,7 @@ public class RunnerJobStateServiceImpl implements RunnerJobStateService {
             // Persist snapshot atomically (no partial writes)
             writeAtomically(statusPath, updated);
 
-            log.info("Execution state [{}] persisted for job {}", executionState, jobId);
+            log.debug("Execution state [{}] persisted for job {}", executionState, jobId);
 
         } catch (Exception e) {
 
@@ -177,7 +180,7 @@ public class RunnerJobStateServiceImpl implements RunnerJobStateService {
             // Persist snapshot atomically
             writeAtomically(statusPath, updated);
 
-            log.info("Lifecycle state [{}] persisted for job {}", status, jobId);
+            log.debug("Lifecycle state [{}] persisted for job {}", status, jobId);
 
         } catch (Exception e) {
 
@@ -282,7 +285,10 @@ public class RunnerJobStateServiceImpl implements RunnerJobStateService {
             try {
                 fos.getFD().sync();
             } catch (java.io.SyncFailedException e) {
-                log.warn("fsync not supported on this filesystem for {} — skipping (atomic rename still guarantees consistency)", statusPath);
+                if (!fsyncWarningLogged) {
+                    fsyncWarningLogged = true;
+                    log.warn("fsync not supported on this filesystem — skipping (atomic rename still guarantees consistency)");
+                }
             }
         }
 

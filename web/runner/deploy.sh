@@ -170,6 +170,7 @@ LOG_MAX_FILES="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.logging.max_files" "${INPU
 
 BACKUP_ENABLED="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.backup.perform_backup // \"true\"" "${INPUT_DIR}/deployment-config.yml")"
 MAX_BACKUPS="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.backup.max_backups // 5" "${INPUT_DIR}/deployment-config.yml")"
+STABILITY_WINDOW="$(yq -r ".apps.${APP_NAME}.${ENV_NAME}.deployment_options.stability_window // 20" "${INPUT_DIR}/deployment-config.yml")"
 
 EXTRA_DIRS_COUNT="$(yq -r "(.apps.${APP_NAME}.${ENV_NAME}.build.extra_dirs // []) | length" "${INPUT_DIR}/deployment-config.yml" 2>/dev/null || echo 0)"
 CERT_PATHS_COUNT="$(yq -r "(.apps.${APP_NAME}.${ENV_NAME}.build.cert_paths // []) | length" "${INPUT_DIR}/deployment-config.yml")"
@@ -180,6 +181,10 @@ fi
 
 if [[ -z "$MAX_BACKUPS" || "$MAX_BACKUPS" -lt 1 ]]; then
   MAX_BACKUPS=5
+fi
+
+if [[ -z "$STABILITY_WINDOW" || "$STABILITY_WINDOW" -lt 5 ]]; then
+  STABILITY_WINDOW=20
 fi
 
 export LOG_MAX_SIZE LOG_MAX_FILES
@@ -203,6 +208,7 @@ if [[ "$BACKUP_ENABLED" == "true" ]]; then
 else
   log_info "Backup:         disabled"
 fi
+log_info "Stability:      ${STABILITY_WINDOW}s monitoring window"
 
 if [[ "$CERT_PATHS_COUNT" -gt 0 ]]; then
   log_info "Cert paths:     ${CERT_PATHS_COUNT} configured"
@@ -410,9 +416,11 @@ log_info "Connecting to ${SSH_USER}@${SSH_HOST}:${SSH_PORT} ..."
 log_info "Deploying: ${APP_NAME} (${ENV_NAME}) → ${TARGET_BASE}/${APP_NAME}"
 
 SSH_REMOTE_LOG="${LOG_DIR}/ssh-remote.log"
+> "$SSH_REMOTE_LOG"
 
-# Run remote deployment script and capture all output.
-# set +e temporarily since we need the exit code for reporting.
+# Stream remote output in real-time so the user sees progress live in the UI.
+# Disable ERR trap for this block — pipe + set -e interact badly.
+trap - ERR
 set +e
 ssh -i "$SSH_KEY" -p "$SSH_PORT" \
     -o StrictHostKeyChecking=no \
@@ -428,25 +436,40 @@ ssh -i "$SSH_KEY" -p "$SSH_PORT" \
     "$RUN_AS_USER" \
     "$BACKUP_ENABLED" \
     "$MAX_BACKUPS" \
-    > "$SSH_REMOTE_LOG" 2>&1
-SSH_EXIT=$?
+    "$STABILITY_WINDOW" \
+    2>&1 | {
+      STABILITY_EMITTED=false
+      while IFS= read -r line; do
+        echo "$line" >> "$SSH_REMOTE_LOG"
+        if [[ -n "${line// }" ]]; then
+          # Detect stability phase start (port wait or monitoring) and emit a new section header
+          if [[ "$STABILITY_EMITTED" == "false" ]]; then
+            if echo "$line" | grep -qi "Waiting for port\|Monitoring for.*to verify stability"; then
+              STABILITY_EMITTED=true
+              log_section "Stability check"
+            fi
+          fi
+          log_info "  ${line}"
+        fi
+      done
+    }
+SSH_EXIT=${PIPESTATUS[0]}
 set -e
+trap 'log_error "Deploy failed on line $LINENO (exit code $?)"; exit 1' ERR
 
-# Always forward remote output into deploy.log so it appears in the UI.
-# Lines from application-deployment.sh are indented with "  " prefix.
-if [[ -s "$SSH_REMOTE_LOG" ]]; then
-  while IFS= read -r line; do
-    [[ -n "${line// }" ]] && log_info "  ${line}"
-  done < "$SSH_REMOTE_LOG"
-  # Also append to ssh.log for full audit trail
-  cat "$SSH_REMOTE_LOG" >> "$SSH_LOG" 2>/dev/null || true
-fi
+# Also archive to ssh.log for full audit trail
+cat "$SSH_REMOTE_LOG" >> "$SSH_LOG" 2>/dev/null || true
 
 if [[ $SSH_EXIT -ne 0 ]]; then
   log_error "Remote deployment failed (exit code: ${SSH_EXIT})"
   exit $EXIT_REMOTE_FAILED
 fi
 
-log_section "Deployment completed successfully"
+log_section "Cleanup"
+log_info "Removing local build artifacts..."
+rm -rf "$BUILD_DIR" 2>/dev/null || true
+log_info "Local workspace cleaned"
+log_info ""
 log_info "${APP_NAME} (${ENV_NAME}) is running on ${SSH_HOST}:${SERVER_PORT}"
+log_info "Deployment completed successfully"
 exit 0

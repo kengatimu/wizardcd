@@ -127,6 +127,11 @@ public class YamlGenerationServiceImpl implements YamlGenerationService {
                     "max_backups", request.getMaxBackups()
             ));
 
+            // Deployment options
+            appSection.put("deployment_options", Map.of(
+                    "stability_window", request.getStabilityWindow() != null ? request.getStabilityWindow() : 20
+            ));
+
             // Wrap environment layer (e.g., uat, prod)
             Map<String, Object> environmentWrapper = Map.of(request.getEnvironment(), appSection);
 

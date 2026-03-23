@@ -15,7 +15,7 @@
         <withJansi>false</withJansi>
         <encoder>
 <!--            <pattern>[%d{yyyy-MM-dd'T'HH:mm:ss.SSS}] [%myCustomHighlighting(%-5level)] %magenta([%cleanThread]) [%blue(%logger{50})] %msg%n</pattern>-->
-            <pattern>[%d{yyyy-MM-dd'T'HH:mm:ss.SSS}] [%myCustomHighlighting(%-5level)] [%blue(%logger{50})] %msg%n</pattern>
+            <pattern>[%d{yyyy-MM-dd'T'HH:mm:ss.SSS}] [%myCustomHighlighting(%-5level)] [%blue(%logger{0})] %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -39,9 +39,23 @@
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>[%d{yyyy-MM-dd'T'HH:mm:ss.SSS}] [%-5level] [%logger{50}] %msg%n</pattern>
+            <pattern>[%d{yyyy-MM-dd'T'HH:mm:ss.SSS}] [%-5level] [%logger{0}] %msg%n</pattern>
         </encoder>
     </appender>
+
+    <!-- Clean console appender for deploy.sh output — no class name, just the message -->
+    <appender name="DEPLOY_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <withJansi>false</withJansi>
+        <encoder>
+            <pattern>[%d{yyyy-MM-dd'T'HH:mm:ss.SSS}] [%myCustomHighlighting(%-5level)] [deploy] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Deploy script output — clean console format, shared file appender -->
+    <logger name="wizardcd.deploy" level="INFO" additivity="false">
+        <appender-ref ref="DEPLOY_STDOUT"/>
+        <appender-ref ref="FILE"/>
+    </logger>
 
     <!-- Root logger -->
     <root level="INFO">

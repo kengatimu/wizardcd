@@ -945,6 +945,29 @@ zip -r lib-deps.zip lib/    # creates lib/lib/*.jar in workspace, but find still
 - [x] `Header.tsx` — **Settings2 gear icon removed**: badge is cleaner without the gear since it no longer goes to Settings
 - [x] TypeScript: `tsc --noEmit` exits 0
 
+### Session — Stability Window + Application View + Job Detail Redesign (2026-03-21)
+
+#### Stability Window — Full Stack (Configurable 5–120s, default 20)
+- [x] `DeploymentRequest.java` — added `stabilityWindow: Integer` field + getter/setter
+- [x] `DeploymentValidatorServiceImpl.java` — validates stabilityWindow 5–120 when provided; made xms/xmx optional (format validated when present)
+- [x] `YamlGenerationServiceImpl.java` — writes `deployment_options.stability_window` to YAML (defaults to 20)
+- [x] `DeploymentRequest.ts` — added `stabilityWindow: number`
+- [x] `deploy.sh` — reads `stability_window` from YAML, validates ≥5, passes as arg 10 to application-deployment.sh
+- [x] `application-deployment.sh` — accepts arg 10 for STABILITY_WINDOW; redesigned monitoring logs: progress-style "Monitoring: Xs/Ys (Z%) — all checks passed" instead of "Health check 1/10…10/10"
+- [x] `DeployPage.tsx` — stability window UI: preset buttons (10s/20s/30s/60s) + custom input (5–120); added to both FormState interfaces, session storage save/restore, buildRequest(), review step, MissionControl summary
+- [x] `MissionControl.tsx` — added `stabilityWindow` to form interface + "Stability Xs" summary line
+
+#### Application View Page (NEW)
+- [x] `ApplicationPage.tsx` — NEW page at `/apps/:appName`: 3 environment status cards (SIT/UAT/PROD) + recent deployments table
+- [x] `App.tsx` — added route `/apps/:appName`
+
+#### Job Detail Page Redesign
+- [x] `JobDetailPage.tsx` — unified status banner with duration; Deployment Phases as primary content; compact Environment Status strip; Job Metadata collapsed by default
+- [x] `JobQueryServiceImpl.java` — corrupted job directory: changed `log.warn` with stack trace to `log.debug` with message only
+
+#### Backend Validation Hardening
+- [x] `DeploymentValidatorServiceImpl.java` — xms/xmx now OPTIONAL (ergonomic defaults); format validated only when provided; added missing validations for jarName, runAsUser, targetBasePath, maxLogSize, maxLogFiles
+
 ---
 
 ## Pending / Known Issues
@@ -966,4 +989,4 @@ None currently.
 
 ---
 
-*Last updated: 2026-03-20 — run `/update-memory` after each session*
+*Last updated: 2026-03-21 — run `/update-memory` after each session*

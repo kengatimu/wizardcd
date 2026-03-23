@@ -1,5 +1,6 @@
 package com.ebb.wizardcd.runner.service;
 
+import com.ebb.wizardcd.runner.dto.PreflightResult;
 import com.ebb.wizardcd.runner.dto.SshTestResult;
 
 import java.util.Map;
@@ -25,4 +26,14 @@ public interface SshKeyService {
      * environment-specific private key.
      */
     SshTestResult testConnection(String sshUser, String sshHost, int sshPort, String environment);
+
+    /**
+     * Runs pre-flight checks on the target server before deployment:
+     *   - SSH connectivity
+     *   - Write permissions on targetBasePath
+     *   - Disk space availability
+     *   - Existing backup presence (last-successful)
+     */
+    PreflightResult runPreflight(String sshUser, String sshHost, int sshPort,
+                                  String environment, String targetBasePath, String appName);
 }

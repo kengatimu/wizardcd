@@ -1,5 +1,6 @@
 package com.ebb.wizardcd.runner.web.controller;
 
+import com.ebb.wizardcd.runner.dto.PreflightResult;
 import com.ebb.wizardcd.runner.dto.SshTestRequest;
 import com.ebb.wizardcd.runner.dto.SshTestResult;
 import com.ebb.wizardcd.runner.service.SshKeyService;
@@ -90,4 +91,43 @@ public class SshController {
 
         return ResponseEntity.ok(result);
     }
+
+    /**
+     * Runs pre-flight checks on the target server before deployment.
+     * Checks: write permissions, disk space, existing backup.
+     *
+     * Request body: { sshUser, sshHost, sshPort, environment, targetBasePath, appName }
+     */
+    @PostMapping("/ssh/preflight")
+    public ResponseEntity<PreflightResult> runPreflight(@RequestBody PreflightRequest request) {
+        log.info("Preflight check requested for {}@{}:{} [env={}, path={}/{}]",
+                request.sshUser, request.sshHost, request.sshPort,
+                request.environment, request.targetBasePath, request.appName);
+
+        PreflightResult result = sshKeyService.runPreflight(
+                request.sshUser,
+                request.sshHost,
+                request.sshPort != null ? request.sshPort : 22,
+                request.environment,
+                request.targetBasePath,
+                request.appName
+        );
+
+        log.info("Preflight result for {}@{}: reachable={}, writable={}, disk={}, lastSuccessful={}, releases={}",
+                request.sshUser, request.sshHost,
+                result.isTargetReachable(), result.isWritable(),
+                result.getDiskAvailable(), result.isLastSuccessfulExists(), result.getReleaseBackupCount());
+
+        return ResponseEntity.ok(result);
+    }
+
+    /** Request DTO for pre-flight checks */
+    record PreflightRequest(
+            String sshUser,
+            String sshHost,
+            Integer sshPort,
+            String environment,
+            String targetBasePath,
+            String appName
+    ) {}
 }

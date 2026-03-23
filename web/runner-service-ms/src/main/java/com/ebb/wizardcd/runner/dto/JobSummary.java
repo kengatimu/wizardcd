@@ -32,6 +32,9 @@ public class JobSummary {
     // Timestamp when the job reached a terminal state (null for in-flight jobs)
     private Instant completedAt;
 
+    // Job type: "deploy", "redeploy", or "rollback"
+    private String jobType;
+
     public JobSummary() {
     }
 
@@ -41,7 +44,7 @@ public class JobSummary {
                       Instant createdAt,
                       JobStatus lifecycleStatus,
                       JobExecutionStateStatus executionStatus) {
-        this(jobId, appName, environment, createdAt, lifecycleStatus, executionStatus, null);
+        this(jobId, appName, environment, createdAt, lifecycleStatus, executionStatus, null, "deploy");
     }
 
     public JobSummary(String jobId,
@@ -51,6 +54,17 @@ public class JobSummary {
                       JobStatus lifecycleStatus,
                       JobExecutionStateStatus executionStatus,
                       Instant completedAt) {
+        this(jobId, appName, environment, createdAt, lifecycleStatus, executionStatus, completedAt, "deploy");
+    }
+
+    public JobSummary(String jobId,
+                      String appName,
+                      String environment,
+                      Instant createdAt,
+                      JobStatus lifecycleStatus,
+                      JobExecutionStateStatus executionStatus,
+                      Instant completedAt,
+                      String jobType) {
         this.jobId = jobId;
         this.appName = appName;
         this.environment = environment;
@@ -58,6 +72,7 @@ public class JobSummary {
         this.lifecycleStatus = lifecycleStatus;
         this.executionStatus = executionStatus;
         this.completedAt = completedAt;
+        this.jobType = jobType;
     }
 
     public String getJobId() {
@@ -111,4 +126,8 @@ public class JobSummary {
     public Instant getCompletedAt() { return completedAt; }
 
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
+
+    public String getJobType() { return jobType != null ? jobType : "deploy"; }
+
+    public void setJobType(String jobType) { this.jobType = jobType; }
 }

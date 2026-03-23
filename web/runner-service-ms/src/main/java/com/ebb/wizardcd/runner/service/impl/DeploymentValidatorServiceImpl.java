@@ -15,7 +15,7 @@ public class DeploymentValidatorServiceImpl implements DeploymentValidatorServic
         }
 
         // -----------------------------
-        // Identity validation
+        // Application identity
         // -----------------------------
         if (isBlank(request.getAppName())) {
             throw new IllegalArgumentException("appName must not be blank");
@@ -29,8 +29,12 @@ public class DeploymentValidatorServiceImpl implements DeploymentValidatorServic
             throw new IllegalArgumentException("mainClass must not be blank");
         }
 
+        if (isBlank(request.getJarName())) {
+            throw new IllegalArgumentException("jarName must not be blank");
+        }
+
         // -----------------------------
-        // Java configuration validation
+        // Java runtime
         // -----------------------------
         if (isBlank(request.getJavaCommand())) {
             throw new IllegalArgumentException("javaCommand must not be blank");
@@ -41,14 +45,22 @@ public class DeploymentValidatorServiceImpl implements DeploymentValidatorServic
         }
 
         // -----------------------------
-        // Runtime validation
+        // Runtime configuration
         // -----------------------------
         if (request.getServerPort() == null || request.getServerPort() <= 0 || request.getServerPort() > 65535) {
             throw new IllegalArgumentException("serverPort must be between 1 and 65535");
         }
 
+        if (isBlank(request.getRunAsUser())) {
+            throw new IllegalArgumentException("runAsUser must not be blank");
+        }
+
+        if (isBlank(request.getTargetBasePath())) {
+            throw new IllegalArgumentException("targetBasePath must not be blank");
+        }
+
         // -----------------------------
-        // SSH validation
+        // SSH target
         // -----------------------------
         if (isBlank(request.getSshUser())) {
             throw new IllegalArgumentException("sshUser must not be blank");
@@ -62,11 +74,38 @@ public class DeploymentValidatorServiceImpl implements DeploymentValidatorServic
             throw new IllegalArgumentException("sshPort must be between 1 and 65535");
         }
 
-        // privateKeyPath is no longer supplied by the client — the runner resolves the
-        // per-environment key automatically via SshKeyService.
+        // privateKeyPath is resolved server-side from the environment field — never from the client.
 
         // -----------------------------
-        // Backup validation
+        // JVM configuration
+        // -----------------------------
+        // xms and xmx are OPTIONAL — empty/null means the JVM uses ergonomic defaults.
+        // The Tanuki wrapper conf generator (generate-tanuki-wrapper-conf.sh) already
+        // handles empty values by simply not emitting -Xms/-Xmx flags.
+        // When provided, validate format (e.g. "512m", "2g")
+        if (!isBlank(request.getXms()) && !isValidHeapSize(request.getXms())) {
+            throw new IllegalArgumentException("xms has invalid format — use e.g. 512m, 1g");
+        }
+        if (!isBlank(request.getXmx()) && !isValidHeapSize(request.getXmx())) {
+            throw new IllegalArgumentException("xmx has invalid format — use e.g. 512m, 2g");
+        }
+
+        // newRatio is OPTIONAL — always empty in current UI (modern GCs self-tune).
+        // extraOpts are OPTIONAL — validated by frontend (must start with '-').
+
+        // -----------------------------
+        // Logging
+        // -----------------------------
+        if (isBlank(request.getMaxLogSize())) {
+            throw new IllegalArgumentException("maxLogSize must not be blank");
+        }
+
+        if (request.getMaxLogFiles() == null || request.getMaxLogFiles() <= 0) {
+            throw new IllegalArgumentException("maxLogFiles must be positive");
+        }
+
+        // -----------------------------
+        // Backup
         // -----------------------------
         if (Boolean.TRUE.equals(request.getPerformBackup())) {
             if (request.getMaxBackups() == null || request.getMaxBackups() <= 0) {
@@ -75,14 +114,24 @@ public class DeploymentValidatorServiceImpl implements DeploymentValidatorServic
         }
 
         // -----------------------------
-        // JVM memory sanity check
+        // Deployment options
         // -----------------------------
-        if (isBlank(request.getXms()) || isBlank(request.getXmx())) {
-            throw new IllegalArgumentException("xms and xmx must not be blank");
+        if (request.getStabilityWindow() != null) {
+            if (request.getStabilityWindow() < 5 || request.getStabilityWindow() > 120) {
+                throw new IllegalArgumentException("stabilityWindow must be between 5 and 120 seconds");
+            }
         }
     }
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    /**
+     * Validates JVM heap size format: number followed by m, M, g, or G.
+     * Examples: "512m", "2G", "1024M", "4g"
+     */
+    private boolean isValidHeapSize(String size) {
+        return size.matches("^\\d+[mMgG]$");
     }
 }

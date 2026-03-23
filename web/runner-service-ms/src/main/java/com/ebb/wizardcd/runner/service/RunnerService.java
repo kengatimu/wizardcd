@@ -9,9 +9,11 @@ import java.util.List;
 public interface RunnerService {
 
     // Executes a deployment using deploy.sh and returns the final job status
+    // jobType: "deploy" or "redeploy"
     JobStatus runDeploy(String jobId, DeploymentRequest request,
                         MultipartFile jarArtifact, MultipartFile libZip,
-                        List<MultipartFile> certZips, List<MultipartFile> extraZips);
+                        List<MultipartFile> certZips, List<MultipartFile> extraZips,
+                        String jobType);
 
     // Executes a rollback using rollback-deploy.sh — restores last-successful backup on target
     JobStatus runRollback(String jobId, DeploymentRequest request);

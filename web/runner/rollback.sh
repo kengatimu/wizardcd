@@ -132,50 +132,101 @@ if ! "$WRAPPER_SH" start; then
   exit 60
 fi
 
-log_info "Wrapper start command executed. Waiting for stabilisation..."
+# --------------------------------------------------
+# Phase 1: Wait for port to bind (startup readiness)
+# --------------------------------------------------
+PORT_WAIT_TIMEOUT=120
+PORT_WAIT_INTERVAL=2
+port_waited=0
 
-GRACE_PERIOD=5
-STABILITY_WINDOW=20
-CHECK_INTERVAL=2
+log_info "Waiting for port ${SERVER_PORT} to become available (up to ${PORT_WAIT_TIMEOUT}s)..."
 
-sleep "$GRACE_PERIOD"
-
-elapsed=0
-check_num=0
-total_checks=$(( STABILITY_WINDOW / CHECK_INTERVAL ))
-
-while (( elapsed < STABILITY_WINDOW )); do
-  check_num=$(( check_num + 1 ))
+while (( port_waited < PORT_WAIT_TIMEOUT )); do
+  # Check if process is still alive
+  PID_FILE="${BIN_DIR}/${APP}.pid"
+  if [[ -f "$PID_FILE" ]]; then
+    startup_pid=$(cat "$PID_FILE")
+    if ! kill -0 "$startup_pid" 2>/dev/null; then
+      log_error "Application process exited during startup — PID ${startup_pid} no longer running"
+      log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
+      exit 60
+    fi
+  fi
 
   # Check wrapper status
   STATUS_OUTPUT=$("$WRAPPER_SH" status || true)
   if ! echo "$STATUS_OUTPUT" | grep -q "STARTED"; then
-    log_error "Stabilisation failed — wrapper status not STARTED (check ${check_num}/${total_checks})"
+    log_error "Application wrapper stopped during startup — wrapper status not STARTED"
+    log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
+    exit 60
+  fi
+
+  # Check if port is bound
+  if ss -lnt | grep -q ":${SERVER_PORT}"; then
+    log_info "  Port ${SERVER_PORT} is ready (took ${port_waited}s)"
+    break
+  fi
+
+  log_info "  Waiting for port ${SERVER_PORT}... ${port_waited}s/${PORT_WAIT_TIMEOUT}s"
+  sleep "$PORT_WAIT_INTERVAL"
+  port_waited=$((port_waited + PORT_WAIT_INTERVAL))
+done
+
+if (( port_waited >= PORT_WAIT_TIMEOUT )); then
+  log_error "Application failed to bind port ${SERVER_PORT} within ${PORT_WAIT_TIMEOUT}s"
+  log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
+  exit 60
+fi
+
+# --------------------------------------------------
+# Phase 2: Stability monitoring
+# --------------------------------------------------
+STABILITY_WINDOW=20
+CHECK_INTERVAL=2
+
+log_info "Application started. Monitoring for ${STABILITY_WINDOW}s to verify stability..."
+log_info "Checks: process alive, port ${SERVER_PORT} listening, wrapper status OK"
+
+elapsed=0
+while (( elapsed < STABILITY_WINDOW )); do
+  progress_pct=$(( (elapsed + CHECK_INTERVAL) * 100 / STABILITY_WINDOW ))
+  if (( progress_pct > 100 )); then progress_pct=100; fi
+
+  # Check wrapper status
+  STATUS_OUTPUT=$("$WRAPPER_SH" status || true)
+  if ! echo "$STATUS_OUTPUT" | grep -q "STARTED"; then
+    log_error "Application crashed during stability monitoring at ${elapsed}s — wrapper not STARTED"
+    log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
     exit 60
   fi
 
   # Check PID file
   PID_FILE="${BIN_DIR}/${APP}.pid"
   if [[ ! -f "$PID_FILE" ]]; then
-    log_error "Stabilisation failed — PID file missing (check ${check_num}/${total_checks})"
+    log_error "Application crashed during stability monitoring at ${elapsed}s — PID file missing"
+    log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
     exit 60
   fi
 
   PID=$(cat "$PID_FILE")
   if ! kill -0 "$PID" 2>/dev/null; then
-    log_error "Stabilisation failed — process ${PID} exited unexpectedly (check ${check_num}/${total_checks})"
+    log_error "Application crashed during stability monitoring at ${elapsed}s — process ${PID} exited unexpectedly"
+    log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
     exit 60
   fi
 
   if ! ss -lnt | grep -q ":${SERVER_PORT}"; then
-    log_error "Stabilisation failed — port ${SERVER_PORT} not bound (check ${check_num}/${total_checks})"
+    log_error "Application crashed during stability monitoring at ${elapsed}s — port ${SERVER_PORT} not bound"
+    log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
     exit 60
   fi
 
-  log_info "  Health check ${check_num}/${total_checks} — process alive, port ${SERVER_PORT} bound"
+  log_info "  Monitoring: ${elapsed}s/${STABILITY_WINDOW}s (${progress_pct}%) — all checks passed"
   sleep "$CHECK_INTERVAL"
   elapsed=$((elapsed + CHECK_INTERVAL))
 done
+
+log_info "  Monitoring: ${STABILITY_WINDOW}s/${STABILITY_WINDOW}s (100%) — all checks passed"
 
 echo
 log_info "=================================================="

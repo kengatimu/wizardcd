@@ -56,6 +56,7 @@ JAVA_VERSION="$6"
 RUN_AS_USER="$7"
 BACKUP_ENABLED="${8:-true}"
 MAX_BACKUPS="${9:-5}"
+STABILITY_WINDOW="${10:-20}"
 
 # Normalize backup flag to strict true/false
 if [[ "$BACKUP_ENABLED" != "false" ]]; then
@@ -65,6 +66,11 @@ fi
 # Ensure max backups is valid
 if [[ -z "$MAX_BACKUPS" || "$MAX_BACKUPS" -lt 1 ]]; then
   MAX_BACKUPS=5
+fi
+
+# Ensure stability window is valid
+if [[ -z "$STABILITY_WINDOW" || "$STABILITY_WINDOW" -lt 5 ]]; then
+  STABILITY_WINDOW=20
 fi
 
 # --------------------------------------------------
@@ -221,39 +227,81 @@ start_app() {
     exit 60
   fi
 
-  log_info "Wrapper start command executed. Waiting for application to stabilize..."
+  # --------------------------------------------------
+  # Phase 1: Wait for port to bind (startup readiness)
+  #
+  # The wrapper reports "started" when the JVM process
+  # launches, but the application hasn't opened its port
+  # yet. We poll until the port is bound or the process
+  # dies / times out. Max wait = 120s (covers slow
+  # Spring Boot apps with DB migrations, large contexts).
+  # --------------------------------------------------
+  local PORT_WAIT_TIMEOUT=120
+  local PORT_WAIT_INTERVAL=2
+  local port_waited=0
+
+  log_info "Waiting for port ${SERVER_PORT} to become available (up to ${PORT_WAIT_TIMEOUT}s)..."
+
+  while (( port_waited < PORT_WAIT_TIMEOUT )); do
+    # Check if process is still alive
+    local pid_file="${BIN_DIR}/${APP}.pid"
+    if [[ -f "$pid_file" ]]; then
+      local startup_pid
+      startup_pid=$(cat "$pid_file")
+      if ! kill -0 "$startup_pid" 2>/dev/null; then
+        log_error "Application process exited during startup — PID ${startup_pid} no longer running"
+        log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
+        exit 60
+      fi
+    fi
+
+    # Check wrapper status
+    STATUS_OUTPUT=$("$wrapper_sh" status || true)
+    if ! echo "$STATUS_OUTPUT" | grep -q "STARTED"; then
+      log_error "Application wrapper stopped during startup — wrapper status not STARTED"
+      log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
+      exit 60
+    fi
+
+    # Check if port is bound
+    if ss -lnt | grep -q ":${SERVER_PORT}"; then
+      log_info "  Port ${SERVER_PORT} is ready (took ${port_waited}s)"
+      break
+    fi
+
+    log_info "  Waiting for port ${SERVER_PORT}... ${port_waited}s/${PORT_WAIT_TIMEOUT}s"
+    sleep "$PORT_WAIT_INTERVAL"
+    port_waited=$((port_waited + PORT_WAIT_INTERVAL))
+  done
+
+  if (( port_waited >= PORT_WAIT_TIMEOUT )); then
+    log_error "Application failed to bind port ${SERVER_PORT} within ${PORT_WAIT_TIMEOUT}s"
+    log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
+    exit 60
+  fi
 
   # --------------------------------------------------
-  # Stabilization Logic
+  # Phase 2: Stability monitoring
   #
-  # Purpose:
-  # Ensure the application does not crash immediately
-  # after wrapper reports success.
-  #
-  # This protects against:
-  #   - Missing keystore
-  #   - Invalid config
-  #   - Immediate JVM crash
-  #   - Port binding failure
+  # Now that the port is bound, monitor for
+  # STABILITY_WINDOW seconds to catch post-startup
+  # crashes (OOM, config errors, failed health checks).
   # --------------------------------------------------
+  log_info "Application started. Monitoring for ${STABILITY_WINDOW}s to verify stability..."
+  log_info "Checks: process alive, port ${SERVER_PORT} listening, wrapper status OK"
 
-  local GRACE_PERIOD=5
-  local STABILITY_WINDOW=20
   local CHECK_INTERVAL=2
   local elapsed=0
-
-  sleep "$GRACE_PERIOD"
-
-  local check_num=0
-  local total_checks=$(( STABILITY_WINDOW / CHECK_INTERVAL ))
+  local pid=""
 
   while (( elapsed < STABILITY_WINDOW )); do
-    check_num=$(( check_num + 1 ))
+    local progress_pct=$(( (elapsed + CHECK_INTERVAL) * 100 / STABILITY_WINDOW ))
+    if (( progress_pct > 100 )); then progress_pct=100; fi
 
     # Validate wrapper status
     STATUS_OUTPUT=$("$wrapper_sh" status || true)
     if ! echo "$STATUS_OUTPUT" | grep -q "STARTED"; then
-      log_error "Stabilization failed — wrapper status not STARTED (check ${check_num}/${total_checks})"
+      log_error "Application crashed during stability monitoring at ${elapsed}s — wrapper status not STARTED"
       log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60
     fi
@@ -261,31 +309,32 @@ start_app() {
     # Validate PID file
     local pid_file="${BIN_DIR}/${APP}.pid"
     if [[ ! -f "$pid_file" ]]; then
-      log_error "Stabilization failed — PID file missing (check ${check_num}/${total_checks})"
+      log_error "Application crashed during stability monitoring at ${elapsed}s — PID file missing"
       exit 60
     fi
 
-    local pid
     pid=$(cat "$pid_file")
 
     # Ensure process still alive
     if ! kill -0 "$pid" 2>/dev/null; then
-      log_error "Stabilization failed — process ${pid} exited unexpectedly (check ${check_num}/${total_checks})"
+      log_error "Application crashed during stability monitoring at ${elapsed}s — process ${pid} exited unexpectedly"
       log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60
     fi
 
-    # Ensure application port is bound
+    # Ensure application port is still bound
     if ! ss -lnt | grep -q ":${SERVER_PORT}"; then
-      log_error "Stabilization failed — port ${SERVER_PORT} not bound (check ${check_num}/${total_checks})"
+      log_error "Application crashed during stability monitoring at ${elapsed}s — port ${SERVER_PORT} not bound"
       log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60
     fi
 
-    log_info "  Health check ${check_num}/${total_checks} — process alive, port ${SERVER_PORT} bound"
+    log_info "  Monitoring: ${elapsed}s/${STABILITY_WINDOW}s (${progress_pct}%) — all checks passed"
     sleep "$CHECK_INTERVAL"
     elapsed=$((elapsed + CHECK_INTERVAL))
   done
+
+  log_info "  Monitoring: ${STABILITY_WINDOW}s/${STABILITY_WINDOW}s (100%) — all checks passed"
 
   # Final success confirmation with operational visibility
   log_info "-------------------------------------------------------------------------------"

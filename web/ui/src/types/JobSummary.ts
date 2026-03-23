@@ -12,4 +12,5 @@ export interface JobSummary {
   lifecycleStatus: JobLifecycleStatus
   executionStatus: JobExecutionStatus
   completedAt?:    string           // ISO 8601; set when job reaches a terminal state
+  jobType?:        'deploy' | 'redeploy' | 'rollback'  // defaults to "deploy" for old jobs
 }

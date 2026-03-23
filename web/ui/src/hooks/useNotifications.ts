@@ -4,12 +4,15 @@ import type { JobSummary } from '../types/JobSummary'
 
 // ── Types ─────────────────────────────────────────────────────────
 
+export type JobType = 'deploy' | 'redeploy' | 'rollback'
+
 export interface Notification {
   id:          string          // jobId + status (unique per transition)
   jobId:       string
   appName:     string
   environment: string
   status:      'SUCCESS' | 'FAILED' | 'ABORTED'
+  jobType:     JobType         // deploy, redeploy, or rollback
   timestamp:   string          // ISO 8601
   read:        boolean
 }
@@ -86,6 +89,7 @@ export function useNotifications(pollIntervalMs = 5000) {
                 appName:     job.appName,
                 environment: job.environment,
                 status:      job.lifecycleStatus as 'SUCCESS' | 'FAILED' | 'ABORTED',
+                jobType:     (job.jobType as JobType) ?? 'deploy',
                 timestamp:   job.completedAt ?? new Date().toISOString(),
                 read:        false,
               })

@@ -89,6 +89,9 @@ public class DeploymentRequest {
     private Boolean performBackup;
     private Integer maxBackups;
 
+    // Deployment options
+    private Integer stabilityWindow;
+
     // getters & setters
 
     public String getAppName() {
@@ -265,6 +268,14 @@ public class DeploymentRequest {
 
     public void setMaxBackups(Integer maxBackups) {
         this.maxBackups = maxBackups;
+    }
+
+    public Integer getStabilityWindow() {
+        return stabilityWindow;
+    }
+
+    public void setStabilityWindow(Integer stabilityWindow) {
+        this.stabilityWindow = stabilityWindow;
     }
 
     public List<CertPath> getCertPaths() {

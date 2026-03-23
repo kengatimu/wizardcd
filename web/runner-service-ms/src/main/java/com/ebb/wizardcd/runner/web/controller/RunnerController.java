@@ -45,17 +45,20 @@ public class RunnerController {
     private final RunnerJobStateService jobStateService;
     private final JobQueryService jobQueryService;
     private final ObjectMapper objectMapper;
+    private final com.ebb.wizardcd.runner.service.SshKeyService sshKeyService;
 
     public RunnerController(@Value("${runner.workspaceRoot}") String workspaceRoot,
                             RunnerService runnerService,
                             RunnerJobStateService jobStateService,
                             JobQueryService jobQueryService,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            com.ebb.wizardcd.runner.service.SshKeyService sshKeyService) {
         this.workspaceRoot = workspaceRoot;
         this.runnerService = runnerService;
         this.jobStateService = jobStateService;
         this.jobQueryService = jobQueryService;
         this.objectMapper = objectMapper;
+        this.sshKeyService = sshKeyService;
     }
 
     // Accept deployment request and return HTTP 202 because execution is asynchronous
@@ -83,7 +86,7 @@ public class RunnerController {
         List<MultipartFile> stableExtras = eagerList(extraZips);
 
         // Delegate orchestration to RunnerService (non-blocking)
-        runnerService.runDeploy(jobId, request, stableJar, stableLib, stableCerts, stableExtras);
+        runnerService.runDeploy(jobId, request, stableJar, stableLib, stableCerts, stableExtras, "deploy");
 
         // Build response snapshot immediately after scheduling execution
         JobResponse response = new JobResponse(jobId, jobStateService.getStatus(jobId), jobStateService.readCurrentState(jobId));
@@ -138,7 +141,7 @@ public class RunnerController {
         DashboardSummary summary =
                 new DashboardSummary(total, running, successful, failed, aborted, trends);
 
-        log.info("Dashboard — total: {}, running: {}, success: {}, failed: {}, aborted: {}",
+        log.debug("Dashboard — total: {}, running: {}, success: {}, failed: {}, aborted: {}",
                 total, running, successful, failed, aborted);
 
         return ResponseEntity.ok(summary);
@@ -147,7 +150,7 @@ public class RunnerController {
     // Return lifecycle + execution snapshot for a specific job
     @GetMapping("/{jobId}/status")
     public ResponseEntity<JobResponse> getStatus(@PathVariable String jobId) {
-        log.info("Getting job status for job id {}", jobId);
+        log.debug("Getting job status for job id {}", jobId);
 
         // Read lifecycle state from persistent runner state
         JobStatus lifecycle = jobStateService.getStatus(jobId);
@@ -206,19 +209,11 @@ public class RunnerController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Load the original deployment config
-        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
-        if (Files.notExists(requestFile)) {
-            log.warn("No request.json found for job {} — cannot re-deploy", jobId);
+        // Load the original deployment config (with fallback to same app/env jobs)
+        DeploymentRequest originalConfig = loadDeploymentConfig(jobId);
+        if (originalConfig == null) {
+            log.warn("No usable deployment config found for re-deploy of job {}", jobId);
             return ResponseEntity.notFound().build();
-        }
-
-        DeploymentRequest originalConfig;
-        try {
-            originalConfig = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
-        } catch (Exception e) {
-            log.error("Failed to read request.json for job {}: {}", jobId, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
         }
 
         // Update the JAR name to match the new upload (user may have bumped version)
@@ -237,11 +232,143 @@ public class RunnerController {
         List<MultipartFile> stableCerts  = eagerList(certZips);
         List<MultipartFile> stableExtras = eagerList(extraZips);
 
-        // Delegate to RunnerService (same as a normal deploy)
-        runnerService.runDeploy(newJobId, originalConfig, stableJar, stableLib, stableCerts, stableExtras);
+        // Delegate to RunnerService (same as a normal deploy, but tagged as redeploy)
+        runnerService.runDeploy(newJobId, originalConfig, stableJar, stableLib, stableCerts, stableExtras, "redeploy");
 
         JobResponse response = new JobResponse(newJobId, jobStateService.getStatus(newJobId), jobStateService.readCurrentState(newJobId));
         return ResponseEntity.accepted().body(response);
+    }
+
+    /**
+     * Rollback preflight: checks if a last-successful backup exists on the target.
+     * Returns backup size, date, and target info so the UI can show this in the confirmation modal.
+     */
+    @GetMapping("/{jobId}/rollback/preflight")
+    public ResponseEntity<java.util.Map<String, Object>> rollbackPreflight(@PathVariable String jobId) {
+        log.info("Rollback preflight check for job {}", jobId);
+
+        if (jobId == null || jobId.isBlank()
+                || jobId.contains("..") || jobId.contains("/") || jobId.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        DeploymentRequest config = loadDeploymentConfig(jobId);
+        if (config == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // SSH to check backup
+        String sshKey = sshKeyService.getPrivateKeyPath(config.getEnvironment());
+        String sshUser = config.getSshUser();
+        String sshHost = config.getSshHost();
+        int sshPort = config.getSshPort();
+        String basePath = config.getTargetBasePath();
+        String appName = config.getAppName();
+        String backupPath = basePath + "/" + appName + "/backup/last-successful/latest.tar.gz";
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "ssh", "-i", sshKey, "-p", String.valueOf(sshPort),
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                "-o", "BatchMode=yes",
+                sshUser + "@" + sshHost,
+                "if [ -f '" + backupPath + "' ]; then " +
+                    "SIZE=$(du -h '" + backupPath + "' | cut -f1); " +
+                    "DATE=$(stat -c '%y' '" + backupPath + "' 2>/dev/null | cut -d. -f1 || " +
+                    "stat -f '%Sm' '" + backupPath + "' 2>/dev/null || echo 'unknown'); " +
+                    "echo \"FOUND|${SIZE}|${DATE}\"; " +
+                "else echo 'NOT_FOUND'; fi"
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0) {
+                log.warn("Preflight SSH failed (exit {}): {}", exitCode, output);
+                return ResponseEntity.ok(java.util.Map.of(
+                    "available", false,
+                    "reason", "Unable to connect to target server"
+                ));
+            }
+
+            if (output.startsWith("FOUND|")) {
+                String[] parts = output.split("\\|", 3);
+                return ResponseEntity.ok(java.util.Map.of(
+                    "available", true,
+                    "backupSize", parts.length > 1 ? parts[1] : "unknown",
+                    "backupDate", parts.length > 2 ? parts[2] : "unknown",
+                    "backupPath", backupPath,
+                    "targetHost", sshHost
+                ));
+            } else {
+                return ResponseEntity.ok(java.util.Map.of(
+                    "available", false,
+                    "reason", "No last-successful backup found on target"
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Preflight check failed for job {}: {}", jobId, e.getMessage());
+            return ResponseEntity.ok(java.util.Map.of(
+                "available", false,
+                "reason", "Preflight check failed: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Loads deployment config for a job, with fallback to other jobs with same app/env.
+     */
+    private DeploymentRequest loadDeploymentConfig(String jobId) {
+        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
+        DeploymentRequest config = null;
+
+        if (Files.exists(requestFile)) {
+            try {
+                config = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
+            } catch (Exception e) {
+                log.warn("Failed to read request.json for job {}: {}", jobId, e.getMessage());
+            }
+        }
+
+        if (config == null) {
+            log.info("No valid request.json for job {} — searching for config from same app/env", jobId);
+            Path metadataFile = Path.of(workspaceRoot, jobId, "metadata.json");
+            String targetApp = null;
+            String targetEnv = null;
+
+            if (Files.exists(metadataFile)) {
+                try {
+                    JobMetadata meta = objectMapper.readValue(metadataFile.toFile(), JobMetadata.class);
+                    targetApp = meta.getApplication();
+                    targetEnv = meta.getEnvironment();
+                } catch (Exception ignored) {}
+            }
+
+            if (targetApp != null && targetEnv != null) {
+                java.io.File[] jobDirs = new java.io.File(workspaceRoot).listFiles(java.io.File::isDirectory);
+                if (jobDirs != null) {
+                    for (java.io.File jobDir : jobDirs) {
+                        Path candidateRequest = jobDir.toPath().resolve("input/request.json");
+                        Path candidateMetadata = jobDir.toPath().resolve("metadata.json");
+                        if (Files.exists(candidateRequest) && Files.exists(candidateMetadata)) {
+                            try {
+                                JobMetadata candidateMeta = objectMapper.readValue(candidateMetadata.toFile(), JobMetadata.class);
+                                if (targetApp.equals(candidateMeta.getApplication())
+                                        && targetEnv.equals(candidateMeta.getEnvironment())) {
+                                    config = objectMapper.readValue(candidateRequest.toFile(), DeploymentRequest.class);
+                                    log.info("Using config from job {} for rollback", jobDir.getName());
+                                    break;
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            }
+        }
+
+        return config;
     }
 
     /**
@@ -259,19 +386,10 @@ public class RunnerController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Load the original deployment config
-        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
-        if (Files.notExists(requestFile)) {
-            log.warn("No request.json found for job {} — cannot rollback", jobId);
+        DeploymentRequest originalConfig = loadDeploymentConfig(jobId);
+        if (originalConfig == null) {
+            log.warn("No usable deployment config found for rollback of job {}", jobId);
             return ResponseEntity.notFound().build();
-        }
-
-        DeploymentRequest originalConfig;
-        try {
-            originalConfig = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
-        } catch (Exception e) {
-            log.error("Failed to read request.json for job {}: {}", jobId, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
         }
 
         // Generate a new job ID for the rollback
@@ -288,7 +406,7 @@ public class RunnerController {
     // Return the original DeploymentRequest config used for a specific job
     @GetMapping("/{jobId}/config")
     public ResponseEntity<DeploymentRequest> getConfig(@PathVariable String jobId) {
-        log.info("Getting deployment config for job {}", jobId);
+        log.debug("Getting deployment config for job {}", jobId);
 
         // Path traversal guard
         if (jobId == null || jobId.isBlank()
@@ -314,7 +432,7 @@ public class RunnerController {
     // Return last N lines of runner log without loading entire file into memory
     @GetMapping("/{jobId}/logs")
     public ResponseEntity<String> getLogs(@PathVariable String jobId, @RequestParam(defaultValue = "200") int tail) throws Exception {
-        log.info("Getting logs for job id {}", jobId);
+        log.debug("Getting logs for job id {}", jobId);
 
         // Resolve log file path dynamically using configured workspace root
         Path basePath = Path.of(workspaceRoot).toAbsolutePath().normalize();

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Wand2, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle, Clock, ChevronDown, Info, Search } from 'lucide-react'
 import JSZip from 'jszip'
@@ -10,6 +10,7 @@ import FormField, { SelectField, FieldWrapper, RowInput, RowSelect, RowField } f
 import ToggleSwitch from '../components/ToggleSwitch'
 import DynamicList from '../components/DynamicList'
 import { useTheme, type ActiveEnv } from '../context/ThemeContext'
+import MissionControl, { SIDEBAR_MAX_W } from '../components/MissionControl'
 
 // ── Step metadata ─────────────────────────────────────────────────
 
@@ -67,9 +68,10 @@ interface FormState {
   maxLogSize:  string
   maxLogFiles: string
   jarType:     'fat' | 'thin'  // fat = self-contained; thin = requires lib/ dir
-  // Step 5 — Backup
-  performBackup: boolean
-  maxBackups:    string
+  // Step 5 — Backup & Stability
+  performBackup:   boolean
+  maxBackups:      string
+  stabilityWindow: string    // seconds — how long to monitor after startup (default 20)
   // Step 6 — File Uploads
   jarArtifact: File | null      // the application JAR (always required)
   libZip:      File | null      // lib/ dependencies ZIP (thin JAR mode only)
@@ -106,8 +108,9 @@ const INITIAL: FormState = {
   maxLogSize:     '10m',
   maxLogFiles:    '10',
   jarType:        'fat',
-  performBackup:  true,
-  maxBackups:     '3',
+  performBackup:    true,
+  maxBackups:       '3',
+  stabilityWindow:  '20',
   jarArtifact:    null,
   libZip:         null,
   hasCerts:       false,
@@ -120,6 +123,24 @@ const INITIAL: FormState = {
 // ── Per-step validation ───────────────────────────────────────────
 
 type FormErrors = Partial<Record<keyof FormState, string>>
+
+// Human-readable labels for validation error summaries
+const FIELD_LABELS: Partial<Record<keyof FormState, string>> = {
+  sshUser:        'SSH User',
+  sshHost:        'SSH Host',
+  sshPort:        'SSH Port',
+  jarArtifact:    'JAR File',
+  jarName:        'JAR Filename',
+  libZip:         'Dependencies ZIP',
+  appName:        'App Name',
+  mainClass:      'Entry Point',
+  javaCommand:    'Java Path',
+  javaVersion:    'Java Version',
+  runAsUser:      'Run As',
+  serverPort:     'Port',
+  targetBasePath: 'Deploy Path',
+  xms:            'Heap Min',
+}
 
 function validateStep(step: number, form: FormState, jvmConfigEnabled = false): FormErrors {
   const e: FormErrors = {}
@@ -146,17 +167,30 @@ function validateStep(step: number, form: FormState, jvmConfigEnabled = false): 
       if (!form.runAsUser)      e.runAsUser      = 'Required'
       if (!form.serverPort)     e.serverPort     = 'Required'
       if (!form.targetBasePath) e.targetBasePath = 'Required'
-      if (jvmConfigEnabled) {
-        if (!form.xms) e.xms = 'Required'
-        if (!form.xmx) e.xmx = 'Required'
-        if (form.xms && form.xmx && heapMB(form.xms) > heapMB(form.xmx))
-          e.xms = 'Heap min cannot exceed heap max'
-      }
       break
-    case 3:  // Configuration — no required fields
+    case 3:  // Deployment Options — JVM heap validated only when custom JVM is enabled with fixed heap
+      if (jvmConfigEnabled && form.xms && form.xmx && heapMB(form.xms) > heapMB(form.xmx))
+        e.xms = 'Heap min cannot exceed heap max'
       break
   }
   return e
+}
+
+// Inline banner shown at the top of a step when it has validation errors
+function StepErrorBanner({ errors }: { errors: FormErrors }) {
+  const keys = Object.keys(errors) as (keyof FormState)[]
+  if (keys.length === 0) return null
+  return (
+    <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg border border-sig-red/30 bg-sig-red-dim/20 mb-4">
+      <AlertTriangle size={14} className="text-sig-red flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-sig-red">Missing required fields</p>
+        <p className="text-[11px] text-sig-red/70 mt-0.5">
+          {keys.map((k) => FIELD_LABELS[k] ?? k).join(' · ')}
+        </p>
+      </div>
+    </div>
+  )
 }
 
 // ── Step status ───────────────────────────────────────────────────
@@ -210,8 +244,9 @@ function buildRequest(form: FormState, computedJvmFlags: string[] = []): Deploym
     sshHost:        form.sshHost,
     sshPort:        parseInt(form.sshPort,      10),
     targetBasePath: form.targetBasePath,
-    performBackup:  form.performBackup,
-    maxBackups:     parseInt(form.maxBackups,   10),
+    performBackup:    form.performBackup,
+    maxBackups:       parseInt(form.maxBackups,   10),
+    stabilityWindow:  parseInt(form.stabilityWindow, 10) || 20,
   }
 }
 
@@ -992,6 +1027,7 @@ interface SavedDeployment {
   jarType:        'fat' | 'thin'
   performBackup:  boolean
   maxBackups:     string
+  stabilityWindow: string
   jarName:        string
   certUploads:    SavedCertUpload[]
   extraDirs:      SavedExtraDirUpload[]
@@ -1050,8 +1086,9 @@ export default function DeployPage() {
 
   const [step,      setStep]      = useState(1)
   const [visited,   setVisited]   = useState<Set<number>>(new Set([1]))
+  // Steps the user has navigated AWAY from — errors only show after leaving a step
+  const [departed,  setDeparted]  = useState<Set<number>>(new Set())
   const [form,      setForm]      = useState<FormState>(INITIAL)
-  const [errors,    setErrors]    = useState<FormErrors>({})
   const [submitting,setSubmitting]= useState(false)
   // null = not uploading; 0–100 = upload in progress; 100 = upload done, awaiting server response
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
@@ -1125,6 +1162,31 @@ export default function DeployPage() {
   const [autoFilledFields,  setAutoFilledFields]   = useState<Set<string>>(new Set())
   // Controls the Advanced Settings accordion in Step 3
 
+  // ── Live validation errors — computed for departed steps ──────────────────
+  // Only shows errors after the user has left a step and returned (or tried to submit).
+  // This avoids showing red borders on first visit while fields are still being filled.
+  const errors: FormErrors = useMemo(() => {
+    if (!departed.has(step)) return {}
+    return validateStep(step, form, jvmConfigEnabled)
+  }, [step, departed, form, jvmConfigEnabled])
+
+  // ── Mission Control sidebar — memoised JVM flags for live preview ─────────
+  const missionControlJvmFlags = useMemo(() => {
+    if (!jvmConfigEnabled) return []
+    try {
+      const derived = deriveJvmFlags({
+        xms: form.xms, xmx: form.xmx,
+        gcType, workloadProfile, containerAware, advancedGcTuning, maxGcPauseMs,
+        metaspaceSize: advancedJvmEnabled ? metaspaceSize : '',
+        threadStackSize: advancedJvmEnabled ? threadStackSize : '',
+        javaVersion: form.javaVersion, maxRamPct,
+      })
+      return derived.flags
+    } catch { return [] }
+  }, [jvmConfigEnabled, form.xms, form.xmx, gcType, workloadProfile, containerAware,
+      advancedGcTuning, maxGcPauseMs, advancedJvmEnabled, metaspaceSize,
+      threadStackSize, form.javaVersion, maxRamPct])
+
   // Load deploy history from localStorage on mount.
   // Migrates the old single-record format to the new array format transparently.
   useEffect(() => {
@@ -1146,6 +1208,128 @@ export default function DeployPage() {
       // Corrupt or missing — ignore silently
     }
   }, [])
+
+  // ── Draft persistence — save form text fields to sessionStorage ────────────
+  // Restores config if user navigates away and comes back (files need re-upload)
+  const DRAFT_KEY = 'wiz-deploy-draft'
+  const DRAFT_FIELDS: (keyof FormState)[] = [
+    'environment', 'sshUser', 'sshHost', 'sshPort', 'targetBasePath',
+    'appName', 'mainClass', 'javaCommand', 'javaVersion',
+    'xms', 'xmx', 'newRatio', 'extraOpts',
+    'runAsUser', 'serverPort', 'maxLogSize', 'maxLogFiles',
+    'jarType', 'performBackup', 'maxBackups', 'stabilityWindow', 'jarName',
+    'hasCerts', 'hasExtraDirs',
+  ]
+
+  // Track whether the form has meaningful data (for beforeunload warning)
+  const hasDraftData = form.appName.trim() !== '' || form.sshHost.trim() !== '' || form.jarArtifact !== null
+
+  // Banner state: shows a "Continue draft" vs "Start fresh" choice after restore
+  const [draftBanner, setDraftBanner] = useState<{ appName: string; jarName: string; stepLabel: string } | null>(null)
+
+  // Reset form to initial state (for "Start fresh" action)
+  const resetToFresh = useCallback(() => {
+    sessionStorage.removeItem(DRAFT_KEY)
+    setForm(INITIAL)
+    setStep(1)
+    setVisited(new Set([1]))
+    setDeparted(new Set())
+    setJvmConfigEnabled(false)
+    setGcType('G1GC')
+    setWorkloadProfile('API')
+    setContainerAware(false)
+    setMaxRamPct('70.0')
+    setDraftBanner(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Restore draft on mount (runs once)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+
+      // Check if draft has meaningful data worth restoring
+      const hasMeaningfulData = draft.appName?.trim() || draft.sshHost?.trim() || draft.jarName?.trim()
+      if (!hasMeaningfulData) return
+
+      setForm((prev) => {
+        const restored = { ...prev }
+        for (const key of DRAFT_FIELDS) {
+          if (key in draft && draft[key] !== undefined) {
+            ;(restored as Record<string, unknown>)[key] = draft[key]
+          }
+        }
+        // Restore cert/extra dir config (paths only — files need re-upload)
+        if (Array.isArray(draft._certPaths) && draft._certPaths.length > 0) {
+          restored.hasCerts = true
+          restored.certUploads = draft._certPaths.map((c: { source: string; targetPath: string }) => ({
+            source: c.source, targetPath: c.targetPath, file: null,
+          }))
+        }
+        if (Array.isArray(draft._extraDirPaths) && draft._extraDirPaths.length > 0) {
+          restored.hasExtraDirs = true
+          restored.extraDirs = draft._extraDirPaths.map((d: { dirName: string; targetPath: string }) => ({
+            dirName: d.dirName, targetPath: d.targetPath, file: null,
+          }))
+        }
+        return restored
+      })
+      // Restore step position
+      if (typeof draft._step === 'number') setStep(draft._step)
+      // Restore JVM state
+      if (typeof draft._jvmConfigEnabled === 'boolean') setJvmConfigEnabled(draft._jvmConfigEnabled)
+      if (draft._gcType) setGcType(draft._gcType)
+      if (draft._workloadProfile) setWorkloadProfile(draft._workloadProfile)
+      if (typeof draft._containerAware === 'boolean') setContainerAware(draft._containerAware)
+      if (draft._maxRamPct) setMaxRamPct(draft._maxRamPct)
+
+      // Show draft restore banner with "Continue" / "Start fresh" options
+      const stepNum = (draft._step ?? 0) + 1
+      setDraftBanner({
+        appName: draft.appName?.trim() || '',
+        jarName: draft.jarName?.trim() || '',
+        stepLabel: STEPS[Math.min(stepNum - 1, STEPS.length - 1)]?.label ?? `Step ${stepNum}`,
+      })
+    } catch { /* corrupt draft — ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Save draft on form/step/JVM change
+  useEffect(() => {
+    const draft: Record<string, unknown> = { _step: step }
+    for (const key of DRAFT_FIELDS) {
+      draft[key] = form[key]
+    }
+    // Persist cert/extra dir paths (without file objects)
+    draft._certPaths = form.certUploads
+      .filter(c => c.source.trim() || c.targetPath.trim())
+      .map(c => ({ source: c.source, targetPath: c.targetPath }))
+    draft._extraDirPaths = form.extraDirs
+      .filter(d => d.dirName.trim() || d.targetPath.trim())
+      .map(d => ({ dirName: d.dirName, targetPath: d.targetPath }))
+    // Persist JVM UI state
+    draft._jvmConfigEnabled = jvmConfigEnabled
+    draft._gcType = gcType
+    draft._workloadProfile = workloadProfile
+    draft._containerAware = containerAware
+    draft._maxRamPct = maxRamPct
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  }, [form, step, jvmConfigEnabled, gcType, workloadProfile, containerAware, maxRamPct])
+
+  // Warn before unload when form has data
+  useEffect(() => {
+    if (!hasDraftData) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasDraftData])
+
+  // Clear draft on successful submission
+  const clearDraft = () => sessionStorage.removeItem(DRAFT_KEY)
 
   // Keep the environment field in sync with whatever the user picks in Settings.
   // This runs whenever activeEnv changes so the form always reflects the
@@ -1175,7 +1359,6 @@ export default function DeployPage() {
 
   const set = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((p) => ({ ...p, [key]: value }))
-    setErrors((p) => { const n = { ...p }; delete n[key]; return n })
   }, [])
 
   // Handle JAR artifact upload.
@@ -1222,7 +1405,7 @@ export default function DeployPage() {
   }
 
   const goTo = (n: number) => {
-    setErrors({})
+    setDeparted((prev) => new Set([...prev, step]))
     setVisited((prev) => new Set([...prev, n]))
     setStep(n)
   }
@@ -1237,14 +1420,14 @@ export default function DeployPage() {
   }
 
   const handleNext = () => {
-    setErrors({})
+    setDeparted((prev) => new Set([...prev, step]))
     const next = step + 1
     setVisited((prev) => new Set([...prev, next]))
     setStep(next)
   }
 
   const handlePrev = () => {
-    setErrors({})
+    setDeparted((prev) => new Set([...prev, step]))
     setStep((s) => s - 1)
   }
 
@@ -1252,19 +1435,22 @@ export default function DeployPage() {
     // Reveal all step statuses before validation so the user can see which tabs
     // are highlighted as incomplete (yellow warning triangles).
     setVisited(new Set([1, 2, 3]))
+    setDeparted(new Set([1, 2, 3]))
 
     // Final validation of all steps — collect errors and incomplete step names
-    let allErrors: FormErrors = {}
     const incompleteStepLabels: string[] = []
     for (let s = 1; s <= 3; s++) {
       const stepErrors = validateStep(s, form, jvmConfigEnabled)
       if (Object.keys(stepErrors).length > 0) {
         incompleteStepLabels.push(STEPS[s - 1].label)
-        allErrors = { ...allErrors, ...stepErrors }
       }
     }
-    if (Object.keys(allErrors).length > 0) {
-      setErrors(allErrors)
+    if (incompleteStepLabels.length > 0) {
+      // Navigate to the first incomplete step so the user sees the error banner
+      const firstIncompleteStep = [1, 2, 3].find(
+        (s) => Object.keys(validateStep(s, form, jvmConfigEnabled)).length > 0,
+      ) ?? 1
+      setStep(firstIncompleteStep)
       toast.error(`Incomplete: ${incompleteStepLabels.join(', ')}`)
       return
     }
@@ -1365,6 +1551,7 @@ export default function DeployPage() {
           jarType:        form.jarType,
           performBackup:  form.performBackup,
           maxBackups:     form.maxBackups,
+          stabilityWindow: form.stabilityWindow,
           jarName:        form.jarName,
           certUploads:    form.certUploads.map((c) => ({ source: c.source, targetPath: c.targetPath })),
           extraDirs:      form.extraDirs.map((d)  => ({ dirName: d.dirName, targetPath: d.targetPath })),
@@ -1383,6 +1570,7 @@ export default function DeployPage() {
         // localStorage quota exceeded or unavailable — not critical
       }
 
+      clearDraft()
       navigate(`/jobs/${res.jobId}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Deployment failed to start.'
@@ -1519,6 +1707,7 @@ export default function DeployPage() {
       jarType:        entry.jarType,
       performBackup:  entry.performBackup,
       maxBackups:     entry.maxBackups,
+      stabilityWindow: entry.stabilityWindow || '20',
       jarName:        entry.jarName,
       // Restore cert / extra-dir config (paths only — files must be re-uploaded)
       hasCerts:    entry.certUploads.length > 0,
@@ -1555,7 +1744,7 @@ export default function DeployPage() {
   return (
     <>
     {/* ── Page header (title + history) — scrolls away naturally ── */}
-    <div className="flex flex-col gap-6 max-w-3xl pt-6 mb-4">
+    <div className="flex flex-col gap-6 max-w-3xl pt-6 mb-4 xl:!max-w-[1132px]">
 
       {/* ── Page title ── */}
       <div>
@@ -1565,8 +1754,41 @@ export default function DeployPage() {
         </p>
       </div>
 
+      {/* ── Draft restore banner — "Continue" or "Start fresh" ── */}
+      {draftBanner && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-wiz-gold/30 bg-wiz-gold-dim animate-fade-in">
+          <Info size={16} className="text-wiz-gold flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-wiz-cream">
+              Previous draft restored
+              {draftBanner.appName && <> for <span className="font-semibold">{draftBanner.appName}</span></>}
+            </p>
+            <p className="text-xs text-wiz-muted/60 mt-0.5">
+              Continuing from {draftBanner.stepLabel}.
+              {draftBanner.jarName && <> File uploads ({draftBanner.jarName}) will need to be re-uploaded.</>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setDraftBanner(null)}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-sig-green/40 bg-sig-green-dim/40 text-sig-green hover:bg-sig-green-dim hover:border-sig-green/60 transition-all"
+            >
+              Continue
+            </button>
+            <button
+              type="button"
+              onClick={resetToFresh}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-wiz-border/60 text-wiz-muted hover:text-wiz-cream hover:border-wiz-border transition-all"
+            >
+              Start Fresh
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Deploy history card ── */}
-      {deployHistory.length > 0 && !historyDismissed && (
+      {deployHistory.length > 0 && !historyDismissed && !draftBanner && (
         <div className="rounded-xl border border-wiz-gold/30 bg-wiz-gold-dim overflow-hidden animate-fade-in">
 
           {/* Header — clicking it toggles collapse */}
@@ -1739,9 +1961,9 @@ export default function DeployPage() {
     ) : (
       <>
 
-      {/* ── Step tabs — direct sibling at page level, no animated ancestor ── */}
+      {/* ── Step tabs — spans full content width (form + sidebar) ── */}
       <div className="sticky top-0 z-50 -mx-6 px-6 bg-wiz-bg border-b border-wiz-border/40">
-        <div className="grid grid-cols-4 gap-1.5 py-3 max-w-3xl">
+        <div className="grid grid-cols-4 gap-1.5 py-3 max-w-3xl xl:!max-w-[1132px]">
           {STEPS.map((s) => (
             <StepTab
               key={s.id}
@@ -1754,14 +1976,18 @@ export default function DeployPage() {
         </div>
       </div>
 
-      {/* ── Step content card ── */}
-      <div className="max-w-3xl mt-5 relative z-0" key={step}>
+      {/* ── Step content + Mission Control sidebar ── */}
+      <div className="flex gap-6 mt-5">
+
+      {/* Left column — form content */}
+      <div className="max-w-3xl flex-1 min-w-0 relative z-0" key={step}>
       <div className="wiz-card p-5">
 
         {/* ─── Step 1: SSH Target ────────────────────────────── */}
         {step === 1 && (
           <>
             <div className="flex flex-col gap-5">
+              <StepErrorBanner errors={errors} />
 
               {/* ── SSH TARGET CONFIGURATION PANEL ── */}
               <div id="ssh-target-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
@@ -2126,6 +2352,7 @@ export default function DeployPage() {
         {step === 2 && (
           <>
             <div className="flex flex-col gap-5">
+              <StepErrorBanner errors={errors} />
 
               {/* ── APPLICATION PANEL (JAR upload + app details unified) ── */}
               <div id="app-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
@@ -2789,6 +3016,7 @@ export default function DeployPage() {
         {step === 3 && (
           <>
             <div className="flex flex-col gap-5">
+              <StepErrorBanner errors={errors} />
 
 
               {/* ── BACKUP PANEL ── */}
@@ -2862,6 +3090,56 @@ export default function DeployPage() {
                       </div>
                     </RowField>
                   )}
+
+                  {/* Stability monitoring row — always visible */}
+                  <RowField
+                    label="Stability Check"
+                    sublabel="Post-startup"
+                    name="stabilityWindow"
+                    hint={`After the app starts, WizardCD monitors it for ${form.stabilityWindow}s to catch delayed crashes before declaring the deploy successful.`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {([10, 20, 30, 60] as const).map((n) => {
+                          const selected = form.stabilityWindow === n.toString()
+                          return (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => set('stabilityWindow', n.toString())}
+                              className={clsx(
+                                'h-9 px-3 rounded-lg border font-mono text-xs',
+                                'transition-all duration-150 flex items-center justify-center',
+                                selected
+                                  ? 'border-sig-green bg-sig-green/10 text-sig-green'
+                                  : 'border-wiz-border bg-wiz-bg text-wiz-gray hover:border-wiz-border-mid hover:text-wiz-cream',
+                              )}
+                              title={`Monitor for ${n} seconds after startup`}
+                            >
+                              {n}s
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={5}
+                          max={120}
+                          value={form.stabilityWindow}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            if (v === '' || (parseInt(v, 10) >= 0 && parseInt(v, 10) <= 120)) {
+                              set('stabilityWindow', v)
+                            }
+                          }}
+                          className="w-16 h-9 rounded-lg border border-wiz-border bg-wiz-bg text-center font-mono text-xs text-wiz-cream focus:border-wiz-gold focus:outline-none"
+                          title="Custom value (5–120 seconds)"
+                        />
+                        <span className="text-2xs text-wiz-muted">sec</span>
+                      </div>
+                    </div>
+                  </RowField>
 
                 </div>
               </div>
@@ -3759,6 +4037,7 @@ export default function DeployPage() {
                 </div>
                 <div className="px-4 py-2.5 flex flex-col gap-0">
                   <ReviewRow label="Backup" value={form.performBackup ? `Enabled — keep ${form.maxBackups} release${parseInt(form.maxBackups) !== 1 ? 's' : ''}` : 'Disabled'} />
+                  <ReviewRow label="Stability Check" value={`${form.stabilityWindow}s post-startup monitoring`} />
                   <ReviewRow label="Log Rotation" value={`${form.maxLogSize} per file, ${form.maxLogFiles} files max`} />
                   {!jvmConfigEnabled ? (
                     <ReviewRow label="JVM" value="Ergonomic defaults — no custom flags" />
@@ -3799,11 +4078,10 @@ export default function DeployPage() {
           </>
         )}
 
-      </div>
-      </div> {/* end isolate wrapper */}
+      </div> {/* end wiz-card */}
 
       {/* ── Navigation buttons ── */}
-      <div className="max-w-3xl flex items-center justify-between pb-6">
+      <div className="flex items-center justify-between pb-6">
         {/* Prev */}
         <div>
           {step > 1 && (
@@ -3839,6 +4117,26 @@ export default function DeployPage() {
           )}
         </div>
       </div>
+
+      </div> {/* end left column */}
+
+      {/* ── Right column — Mission Control sidebar (xl+ only) ── */}
+      <div className="hidden xl:block">
+        <div className="sticky top-16 pt-1">
+          <MissionControl
+            step={step}
+            form={form}
+            testConnState={testConnState}
+            autoFilledFields={autoFilledFields}
+            jvmConfigEnabled={jvmConfigEnabled}
+            jvmFlags={missionControlJvmFlags}
+            gcType={gcType}
+            containerAware={containerAware}
+          />
+        </div>
+      </div>
+
+      </div> {/* end flex row */}
 
       </> /* end of non-uploading fragment */
     )} {/* end of uploadProgress ternary */}

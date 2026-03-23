@@ -4,6 +4,7 @@ import Layout from './layouts/Layout'
 import DashboardPage from './pages/DashboardPage'
 import DeployPage from './pages/DeployPage'
 import JobDetailPage from './pages/JobDetailPage'
+import ApplicationPage from './pages/ApplicationPage'
 import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
@@ -14,7 +15,8 @@ export default function App() {
           <Routes>
             <Route path="/"            element={<DashboardPage />} />
             <Route path="/deploy"      element={<DeployPage />} />
-            <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+            <Route path="/jobs/:jobId"  element={<JobDetailPage />} />
+            <Route path="/apps/:appName" element={<ApplicationPage />} />
             <Route path="/settings"    element={<SettingsPage />} />
             <Route path="*"            element={<Navigate to="/" replace />} />
           </Routes>

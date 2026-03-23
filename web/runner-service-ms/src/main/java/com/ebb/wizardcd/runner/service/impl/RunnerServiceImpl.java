@@ -5,6 +5,7 @@ import com.ebb.wizardcd.runner.dto.JobMetadata;
 import com.ebb.wizardcd.runner.enums.JobExecutionStateStatus;
 import com.ebb.wizardcd.runner.enums.JobStatus;
 import com.ebb.wizardcd.runner.service.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,11 +20,23 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.regex.Pattern;
 
 @Service
 public class RunnerServiceImpl implements RunnerService {
 
     private static final Logger log = LoggerFactory.getLogger(RunnerServiceImpl.class);
+
+    // Dedicated logger for deploy.sh output — uses a clean format without class names
+    private static final Logger deployLog = LoggerFactory.getLogger("wizardcd.deploy");
+
+    // Strip bash helpers.sh prefix: "2026-03-21 13:35:37.415 [INFO ] [job=UUID] "
+    private static final Pattern BASH_PREFIX = Pattern.compile(
+            "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} \\[(?:INFO |WARN |ERROR)\\] \\[job=[a-f0-9-]+\\]\\s*");
+
+    // Strip remote script prefix: "[INFO]  2026-03-21 13:35:41  " (from application-deployment.sh / rollback.sh)
+    private static final Pattern REMOTE_PREFIX = Pattern.compile(
+            "^\\[(?:INFO|WARN|ERROR)\\]\\s+\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\s+");
 
     // Directory where deploy.sh resides
     private final String scriptsDir;
@@ -39,6 +52,7 @@ public class RunnerServiceImpl implements RunnerService {
     private final RunnerWorkspaceService workspaceService;
     private final RunnerJobStateService jobStateService;
     private final ProcessExecutorService processExecutorService;
+    private final ObjectMapper objectMapper;
 
     // Single-thread executor guarantees serialized deployments (V1 model)
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -52,7 +66,8 @@ public class RunnerServiceImpl implements RunnerService {
                              DeploymentValidatorService deploymentValidatorService,
                              RunnerWorkspaceService workspaceService,
                              RunnerJobStateService jobStateService,
-                             ProcessExecutorService processExecutorService) {
+                             ProcessExecutorService processExecutorService,
+                             ObjectMapper objectMapper) {
         this.scriptsDir = scriptsDir;
         this.executionTimeoutMinutes = executionTimeoutMinutes;
         this.maxConcurrentJobs = maxConcurrentJobs;
@@ -60,13 +75,16 @@ public class RunnerServiceImpl implements RunnerService {
         this.workspaceService = workspaceService;
         this.jobStateService = jobStateService;
         this.processExecutorService = processExecutorService;
+        this.objectMapper = objectMapper;
     }
 
     // Accepts deployment request and delegates execution asynchronously
+    // jobType: "deploy" or "redeploy"
     @Override
     public JobStatus runDeploy(String jobId, DeploymentRequest request,
                                MultipartFile jarArtifact, MultipartFile libZip,
-                               List<MultipartFile> certZips, List<MultipartFile> extraZips) {
+                               List<MultipartFile> certZips, List<MultipartFile> extraZips,
+                               String jobType) {
 
         // Validate mandatory inputs before any lifecycle mutation
         validateInputs(jobId, request, jarArtifact);
@@ -88,7 +106,8 @@ public class RunnerServiceImpl implements RunnerService {
         }
 
         // Submit job into single-thread executor (non-blocking)
-        executor.submit(() -> executeJob(jobId, request, jarArtifact, libZip, certZips, extraZips));
+        String effectiveType = (jobType != null) ? jobType : "deploy";
+        executor.submit(() -> executeJob(jobId, request, jarArtifact, libZip, certZips, extraZips, effectiveType));
 
         // Immediately return RUNNING since execution is asynchronous
         return JobStatus.RUNNING;
@@ -97,14 +116,15 @@ public class RunnerServiceImpl implements RunnerService {
     // Performs full deployment lifecycle inside executor thread
     private void executeJob(String jobId, DeploymentRequest request,
                             MultipartFile jarArtifact, MultipartFile libZip,
-                            List<MultipartFile> certZips, List<MultipartFile> extraZips) {
+                            List<MultipartFile> certZips, List<MultipartFile> extraZips,
+                            String jobType) {
         try {
 
             // Move lifecycle into workspace preparation phase
             transitionState(jobId, JobStatus.PREPARING_WORKSPACE);
 
             // Create immutable job identity snapshot
-            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now());
+            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now(), jobType);
 
             // Prepare isolated job workspace
             Path workspaceConfig = workspaceService.prepareWorkspace(jobId, request, jarArtifact, libZip, certZips, extraZips, metadata);
@@ -171,6 +191,16 @@ public class RunnerServiceImpl implements RunnerService {
     // Interprets exit codes based on formal execution contract
     private void interpretExitCode(String jobId, int exitCode) {
 
+        // If abort was requested, any exit code means ABORTED — the process was killed
+        // (SIGTERM → exit 143) or finished naturally (exit 0) after the abort signal.
+        JobStatus current = jobStateService.getStatus(jobId);
+        if (current == JobStatus.ABORT_REQUESTED) {
+            transitionState(jobId, JobStatus.ABORTED);
+            jobStateService.updateState(jobId, JobExecutionStateStatus.ABORTED,
+                    "Deployment aborted by user");
+            return;
+        }
+
         // 0: successful completion of deploy.sh
         if (exitCode == 0) {
             transitionState(jobId, JobStatus.SUCCESS);
@@ -185,7 +215,7 @@ public class RunnerServiceImpl implements RunnerService {
             return;
         }
 
-        // -2: runner-enforced abort
+        // -2: runner-enforced abort (legacy path — kept for completeness)
         if (exitCode == -2) {
             transitionState(jobId, JobStatus.ABORTED);
             jobStateService.updateState(jobId, JobExecutionStateStatus.ABORTED, "Execution aborted by control plane");
@@ -230,7 +260,7 @@ public class RunnerServiceImpl implements RunnerService {
             transitionState(jobId, JobStatus.PREPARING_WORKSPACE);
 
             // Create minimal workspace: just config YAML + logs dir
-            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now());
+            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now(), "rollback");
             Path jobRoot = Path.of(workspaceService.getWorkspaceRoot(), jobId);
             Path inputDir = jobRoot.resolve("input");
             Path logDir = jobRoot.resolve("logs");
@@ -238,8 +268,7 @@ public class RunnerServiceImpl implements RunnerService {
             java.nio.file.Files.createDirectories(logDir);
 
             // Write metadata
-            new com.fasterxml.jackson.databind.ObjectMapper()
-                    .writerWithDefaultPrettyPrinter()
+            objectMapper.writerWithDefaultPrettyPrinter()
                     .writeValue(jobRoot.resolve("metadata.json").toFile(), metadata);
 
             // Generate YAML config (reuse existing service)
@@ -268,7 +297,17 @@ public class RunnerServiceImpl implements RunnerService {
 
         } catch (Exception e) {
             JobStatus currentStatus = jobStateService.getStatus(jobId);
-            if (currentStatus != JobStatus.ABORT_REQUESTED && currentStatus != JobStatus.ABORTED) {
+            if (currentStatus == JobStatus.ABORT_REQUESTED) {
+                // Abort was requested — transition to ABORTED
+                try {
+                    transitionState(jobId, JobStatus.ABORTED);
+                    jobStateService.updateState(jobId, JobExecutionStateStatus.ABORTED,
+                            "Rollback aborted by user");
+                } catch (Exception inner) {
+                    log.error("Failed to transition rollback job {} to ABORTED", jobId, inner);
+                }
+                log.warn("Rollback job {} aborted by user", jobId);
+            } else if (currentStatus != JobStatus.ABORTED) {
                 try {
                     transitionState(jobId, JobStatus.FAILED);
                     jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED,
@@ -276,8 +315,8 @@ public class RunnerServiceImpl implements RunnerService {
                 } catch (Exception inner) {
                     log.error("Failed to transition rollback job {} to FAILED", jobId, inner);
                 }
+                log.error("Rollback job {} failed with exception", jobId, e);
             }
-            log.error("Rollback job {} failed with exception", jobId, e);
         } finally {
             runningJobs.remove(jobId);
         }
@@ -292,9 +331,29 @@ public class RunnerServiceImpl implements RunnerService {
         }
 
         if (current == JobStatus.RUNNING) {
-            // Active process — signal abort, process executor will kill it
+            // Active process — signal abort and kill it
             transitionState(jobId, JobStatus.ABORT_REQUESTED);
-            processExecutorService.abort(jobId);
+
+            // Kill the process directly from runningJobs — processExecutorService.abort()
+            // can miss it because the process is registered there only after streamProcessLogs
+            // finishes (which blocks until process ends).
+            Process process = runningJobs.get(jobId);
+            if (process != null && process.isAlive()) {
+                log.warn("Destroying process for job {}", jobId);
+                process.destroy();
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                if (process.isAlive()) {
+                    log.warn("Force-killing process for job {}", jobId);
+                    process.destroyForcibly();
+                }
+            } else {
+                // Fallback — try processExecutorService in case timing differs
+                processExecutorService.abort(jobId);
+            }
             return;
         }
 
@@ -365,12 +424,16 @@ public class RunnerServiceImpl implements RunnerService {
         }
     }
 
-    // Streams deploy.sh output line-by-line into runner logs
+    // Streams deploy.sh output line-by-line into runner logs.
+    // Strips redundant bash timestamp/level/job-tag prefixes so the runner log
+    // reads cleanly — e.g. "[INFO] Monitoring: 0s/20s (10%) — all checks passed"
     private void streamProcessLogs(Process process) throws Exception {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                log.info("[deploy.sh] {}", line);
+                String clean = BASH_PREFIX.matcher(line).replaceFirst("");
+                clean = REMOTE_PREFIX.matcher(clean).replaceFirst("");
+                deployLog.info("{}", clean);
             }
         }
     }
