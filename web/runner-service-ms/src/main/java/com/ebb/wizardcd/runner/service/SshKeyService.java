@@ -9,7 +9,7 @@ public interface SshKeyService {
 
     /**
      * Returns the per-environment ED25519 public keys as a map keyed by environment name.
-     * Example: { "SIT": "ssh-ed25519 AAAA...wizardcd-sit@runner", "UAT": "...", "PROD": "..." }
+     * Example: { "DEV": "ssh-ed25519 AAAA...wizardcd-dev@runner", "SIT": "...", "UAT": "...", "PROD": "..." }
      * Keys are generated on first access and cached on the runner filesystem.
      */
     Map<String, String> getPublicKeys();

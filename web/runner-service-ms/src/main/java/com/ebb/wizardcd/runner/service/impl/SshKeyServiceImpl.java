@@ -35,7 +35,7 @@ public class SshKeyServiceImpl implements SshKeyService {
     private static final Logger log = LoggerFactory.getLogger(SshKeyServiceImpl.class);
 
     // Environments for which keys are managed, in display order
-    private static final List<String> ENVIRONMENTS = List.of("SIT", "UAT", "PROD");
+    private static final List<String> ENVIRONMENTS = List.of("DEV", "SIT", "UAT", "PROD");
 
     // SSH connection timeout passed to the ssh binary (-o ConnectTimeout)
     private static final int SSH_CONNECT_TIMEOUT_SECONDS = 10;

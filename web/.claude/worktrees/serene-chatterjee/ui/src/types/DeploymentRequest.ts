@@ -78,4 +78,7 @@ export interface DeploymentRequest {
   // ── Backup Policy ────────────────────────────────────────────
   performBackup: boolean
   maxBackups:    number
+
+  // ── Deployment Options ─────────────────────────────────────
+  stabilityWindow: number
 }

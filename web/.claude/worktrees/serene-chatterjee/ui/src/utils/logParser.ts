@@ -49,10 +49,38 @@ export function lineClass(level: LogLevel): string {
   switch (level) {
     case 'error':   return 'log-line log-line-error'
     case 'warn':    return 'log-line log-line-warn'
-    case 'info':    return 'log-line log-line-info'
     case 'success': return 'log-line log-line-success'
+    case 'info':    // INFO is standard text — no blue tint, same as default
     default:        return 'log-line'
   }
+}
+
+// ── Log line display formatter ────────────────────────────────────
+
+/**
+ * Parses the helpers.sh log line format:
+ *   YYYY-MM-DD HH:MM:SS.mmm [LEVEL ] [job=UUID] message
+ *   YYYY-MM-DD HH:MM:SS.mmm [ERROR] [job=UUID line=N] message
+ *
+ * Returns { time: "HH:mm:ss", message: "clean message" }.
+ * Lines that don't match (non-wizard output, yq, etc.) get time=null
+ * and message=raw so they still render without losing content.
+ */
+const LOG_LINE_RE =
+  /^\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})(?:\.\d+)?\s+\[\w+\s*\]\s+\[job=[^\]]+\]\s+(.+)$/
+
+export interface FormattedLine {
+  /** "HH:mm:ss" extracted from the timestamp, or null for unrecognised lines. */
+  time:    string | null
+  /** Cleaned message content (timestamp + level + job prefix stripped). */
+  message: string
+}
+
+export function formatLogLine(raw: string): FormattedLine {
+  if (!raw.trim()) return { time: null, message: raw }
+  const m = raw.match(LOG_LINE_RE)
+  if (!m) return { time: null, message: raw }
+  return { time: m[1], message: m[2].trim() }
 }
 
 // ── Duration formatter ────────────────────────────────────────────

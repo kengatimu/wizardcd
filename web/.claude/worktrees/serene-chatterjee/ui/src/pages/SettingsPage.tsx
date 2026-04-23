@@ -1,44 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
-  Wifi, WifiOff, Save, Loader2, RefreshCw, Check,
-  FlaskConical, ShieldCheck, Rocket,
+  Wifi, WifiOff, Loader2, RefreshCw,
 } from 'lucide-react'
-import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import axios from 'axios'
 import SectionCard from '../components/SectionCard'
-import { SelectField } from '../components/FormField'
 import ToggleSwitch from '../components/ToggleSwitch'
-import { useTheme, type ActiveEnv } from '../context/ThemeContext'
-
-// ── Environment metadata ──────────────────────────────────────────
-
-const ENV_META = {
-  SIT: {
-    label:       'SIT',
-    full:        'System Integration Testing',
-    icon:        FlaskConical,
-    badge:       'bg-sig-blue-dim text-sig-blue border border-sig-blue/25',
-    dot:         'bg-sig-blue',
-    description: 'Used by developers and QA to test new features before UAT sign-off. Data is synthetic and resets frequently. Safe to trigger and abort deployments freely.',
-  },
-  UAT: {
-    label:       'UAT',
-    full:        'User Acceptance Testing',
-    icon:        ShieldCheck,
-    badge:       'bg-sig-yellow-dim text-sig-yellow border border-sig-yellow/25',
-    dot:         'bg-sig-yellow',
-    description: 'Business stakeholders validate features here before production release. Treat deployments with care — co-ordinate with the UAT team before triggering jobs.',
-  },
-  PROD: {
-    label:       'PROD',
-    full:        'Production',
-    icon:        Rocket,
-    badge:       'bg-sig-purple-dim text-sig-purple border border-sig-purple/25',
-    dot:         'bg-sig-purple',
-    description: 'Live production environment. Every action here affects real end-users. Double-check configuration before submitting a deployment.',
-  },
-} as const
 
 // ── Persisted settings shape ──────────────────────────────────────
 
@@ -78,13 +45,28 @@ interface ConnStatus {
   ms:  number
 }
 
-// ── About table row ───────────────────────────────────────────────
+// ── Preference row ────────────────────────────────────────────────
 
-function AboutRow({ label, value }: { label: string; value: string }) {
+interface PrefRowProps {
+  label:    string
+  hint?:    string
+  children: React.ReactNode
+  border?:  boolean
+}
+
+function PrefRow({ label, hint, children, border = true }: PrefRowProps) {
   return (
-    <div className="flex items-start gap-4 py-3 border-b border-wiz-border/40 last:border-b-0">
-      <span className="w-24 flex-shrink-0 section-label text-wiz-muted">{label}</span>
-      <span className="text-sm text-wiz-gray">{value}</span>
+    <div className={clsx(
+      'flex items-center justify-between gap-4 px-4 py-3',
+      border && 'border-b border-wiz-border/20 last:border-b-0',
+    )}>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-sm font-medium text-wiz-cream">{label}</span>
+        {hint && <span className="text-xs text-wiz-muted/50">{hint}</span>}
+      </div>
+      <div className="flex-shrink-0">
+        {children}
+      </div>
     </div>
   )
 }
@@ -92,13 +74,11 @@ function AboutRow({ label, value }: { label: string; value: string }) {
 // ── Main Page ─────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { activeEnv, setActiveEnv } = useTheme()
   const [settings, setSettings] = useState<WizardSettings>(loadSettings)
   const [connStatus, setConnStatus]   = useState<ConnStatus | null>(null)
   const [testing, setTesting]         = useState(false)
-  const [saving, setSaving]           = useState(false)
 
-  // Persist to localStorage whenever settings change
+  // Auto-persist to localStorage whenever settings change
   useEffect(() => {
     localStorage.setItem('wiz-settings', JSON.stringify(settings))
   }, [settings])
@@ -121,103 +101,30 @@ export default function SettingsPage() {
     }
   }
 
-  // Save settings (already auto-persisted, but gives user a clear confirmation)
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise((r) => setTimeout(r, 400))
-    localStorage.setItem('wiz-settings', JSON.stringify(settings))
-    setSaving(false)
-    toast.success('Settings saved successfully.')
-  }
-
   return (
     <div className="flex flex-col gap-6 max-w-3xl animate-fade-in">
 
       {/* ── Page Title ── */}
       <div>
         <h1 className="text-2xl font-bold text-wiz-cream">Settings</h1>
-        <p className="text-sm text-wiz-muted mt-0.5">
+        <p className="text-xs text-wiz-muted/50 mt-1">
           Configure WizardCD control plane behaviour and preferences.
         </p>
       </div>
 
-      {/* ══ Active Environment ══ */}
-      <SectionCard
-        title="Active Environment"
-        description="Select which backend environment this control plane targets. Changes take effect immediately."
-        accent="gold"
-      >
-        <div className="flex flex-col gap-3">
-          {(Object.values(ENV_META) as typeof ENV_META[keyof typeof ENV_META][]).map((e) => {
-            const EIcon    = e.icon
-            const isActive = e.label === activeEnv
-            return (
-              <button
-                key={e.label}
-                type="button"
-                onClick={() => setActiveEnv(e.label as ActiveEnv)}
-                className={clsx(
-                  'w-full flex items-start gap-4 px-4 py-3.5 rounded-xl border-2',
-                  'text-left transition-all duration-150',
-                  isActive
-                    ? [e.badge.replace('border', 'border-2'), 'shadow-card']
-                    : 'bg-wiz-bg border-wiz-border hover:border-wiz-border-mid hover:bg-wiz-raised',
-                )}
-              >
-                {/* Env pill */}
-                <span className={clsx(
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-xs font-bold flex-shrink-0 mt-0.5',
-                  isActive ? e.badge : 'bg-wiz-surface text-wiz-muted border border-wiz-border',
-                )}>
-                  <EIcon size={11} />
-                  {e.label}
-                </span>
+      {/* ══════════════════════════════════════════════════════════════
+          SECTION 1 — API CONNECTION
+          ══════════════════════════════════════════════════════════════ */}
 
-                {/* Description */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={clsx(
-                      'text-sm font-semibold',
-                      isActive ? 'text-wiz-cream' : 'text-wiz-gray',
-                    )}>
-                      {e.full}
-                    </p>
-                    {isActive && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-wiz-gold bg-wiz-gold-dim border border-wiz-gold/20 px-1.5 py-0.5 rounded">
-                        <Check size={8} />
-                        ACTIVE
-                      </span>
-                    )}
-                  </div>
-                  <p className={clsx(
-                    'text-xs mt-0.5 leading-relaxed',
-                    isActive ? 'text-wiz-muted' : 'text-wiz-dim',
-                  )}>
-                    {e.description}
-                  </p>
-                </div>
-
-                {/* Selection indicator */}
-                <span className={clsx(
-                  'w-4 h-4 rounded-full border-2 flex-shrink-0 mt-1 transition-all',
-                  isActive
-                    ? [e.dot, 'border-current']
-                    : 'border-wiz-border-mid bg-transparent',
-                )} />
-              </button>
-            )
-          })}
-        </div>
-      </SectionCard>
-
-      {/* ══ API Connection ══ */}
       <SectionCard
         title="API Connection"
-        description="Runner service endpoint configuration."
         accent="gold"
       >
+        <p className="text-xs text-wiz-muted/50 -mt-2 mb-3">
+          Base URL for the WizardCD runner service REST API.
+        </p>
         <div className="flex flex-col gap-3">
-          <div className="flex gap-3 items-end">
+          <div className="flex gap-3 items-start">
             <div className="flex-1">
               <label className="block text-xs font-medium text-wiz-gray mb-1.5">
                 Runner API URL
@@ -229,15 +136,15 @@ export default function SettingsPage() {
                 placeholder="http://localhost:8081"
                 className="wiz-input"
               />
-              <p className="text-xs text-wiz-muted mt-1">
-                Proxied via Vite — change target in <span className="font-mono">vite.config.ts</span>
+              <p className="text-xs text-wiz-muted/50 mt-1.5">
+                All API requests are sent to this endpoint.
               </p>
             </div>
             <button
               type="button"
               onClick={() => void handleTest()}
               disabled={testing}
-              className="btn-secondary gap-2 flex-shrink-0 h-10"
+              className="btn-secondary gap-2 flex-shrink-0 mt-6"
             >
               {testing
                 ? <Loader2 size={13} className="animate-spin" />
@@ -269,135 +176,142 @@ export default function SettingsPage() {
         </div>
       </SectionCard>
 
-      {/* ══ Dashboard ══ */}
-      <SectionCard title="Dashboard" description="Job list display and polling preferences.">
-        <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-4">
-            <SelectField
-              label="Auto-refresh Rate"
-              name="dashboardRefreshRate"
-              value={settings.dashboardRefreshRate}
-              onChange={(e) => set('dashboardRefreshRate', e.target.value)}
-              hint="How often the jobs list polls for updates"
-              options={[
-                { value: '2000',  label: '2 seconds' },
-                { value: '5000',  label: '5 seconds' },
-                { value: '10000', label: '10 seconds' },
-                { value: '30000', label: '30 seconds' },
-                { value: '0',     label: 'Off' },
-              ]}
-            />
+      {/* ══════════════════════════════════════════════════════════════
+          SECTION 2 — PREFERENCES
+          ══════════════════════════════════════════════════════════════ */}
+
+      <SectionCard
+        title="Preferences"
+      >
+        <p className="text-xs text-wiz-muted/50 -mt-2 mb-4">
+          Customise the dashboard, log viewer, and notification behaviour.
+        </p>
+
+        <div className="flex flex-col gap-4">
+
+          {/* ── Dashboard inner panel (sig-green) ── */}
+          <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-green/5 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-sig-green flex-shrink-0" />
+              <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-green">Dashboard</span>
+            </div>
+            <div>
+              <PrefRow label="Auto-refresh Rate" hint="How often the jobs list polls for updates">
+                <select
+                  value={settings.dashboardRefreshRate}
+                  onChange={(e) => set('dashboardRefreshRate', e.target.value)}
+                  className="wiz-select text-xs w-36"
+                >
+                  <option value="2000">2 seconds</option>
+                  <option value="5000">5 seconds</option>
+                  <option value="10000">10 seconds</option>
+                  <option value="30000">30 seconds</option>
+                  <option value="0">Off</option>
+                </select>
+              </PrefRow>
+
+              <PrefRow label="Lifecycle Status Column" hint="Show control-plane lifecycle state in job table">
+                <ToggleSwitch
+                  checked={settings.showLifecycleStatus}
+                  onChange={(v) => set('showLifecycleStatus', v)}
+                />
+              </PrefRow>
+
+              <PrefRow label="Execution Status Column" hint="Show execution-plane snapshot state in job table" border={false}>
+                <ToggleSwitch
+                  checked={settings.showExecutionStatus}
+                  onChange={(v) => set('showExecutionStatus', v)}
+                />
+              </PrefRow>
+            </div>
           </div>
-          <div className="flex flex-col gap-3">
-            <ToggleSwitch
-              checked={settings.showLifecycleStatus}
-              onChange={(v) => set('showLifecycleStatus', v)}
-              label="Show Lifecycle Status column"
-              hint="Display the control-plane lifecycle state in the job table"
-            />
-            <ToggleSwitch
-              checked={settings.showExecutionStatus}
-              onChange={(v) => set('showExecutionStatus', v)}
-              label="Show Execution Status column"
-              hint="Display the execution-plane snapshot state in the job table"
-            />
+
+          {/* ── Log Viewer inner panel (sig-blue) ── */}
+          <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue/5 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-sig-blue flex-shrink-0" />
+              <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue">Log Viewer</span>
+            </div>
+            <div>
+              <PrefRow label="Default Tail Lines" hint="Number of log lines fetched per request">
+                <select
+                  value={settings.logTailLines}
+                  onChange={(e) => set('logTailLines', e.target.value)}
+                  className="wiz-select text-xs w-36"
+                >
+                  <option value="50">50 lines</option>
+                  <option value="100">100 lines</option>
+                  <option value="200">200 lines</option>
+                  <option value="500">500 lines</option>
+                  <option value="1000">1,000 lines</option>
+                </select>
+              </PrefRow>
+
+              <PrefRow label="Auto-scroll to Latest" hint="Scroll to bottom when new log lines arrive" border={false}>
+                <ToggleSwitch
+                  checked={settings.logAutoScroll}
+                  onChange={(v) => set('logAutoScroll', v)}
+                />
+              </PrefRow>
+            </div>
           </div>
+
+          {/* ── Notifications inner panel (wiz-gold) ── */}
+          <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-wiz-gold/60 border-r-wiz-border-strong overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-wiz-gold/5 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold flex-shrink-0" />
+              <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-wiz-gold">Notifications</span>
+            </div>
+            <div>
+              <PrefRow label="Toast Position" hint="Where deployment notifications appear on screen" border={false}>
+                <select
+                  value={settings.toastPosition}
+                  onChange={(e) => set('toastPosition', e.target.value)}
+                  className="wiz-select text-xs w-36"
+                >
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="top-right">Top Right</option>
+                  <option value="top-left">Top Left</option>
+                  <option value="top-center">Top Center</option>
+                  <option value="bottom-center">Bottom Center</option>
+                </select>
+              </PrefRow>
+            </div>
+          </div>
+
         </div>
       </SectionCard>
 
-      {/* ══ Log Viewer ══ */}
-      <SectionCard title="Log Viewer" description="Log streaming and display preferences.">
-        <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-4">
-            <SelectField
-              label="Default Tail Lines"
-              name="logTailLines"
-              value={settings.logTailLines}
-              onChange={(e) => set('logTailLines', e.target.value)}
-              hint="Number of log lines fetched by default"
-              options={[
-                { value: '50',   label: '50 lines' },
-                { value: '100',  label: '100 lines' },
-                { value: '200',  label: '200 lines' },
-                { value: '500',  label: '500 lines' },
-                { value: '1000', label: '1000 lines' },
-              ]}
-            />
-          </div>
-          <ToggleSwitch
-            checked={settings.logAutoScroll}
-            onChange={(v) => set('logAutoScroll', v)}
-            label="Auto-scroll to latest log line"
-            hint="Automatically scroll to the bottom when new log lines arrive"
+      {/* ══════════════════════════════════════════════════════════════
+          ABOUT (compact footer row)
+          ══════════════════════════════════════════════════════════════ */}
+
+      <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-wiz-border/40 bg-wiz-surface/30">
+        <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-wiz-border bg-wiz-bg">
+          <img
+            src="/wizardCD-logo.png"
+            alt="WizardCD"
+            className="w-full h-full object-contain p-0.5"
+            style={{ objectPosition: 'left center' }}
           />
         </div>
-      </SectionCard>
-
-      {/* ══ Notifications ══ */}
-      <SectionCard title="Notifications" description="Toast notification display settings.">
-        <div className="grid grid-cols-2 gap-4">
-          <SelectField
-            label="Toast Position"
-            name="toastPosition"
-            value={settings.toastPosition}
-            onChange={(e) => set('toastPosition', e.target.value)}
-            options={[
-              { value: 'bottom-right', label: 'Bottom Right' },
-              { value: 'bottom-left',  label: 'Bottom Left' },
-              { value: 'top-right',    label: 'Top Right' },
-              { value: 'top-left',     label: 'Top Left' },
-              { value: 'top-center',   label: 'Top Center' },
-              { value: 'bottom-center',label: 'Bottom Center' },
-            ]}
-            hint="Where deployment notifications appear on screen"
-          />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-wiz-cream">
+            Wizard<span className="text-wiz-gold">CD</span>
+            <span className="text-2xs font-normal text-wiz-muted ml-2">v1.0.0</span>
+          </p>
+          <p className="text-2xs text-wiz-muted/50">
+            One Config. One Command. Continuous Magic.
+          </p>
         </div>
-      </SectionCard>
-
-      {/* ══ About ══ */}
-      <SectionCard title="About" description="Platform identity and build information.">
-        <div className="flex items-start gap-5">
-          {/* Logo */}
-          <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-wiz-border bg-wiz-bg">
-            <img
-              src="/wizardCD-logo.png"
-              alt="WizardCD"
-              className="w-full h-full object-contain p-1"
-              style={{ objectPosition: 'left center' }}
-            />
-          </div>
-          {/* Brand metadata */}
-          <div className="flex-1">
-            <p className="text-lg font-bold text-wiz-cream">
-              Wizard<span className="text-wiz-gold">CD</span>
-            </p>
-            <p className="section-label mt-0.5 mb-3">Deployment Control Plane</p>
-            <div className="wiz-divider" />
-            <AboutRow label="VENDOR"  value="Engineered By Bytes Ltd" />
-            <AboutRow label="WEBSITE" value="wizardcd.com" />
-            <AboutRow label="CONTACT" value="info@engineeredbytes.com" />
-            <AboutRow label="SLOGAN"  value="One Config. One Command. Continuous Magic." />
-            <AboutRow label="VERSION" value="1.0.0" />
-          </div>
+        <div className="flex-shrink-0 text-right">
+          <p className="text-2xs text-wiz-muted/50">Engineered By Bytes Ltd</p>
+          <p className="text-2xs text-wiz-muted/40">wizardcd.com</p>
         </div>
-      </SectionCard>
-
-      {/* ══ Save bar ══ */}
-      <div className="flex justify-end pb-6">
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saving}
-          className="btn-primary gap-2"
-        >
-          {saving
-            ? <Loader2 size={14} className="animate-spin" />
-            : <Save size={14} />
-          }
-          {saving ? 'Saving…' : 'Save Settings'}
-        </button>
       </div>
 
+      <div className="h-2" />
     </div>
   )
 }

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  AlertTriangle, StopCircle, ArrowLeft, RefreshCw,
-  Server, Hash, Box, Globe, Terminal,
-  CheckCircle2, XCircle, Loader2, AlertCircle,
-  List,
+  AlertTriangle, StopCircle, ArrowLeft, RefreshCw, Wand2, RotateCcw,
+  Server, Hash, Globe,
+  CheckCircle2, XCircle, Loader2, AlertCircle, ShieldAlert,
+  Layers, Calendar, Upload, Package, Send, Play, FlagTriangleRight,
+  ChevronDown, Activity, MousePointer2, Clock, ExternalLink, Trash2,
 } from 'lucide-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { abortJob } from '../api/jobs'
+import { abortJob, fetchJobs, rollbackPreflight, type RollbackPreflightResult } from '../api/jobs'
+import RedeployModal from '../components/RedeployModal'
+import RollbackModal from '../components/RollbackModal'
 import { useJobStatus } from '../hooks/useJobStatus'
 import { useJobLogs } from '../hooks/useJobLogs'
 import StatusBadge from '../components/StatusBadge'
@@ -18,43 +21,87 @@ import type { JobLifecycleStatus } from '../types/enums'
 import {
   parseLogSections,
   formatSectionDuration,
+  detectLevel,
   type LogSection,
 } from '../utils/logParser'
 
-// ── Metadata Row ──────────────────────────────────────────────────
+// ── Environment config ─────────────────────────────────────────────
 
-interface MetaRowProps {
-  icon:  React.ReactNode
-  label: string
-  value: React.ReactNode
-  mono?: boolean
+const ENV_CFG: Record<string, { badge: string; border: string; header: string; dim: string }> = {
+  DEV:  { badge: 'bg-sig-green/20  text-sig-green',  border: 'border-l-sig-green',   header: 'bg-sig-green/5',   dim: 'border-l-sig-green/20'   },
+  SIT:  { badge: 'bg-sig-blue/20   text-sig-blue',   border: 'border-l-sig-blue',    header: 'bg-sig-blue/5',    dim: 'border-l-sig-blue/20'    },
+  UAT:  { badge: 'bg-sig-yellow/20 text-sig-yellow', border: 'border-l-sig-yellow',  header: 'bg-sig-yellow/5',  dim: 'border-l-sig-yellow/20'  },
+  PROD: { badge: 'bg-sig-purple/20 text-sig-purple', border: 'border-l-sig-purple',  header: 'bg-sig-purple/5',  dim: 'border-l-sig-purple/20'  },
 }
+const FALLBACK_CFG = { badge: 'bg-wiz-border/20 text-wiz-muted', border: 'border-l-wiz-gold', header: 'bg-wiz-surface/20', dim: 'border-l-wiz-border/20' }
+function envCfg(env?: string | null) { return (env && ENV_CFG[env]) ? ENV_CFG[env] : FALLBACK_CFG }
 
-function MetaRow({ icon, label, value, mono }: MetaRowProps) {
+function EnvBadge({ env }: { env: string }) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-wiz-border/40 last:border-b-0">
-      <span className="mt-0.5 flex-shrink-0 text-wiz-muted">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-2xs text-wiz-muted uppercase tracking-wider font-mono">{label}</p>
-        <p className={clsx(
-          'mt-0.5 text-sm text-wiz-cream break-all',
-          mono && 'font-mono text-xs text-wiz-gray',
-        )}>
-          {value}
-        </p>
-      </div>
-    </div>
+    <span className={clsx('text-xs font-mono font-semibold px-2 py-0.5 rounded', envCfg(env).badge)}>
+      {env}
+    </span>
   )
 }
 
-// ── Abort Modal ───────────────────────────────────────────────────
+// ── Phase → log-section mapping ────────────────────────────────────
 
-interface AbortModalProps {
-  jobId:     string
-  onConfirm: () => void
-  onCancel:  () => void
-  loading:   boolean
+const DEPLOY_PHASE_KEYWORDS: string[][] = [
+  ['deployment job initialized'],
+  ['packaging', 'tanuki'],
+  ['transferring'],
+  ['executing remote'],
+  ['stability check'],
+  ['cleanup'],
+]
+
+const ROLLBACK_PHASE_KEYWORDS: string[][] = [
+  ['rollback job initialized'],
+  ['verifying rollback backup', 'verifying backup'],
+  ['executing remote rollback'],
+  ['stability check'],
+  ['cleanup'],
+]
+
+function sectionsForPhase(phaseIndex: number, sections: LogSection[], keywordList: string[][] = DEPLOY_PHASE_KEYWORDS): LogSection[] {
+  const keywords = keywordList[phaseIndex] ?? []
+  if (keywords.length === 0) return []
+  return sections.filter(s =>
+    keywords.some(kw => s.title.toLowerCase().includes(kw))
+  )
 }
+
+function combineSections(phaseSections: LogSection[], phaseLabel: string): LogSection | null {
+  if (phaseSections.length === 0) return null
+  if (phaseSections.length === 1) return phaseSections[0]
+  return {
+    title:          phaseLabel,
+    lines:          phaseSections.flatMap(s => s.lines),
+    lineStart:      phaseSections[0].lineStart,
+    hasError:       phaseSections.some(s => s.hasError),
+    hasWarn:        phaseSections.some(s => s.hasWarn),
+    titleTimestamp: phaseSections[0].titleTimestamp,
+  }
+}
+
+function sliceSection(section: LogSection, mode: 'before' | 'from', keyword: string): LogSection {
+  const kw  = keyword.toLowerCase()
+  const idx = section.lines.findIndex(l => l.toLowerCase().includes(kw))
+  if (idx === -1) return section
+  const lines = mode === 'before' ? section.lines.slice(0, idx) : section.lines.slice(idx)
+  return {
+    ...section,
+    title:     section.title,
+    lines,
+    lineStart: mode === 'from' ? section.lineStart + idx : section.lineStart,
+    hasError:  lines.some(l => detectLevel(l) === 'error'),
+    hasWarn:   lines.some(l => detectLevel(l) === 'warn'),
+  }
+}
+
+// ── Abort Modal ────────────────────────────────────────────────────
+
+interface AbortModalProps { jobId: string; onConfirm: () => void; onCancel: () => void; loading: boolean }
 
 function AbortModal({ jobId, onConfirm, onCancel, loading }: AbortModalProps) {
   return (
@@ -70,13 +117,9 @@ function AbortModal({ jobId, onConfirm, onCancel, loading }: AbortModalProps) {
           </div>
         </div>
         <p className="text-sm text-wiz-gray mb-2">Are you sure you want to abort job:</p>
-        <p className="font-mono text-xs text-wiz-gold bg-wiz-bg border border-wiz-border rounded-md px-3 py-2 mb-5">
-          {jobId}
-        </p>
+        <p className="font-mono text-xs text-wiz-gold bg-wiz-bg border border-wiz-border rounded-md px-3 py-2 mb-5">{jobId}</p>
         <div className="flex gap-3 justify-end">
-          <button type="button" onClick={onCancel} disabled={loading} className="btn-secondary">
-            Cancel
-          </button>
+          <button type="button" onClick={onCancel} disabled={loading} className="btn-secondary">Cancel</button>
           <button type="button" onClick={onConfirm} disabled={loading}
             className={clsx('btn-danger', loading && 'opacity-60')}>
             <StopCircle size={14} />
@@ -88,162 +131,373 @@ function AbortModal({ jobId, onConfirm, onCancel, loading }: AbortModalProps) {
   )
 }
 
-// ── Steps Sidebar ─────────────────────────────────────────────────
+// ── Compact metadata row ───────────────────────────────────────────
 
-interface StepsSidebarProps {
-  sections:        LogSection[]
-  selectedIndex:   number        // -1 = none selected (show all)
-  onSelect:        (i: number) => void
-  isLive:          boolean
-  jobLifecycle:    JobLifecycleStatus
-}
+interface MetaRowProps { icon: React.ReactNode; label: string; value: React.ReactNode; mono?: boolean }
 
-function StepsSidebar({
-  sections, selectedIndex, onSelect, isLive, jobLifecycle,
-}: StepsSidebarProps) {
-  const isTerminal = ['SUCCESS', 'FAILED', 'ABORTED'].includes(jobLifecycle)
-
+function MetaRow({ icon, label, value, mono }: MetaRowProps) {
   return (
-    <div className="mt-4 wiz-card p-0 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-wiz-border bg-wiz-panel/50">
-        <List size={13} className="text-wiz-gold" />
-        <p className="section-label">Steps</p>
-        {sections.length > 0 && (
-          <span className="ml-auto text-2xs font-mono text-wiz-dim">
-            {sections.length} steps
-          </span>
-        )}
-      </div>
-
-      {sections.length === 0 ? (
-        /* No sections yet */
-        <div className="px-4 py-4 flex items-center gap-2 text-xs font-mono text-wiz-muted">
-          {isLive
-            ? <><Loader2 size={12} className="animate-spin text-sig-yellow" /> Waiting for steps…</>
-            : <><AlertCircle size={12} /> No steps recorded.</>
-          }
-        </div>
-      ) : (
-        <div className="flex flex-col">
-          {sections.map((section, i) => {
-            const isLast   = i === sections.length - 1
-            const isActive = isLast && isLive
-            const status: 'error' | 'warn' | 'running' | 'success' =
-              section.hasError ? 'error'   :
-              section.hasWarn  ? 'warn'    :
-              isActive         ? 'running' :
-                                 'success'
-
-            const nextTs  = sections[i + 1]?.titleTimestamp
-            const durMs   =
-              section.titleTimestamp && nextTs
-                ? nextTs.getTime() - section.titleTimestamp.getTime()
-                : isActive
-                ? Date.now() - (section.titleTimestamp?.getTime() ?? Date.now())
-                : null
-
-            const isSelected = selectedIndex === i
-
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onSelect(isSelected ? -1 : i)}
-                className={clsx(
-                  'w-full flex items-center gap-2.5 px-4 py-2.5 text-left border-b border-wiz-border/30 last:border-b-0',
-                  'transition-colors duration-100',
-                  isSelected
-                    ? 'bg-wiz-gold/10 border-l-2 border-l-wiz-gold'
-                    : status === 'error'
-                    ? 'hover:bg-sig-red-dim/20 border-l-2 border-l-transparent'
-                    : 'hover:bg-wiz-surface/40 border-l-2 border-l-transparent',
-                )}
-              >
-                {/* Status icon */}
-                {status === 'error'   && <XCircle      size={13} className="text-sig-red flex-shrink-0" />}
-                {status === 'warn'    && <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0" />}
-                {status === 'running' && <Loader2       size={13} className="text-sig-yellow animate-spin flex-shrink-0" />}
-                {status === 'success' && <CheckCircle2  size={13} className="text-sig-green flex-shrink-0" />}
-
-                {/* Step name */}
-                <span className={clsx(
-                  'font-mono text-xs flex-1 truncate text-left',
-                  isSelected                     ? 'text-wiz-cream font-semibold' :
-                  status === 'error'             ? 'text-sig-red'                 :
-                  status === 'running'           ? 'text-sig-yellow'              :
-                                                   'text-wiz-gray',
-                )}>
-                  {section.title}
-                </span>
-
-                {/* Duration */}
-                <span className={clsx(
-                  'text-2xs font-mono flex-shrink-0 w-12 text-right',
-                  isActive ? 'text-sig-yellow animate-pulse' : 'text-wiz-dim',
-                )}>
-                  {durMs !== null && durMs >= 0
-                    ? formatSectionDuration(durMs)
-                    : isActive ? '…' : ''}
-                </span>
-              </button>
-            )
-          })}
-
-          {/* Total footer — only for terminal jobs */}
-          {isTerminal && sections.length > 0 &&
-            sections[0].titleTimestamp &&
-            sections[sections.length - 1].titleTimestamp && (() => {
-              const first = sections[0].titleTimestamp!.getTime()
-              const last  = sections[sections.length - 1].titleTimestamp!.getTime()
-              return (
-                <div className="flex items-center gap-2 px-4 py-2 bg-wiz-panel/30 border-t border-wiz-border/40">
-                  <span className="text-2xs font-mono text-wiz-muted flex-1">Total</span>
-                  <span className="text-2xs font-mono text-wiz-muted">
-                    {formatSectionDuration(last - first)}
-                  </span>
-                </div>
-              )
-            })()
-          }
-        </div>
-      )}
+    <div className="flex items-center gap-2.5 py-2 border-b border-wiz-border/30 last:border-b-0">
+      <span className="text-wiz-dim/70 flex-shrink-0">{icon}</span>
+      <span className="text-2xs text-wiz-muted font-mono uppercase tracking-wider w-24 flex-shrink-0">{label}</span>
+      <span className={clsx('text-xs text-wiz-cream flex-1 min-w-0 truncate', mono && 'font-mono text-wiz-gray text-2xs')}>
+        {value}
+      </span>
     </div>
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────
+// ── Deployment Phases content ──────────────────────────────────────
+
+type PhaseStatus = 'success' | 'warn' | 'error' | 'running' | 'pending' | 'aborted'
+
+function phaseIcon(s: PhaseStatus, size = 13) {
+  if (s === 'success') return <CheckCircle2 size={size} className="text-sig-green flex-shrink-0" />
+  if (s === 'aborted') return <StopCircle   size={size} className="text-wiz-muted flex-shrink-0" />
+  if (s === 'warn')    return <AlertTriangle size={size} className="text-sig-yellow flex-shrink-0" />
+  if (s === 'error')   return <XCircle       size={size} className="text-sig-red flex-shrink-0" />
+  if (s === 'running') return <Loader2       size={size} className="text-sig-yellow animate-spin flex-shrink-0" />
+  return                      <AlertCircle   size={size} className="text-wiz-dim/30 flex-shrink-0" />
+}
+
+function phaseChip(s: PhaseStatus) {
+  if (s === 'success') return <span className="text-2xs font-mono text-sig-green">Done</span>
+  if (s === 'aborted') return <span className="text-2xs font-mono text-wiz-muted">Aborted</span>
+  if (s === 'warn')    return <span className="text-2xs font-mono text-sig-yellow">Warning</span>
+  if (s === 'error')   return <span className="text-2xs font-mono text-sig-red">Failed</span>
+  if (s === 'running') return <span className="text-2xs font-mono text-sig-yellow animate-pulse">Running</span>
+  return                      <span className="text-2xs font-mono text-wiz-dim/40">—</span>
+}
+
+interface PhasesContentProps {
+  sections:        LogSection[]
+  lifecycleState:  JobLifecycleStatus
+  isLive:          boolean
+  selectedPhase:   number
+  onSelectPhase:   (i: number) => void
+}
+
+function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSelectPhase }: PhasesContentProps) {
+  const find   = (kw: string) => sections.find(s => s.title.toLowerCase().includes(kw.toLowerCase()))
+  const lastTl = sections[sections.length - 1]?.title?.toLowerCase() ?? ''
+
+  const isSuccess = lifecycleState === 'SUCCESS'
+  const isFailed  = lifecycleState === 'FAILED'
+  const isAborted = lifecycleState === 'ABORTED'
+  const inWorkspace = ['PREPARING_WORKSPACE','RUNNING','SUCCESS','FAILED','ABORTED'].includes(lifecycleState)
+  const inRunning   = ['RUNNING','SUCCESS','FAILED','ABORTED'].includes(lifecycleState)
+
+  // Detect rollback jobs from log content
+  const isRollback = sections.some(s => s.title.toLowerCase().includes('rollback'))
+
+  const resolve = (sec: LogSection | undefined, active: boolean): PhaseStatus => {
+    if (!inRunning) return 'pending'
+    if (isSuccess)  return 'success'
+    if (active)     return 'running'
+    if (!sec)       return isAborted ? 'aborted' : 'pending'
+    if (isAborted)  return sec.hasError ? 'error' : 'success'
+    return sec.hasError ? 'error' : 'success'
+  }
+
+  let phases: Array<{ icon: React.ReactNode; label: string; status: PhaseStatus }>
+
+  if (isRollback) {
+    // ── Rollback phases (5 phases) ──
+    const initSection      = find('Rollback Job Initialized')
+    const verifySection    = find('Verifying rollback backup')
+    const executeSection   = find('Executing remote rollback')
+    const stabilitySection = find('Stability check')
+    const cleanupSection   = find('Cleanup')
+
+    const verifyActive    = isLive && lastTl.includes('verifying')
+    const executeActive   = isLive && (lastTl.includes('executing remote') && !stabilitySection)
+    const stabilityActive = isLive && lastTl.includes('stability check')
+    const cleanupActive   = isLive && lastTl.includes('cleanup')
+
+    const initStatus: PhaseStatus =
+      inWorkspace ? 'success' : ['VALIDATING','CREATED'].includes(lifecycleState) ? 'running' : 'pending'
+
+    const verifyStatus  = resolve(verifySection, verifyActive)
+
+    const executeStatus: PhaseStatus =
+      !inRunning      ? 'pending' :
+      isSuccess       ? 'success' :
+      executeActive   ? 'running' :
+      !executeSection ? (isAborted ? 'aborted' : 'pending') :
+      isAborted       ? (executeSection.hasError ? 'error' : 'success') :
+      executeSection.hasError ? 'error' : 'success'
+
+    const stabilityStatus: PhaseStatus =
+      !inRunning        ? 'pending' :
+      isSuccess         ? 'success' :
+      stabilityActive   ? 'running' :
+      !stabilitySection ? (isAborted ? 'aborted' : (executeSection && !executeSection.hasError ? (isLive ? 'running' : 'pending') : 'pending')) :
+      isAborted         ? (stabilitySection.hasError ? 'error' : 'success') :
+      stabilitySection.hasError ? 'error' : 'success'
+
+    const cleanupStatus: PhaseStatus =
+      isSuccess                      ? 'success' :
+      cleanupActive                  ? 'running' :
+      cleanupSection                 ? 'success' :
+      isFailed || isAborted          ? 'aborted' :
+      stabilityStatus === 'success'  ? 'running' : 'pending'
+
+    phases = [
+      { icon: <RotateCcw size={11} />,         label: 'Rollback Job Initialized',        status: initStatus       },
+      { icon: <ShieldAlert size={11} />,       label: 'Verifying Backup on Target',      status: verifyStatus     },
+      { icon: <Play size={11} />,              label: 'Executing Remote Rollback',       status: executeStatus    },
+      { icon: <Activity size={11} />,          label: 'Stability Check',                 status: stabilityStatus  },
+      { icon: <Trash2 size={11} />,            label: 'Cleanup',                         status: cleanupStatus    },
+    ]
+  } else {
+    // ── Deploy phases ──
+    const packagingSection  = find('Packaging deployment')
+    const transferSection   = find('Transferring artifacts')
+    const remoteSection     = find('Executing remote')
+    const stabilitySection  = find('Stability check')
+    const cleanupSection    = find('Cleanup')
+
+    const packagingActive  = isLive && lastTl.includes('packaging')
+    const transferActive   = isLive && lastTl.includes('transferring artifacts')
+    const remoteActive     = isLive && (lastTl.includes('executing remote') && !stabilitySection)
+    const stabilityActive  = isLive && lastTl.includes('stability check')
+    const cleanupActive    = isLive && lastTl.includes('cleanup')
+
+    const workspaceStatus: PhaseStatus =
+      inWorkspace ? 'success' : ['VALIDATING','CREATED'].includes(lifecycleState) ? 'running' : 'pending'
+
+    const packagingStatus = resolve(packagingSection, packagingActive)
+    const transferStatus  = resolve(transferSection, transferActive)
+
+    const remoteStatus: PhaseStatus =
+      !inRunning     ? 'pending' :
+      isSuccess      ? 'success' :
+      remoteActive   ? 'running' :
+      !remoteSection ? (isAborted ? 'aborted' : 'pending') :
+      isAborted      ? (remoteSection.hasError ? 'error' : 'success') :
+      remoteSection.hasError ? 'error' : 'success'
+
+    const stabilityStatus: PhaseStatus =
+      !inRunning        ? 'pending' :
+      isSuccess         ? 'success' :
+      stabilityActive   ? 'running' :
+      !stabilitySection ? (isAborted ? 'aborted' : (remoteSection && !remoteSection.hasError ? (isLive ? 'running' : 'pending') : 'pending')) :
+      isAborted         ? (stabilitySection.hasError ? 'error' : 'success') :
+      stabilitySection.hasError ? 'error' : 'success'
+
+    const cleanupStatus: PhaseStatus =
+      isSuccess                      ? 'success' :
+      cleanupActive                  ? 'running' :
+      cleanupSection                 ? 'success' :
+      isFailed || isAborted          ? 'aborted' :
+      stabilityStatus === 'success'  ? 'running' : 'pending'
+
+    phases = [
+      { icon: <Upload size={11} />,            label: 'Deployment Job Initialization',  status: workspaceStatus   },
+      { icon: <Package size={11} />,           label: 'Artifact Packaging',        status: packagingStatus  },
+      { icon: <Send size={11} />,              label: 'Transfer to Server',        status: transferStatus   },
+      { icon: <Play size={11} />,              label: 'Remote Deployment',         status: remoteStatus     },
+      { icon: <Activity size={11} />,          label: 'Stability Check',           status: stabilityStatus  },
+      { icon: <Trash2 size={11} />,            label: 'Cleanup',                   status: cleanupStatus    },
+    ]
+  }
+
+  return (
+    <div className="divide-y divide-wiz-border/30">
+      <div className="flex items-center gap-1.5 px-4 py-2 bg-wiz-bg/20">
+        <MousePointer2 size={9} className="text-wiz-dim/40" />
+        <span className="text-xs text-wiz-muted/70">Click a phase to filter logs</span>
+      </div>
+
+      {phases.map((p, i) => {
+        const activeKeywords = isRollback ? ROLLBACK_PHASE_KEYWORDS : DEPLOY_PHASE_KEYWORDS
+        const hasSections = (activeKeywords[i] ?? []).length > 0
+        const isSelected  = selectedPhase === i
+        const linked      = sectionsForPhase(i, sections, activeKeywords)
+        const hasLogs     = linked.length > 0
+
+        const durMs = (() => {
+          if (linked.length === 0) return null
+          const first = linked[0].titleTimestamp
+          const nextAfterLast = sections[sections.indexOf(linked[linked.length - 1]) + 1]?.titleTimestamp
+          const isActive = isLive && linked.some(s => s === sections[sections.length - 1])
+          if (first && nextAfterLast) return nextAfterLast.getTime() - first.getTime()
+          if (first && isActive) return Date.now() - first.getTime()
+          return null
+        })()
+
+        const rowContent = (
+          <>
+            {phaseIcon(p.status)}
+            <div className="flex-1 min-w-0">
+              <span className={clsx(
+                'text-xs',
+                p.status === 'error'   ? 'text-sig-red font-mono'    :
+                p.status === 'warn'    ? 'text-sig-yellow font-mono' :
+                p.status === 'aborted' ? 'text-wiz-muted font-mono'  :
+                p.status === 'running' ? 'text-sig-yellow font-mono' :
+                p.status === 'success' ? 'text-wiz-gray'             :
+                                         'text-wiz-dim/50',
+              )}>
+                {p.label}
+              </span>
+              {hasLogs && (
+                <span className={clsx(
+                  'ml-2 text-2xs font-mono',
+                  isSelected ? 'text-wiz-gold' : 'text-wiz-dim/40 group-hover:text-wiz-dim',
+                )}>
+                  {linked.reduce((n, s) => n + s.lines.filter(l => l.trim()).length, 0)} lines
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {durMs !== null && durMs >= 0 && (
+                <span className={clsx(
+                  'text-2xs font-mono',
+                  isLive && linked.some(s => s === sections[sections.length - 1])
+                    ? 'text-sig-yellow animate-pulse' : 'text-wiz-dim/50',
+                )}>
+                  {formatSectionDuration(durMs)}
+                </span>
+              )}
+              {phaseChip(p.status)}
+            </div>
+          </>
+        )
+
+        if (hasSections) {
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => onSelectPhase(isSelected ? -1 : i)}
+              className={clsx(
+                'group w-full flex items-center gap-3 px-4 py-2.5 text-left border-l-2 transition-colors duration-100',
+                isSelected
+                  ? 'bg-wiz-gold/10 border-l-wiz-gold'
+                  : p.status === 'error'
+                  ? 'hover:bg-sig-red/5 border-l-transparent'
+                  : 'hover:bg-wiz-surface/30 border-l-transparent',
+                p.status === 'running' && !isSelected && 'bg-sig-yellow/5',
+              )}
+            >
+              {rowContent}
+            </button>
+          )
+        }
+
+        return (
+          <div
+            key={p.label}
+            className={clsx(
+              'flex items-center gap-3 px-4 py-2.5 border-l-2 border-l-transparent',
+              p.status === 'error'   && 'bg-sig-red/5',
+              p.status === 'running' && 'bg-sig-yellow/5',
+            )}
+          >
+            {rowContent}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+function timeAgo(dateStr: string): string {
+  const ms = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(ms / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
+function totalDuration(createdAt?: string, completedAt?: string): string | null {
+  if (!createdAt) return null
+  const start = new Date(createdAt).getTime()
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now()
+  const ms = end - start
+  const secs = Math.floor(ms / 1000)
+  if (secs < 60) return `${secs}s`
+  const mins = Math.floor(secs / 60)
+  return `${mins}m ${secs % 60}s`
+}
+
+// ── Main Page ──────────────────────────────────────────────────────
 
 const ABORTABLE: JobLifecycleStatus[] = ['CREATED', 'VALIDATING', 'PREPARING_WORKSPACE', 'RUNNING']
+const ALL_ENVS = ['DEV', 'SIT', 'UAT', 'PROD']
 
 export default function JobDetailPage() {
   const { jobId }   = useParams<{ jobId: string }>()
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
-  const [showAbortModal,    setShowAbortModal]    = useState(false)
-  const [selectedStepIndex, setSelectedStepIndex] = useState(-1)  // -1 = show all
+  const [showAbortModal,     setShowAbortModal]     = useState(false)
+  const [showRedeployModal,  setShowRedeployModal]  = useState(false)
+  const [showRollbackModal,  setShowRollbackModal]  = useState(false)
+  const [rollbackPreflightData, setRollbackPreflightData] = useState<RollbackPreflightResult | null>(null)
+  const [rollbackPreflightLoading, setRollbackPreflightLoading] = useState(false)
+  const [selectedPhase,      setSelectedPhase]      = useState(-1)
+  const [refreshing,         setRefreshing]         = useState(false)
+  const [metaOpen,           setMetaOpen]           = useState(false) // collapsed by default
+
+  // Reset state when navigating between jobs
+  useEffect(() => {
+    setSelectedPhase(-1)
+    setMetaOpen(false)
+    setShowAbortModal(false)
+    setShowRedeployModal(false)
+    setShowRollbackModal(false)
+    window.scrollTo({ top: 0 })
+  }, [jobId])
 
   const { data: status, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } =
     useJobStatus(jobId)
-
-  const { data: logs, isLoading: logsLoading } =
+  const { data: logs, isLoading: logsLoading, refetch: refetchLogs } =
     useJobLogs(jobId, status?.jobStatus)
 
-  const isLive      = status?.jobStatus === 'RUNNING' || status?.jobStatus === 'PREPARING_WORKSPACE'
-  const isAbortable = status?.jobStatus ? ABORTABLE.includes(status.jobStatus) : false
+  // Fetch all jobs to build Environment Status strip
+  const { data: allJobs } = useQuery({
+    queryKey: ['jobs-list'],
+    queryFn: () => fetchJobs(),
+    staleTime: 30_000,
+  })
 
-  // Parse sections from logs
+  const isLive        = status?.jobStatus === 'RUNNING' || status?.jobStatus === 'PREPARING_WORKSPACE'
+  const isAbortable   = status?.jobStatus ? ABORTABLE.includes(status.jobStatus) : false
+  const isTerminal    = status?.jobStatus === 'SUCCESS' || status?.jobStatus === 'FAILED' || status?.jobStatus === 'ABORTED'
+  const isRedeployable = isTerminal && status?.application && status?.environment
+  const activeEnv     = status?.environment ?? ''
+  const appName       = status?.application ?? ''
+
   const rawLines = logs ? logs.split('\n') : []
   const { sections } = rawLines.length > 0
     ? parseLogSections(rawLines)
     : { sections: [] as LogSection[] }
 
-  // Auto-select the last (active) section on live jobs
+  // Detect rollback job from log sections
+  const isRollbackJob = sections.some(s => s.title.toLowerCase().includes('rollback'))
+  const activeKeywords = isRollbackJob ? ROLLBACK_PHASE_KEYWORDS : DEPLOY_PHASE_KEYWORDS
+
+  // Auto-select the active phase on live jobs
   useEffect(() => {
     if (isLive && sections.length > 0) {
-      setSelectedStepIndex(sections.length - 1)
+      const lastTitle = sections[sections.length - 1]?.title?.toLowerCase() ?? ''
+      const autoPhase = activeKeywords.findIndex(kws =>
+        kws.length > 0 && kws.some(kw => lastTitle.includes(kw))
+      )
+      if (autoPhase !== -1) setSelectedPhase(autoPhase)
     }
   }, [isLive, sections.length])
+
+  // Auto-expand metadata when job reaches terminal state
+  useEffect(() => {
+    if (isTerminal) setMetaOpen(true)
+  }, [isTerminal])
 
   const abortMutation = useMutation({
     mutationFn: () => abortJob(jobId!),
@@ -256,10 +510,47 @@ export default function JobDetailPage() {
     onError: () => toast.error('Failed to send abort request.'),
   })
 
-  // ── Loading state ──
+  // Build Environment Status: latest job per env for this app
+  // Always include the current job so it shows up even before allJobs refreshes
+  const envStatus = (() => {
+    if (!allJobs || !appName) return {}
+    const appJobs = allJobs
+      .filter(j => j.appName === appName)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    const byEnv: Record<string, typeof allJobs[0]> = {}
+    for (const job of appJobs) {
+      if (!byEnv[job.environment]) {
+        byEnv[job.environment] = job
+      }
+    }
+    // Ensure current job overrides its env slot if it's newer
+    if (activeEnv && status?.createdAt && jobId) {
+      const current = byEnv[activeEnv]
+      if (!current || new Date(status.createdAt).getTime() >= new Date(current.createdAt).getTime()) {
+        byEnv[activeEnv] = {
+          jobId: jobId,
+          appName,
+          environment: activeEnv,
+          lifecycleStatus: status.jobStatus,
+          createdAt: status.createdAt,
+          completedAt: (allJobs.find(j => j.jobId === jobId))?.completedAt,
+        }
+      }
+    }
+    return byEnv
+  })()
+
+  // Compute total duration
+  const duration = (() => {
+    if (!status?.createdAt) return null
+    // Find completedAt from the allJobs list for this job
+    const thisJob = allJobs?.find(j => j.jobId === jobId)
+    return totalDuration(status.createdAt, thisJob?.completedAt ?? undefined)
+  })()
+
   if (statusLoading) {
     return (
-      <div className="flex flex-col gap-6 animate-fade-in">
+      <div className="flex flex-col gap-6 pt-6 animate-fade-in">
         <div className="skeleton h-8 rounded w-48" />
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-1 wiz-card p-5">
@@ -276,7 +567,6 @@ export default function JobDetailPage() {
     )
   }
 
-  // ── Error / not found ──
   if (statusError || !status) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4 animate-fade-in">
@@ -292,10 +582,46 @@ export default function JobDetailPage() {
   }
 
   const shortId = jobId!.slice(0, 8)
-  const selectedSection: LogSection | null =
-    selectedStepIndex >= 0 && sections[selectedStepIndex]
-      ? sections[selectedStepIndex]
-      : null
+
+  const activeLabels = isRollbackJob ? ROLLBACK_PHASE_LABELS : DEPLOY_PHASE_LABELS
+  const selectedSection: LogSection | null = (() => {
+    if (selectedPhase < 0) return null
+    const matched = sectionsForPhase(selectedPhase, sections, activeKeywords)
+    if (matched.length === 0) return null
+    const combined = combineSections(matched, activeLabels[selectedPhase])
+    return combined
+  })()
+
+  const phaseContextNote: string | null = (() => {
+    if (selectedPhase !== 3) return null
+    const remoteSection = sections.find(s => s.title.toLowerCase().includes('executing remote'))
+    if (!remoteSection) return null
+    const hasStability = sections.some(s => s.title.toLowerCase().includes('stability check'))
+    if (hasStability) {
+      return 'Files deployed and application started. Stability verification is tracked in "Stability Check".'
+    }
+    return null
+  })()
+
+  const sshAuthFailure: { env: string; host: string } | null = (() => {
+    if (!logs) return null
+    const lower = logs.toLowerCase()
+    if (!lower.includes('permission denied (publickey)')) return null
+    return { env: status.environment ?? 'the selected', host: status.application ?? '' }
+  })()
+
+  // Status banner config
+  const statusLabel =
+    status.jobStatus === 'SUCCESS' ? 'Deployment Successful' :
+    status.jobStatus === 'FAILED'  ? 'Deployment Failed' :
+    status.jobStatus === 'ABORTED' ? 'Deployment Aborted' :
+    isLive ? 'Deploying…' : 'Deployment Pending'
+
+  const statusColor =
+    status.jobStatus === 'SUCCESS' ? 'sig-green' :
+    status.jobStatus === 'FAILED'  ? 'sig-red' :
+    status.jobStatus === 'ABORTED' ? 'sig-yellow' :
+    isLive ? 'sig-yellow' : 'wiz-muted'
 
   return (
     <>
@@ -308,7 +634,27 @@ export default function JobDetailPage() {
         />
       )}
 
-      <div className="flex flex-col gap-6 animate-fade-in">
+      {showRedeployModal && status && (
+        <RedeployModal
+          jobId={jobId!}
+          appName={status.application ?? ''}
+          environment={status.environment ?? ''}
+          onClose={() => setShowRedeployModal(false)}
+        />
+      )}
+
+      {showRollbackModal && status && (
+        <RollbackModal
+          jobId={jobId!}
+          appName={status.application ?? ''}
+          environment={status.environment ?? ''}
+          preflight={rollbackPreflightData}
+          preflightLoading={rollbackPreflightLoading}
+          onClose={() => setShowRollbackModal(false)}
+        />
+      )}
+
+      <div className="flex flex-col gap-5 pt-6 animate-fade-in">
 
         {/* ── Page Header ── */}
         <div className="flex items-start justify-between">
@@ -318,7 +664,10 @@ export default function JobDetailPage() {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-wiz-cream font-mono">{shortId}…</h1>
+                <h1 className="text-xl font-bold text-wiz-cream font-mono">
+                  {appName || `${shortId}…`}
+                </h1>
+                {activeEnv && <EnvBadge env={activeEnv} />}
                 {isLive && (
                   <span className="flex items-center gap-1.5 text-xs text-sig-yellow animate-pulse font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-sig-yellow" />
@@ -326,13 +675,63 @@ export default function JobDetailPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-wiz-muted mt-0.5 font-mono">{jobId}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-wiz-muted font-mono">{jobId}</p>
+                {duration && (
+                  <>
+                    <span className="text-wiz-dim">·</span>
+                    <span className="flex items-center gap-1 text-xs text-wiz-muted">
+                      <Clock size={10} />
+                      {duration}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void refetchStatus()} className="btn-secondary gap-1.5">
-              <RefreshCw size={12} /> Refresh
+            {isRedeployable && (
+              <>
+                <button type="button" onClick={() => setShowRedeployModal(true)} className="btn-primary gap-1.5">
+                  <Wand2 size={12} /> Re-deploy
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowRollbackModal(true)
+                    setRollbackPreflightLoading(true)
+                    setRollbackPreflightData(null)
+                    try {
+                      const result = await rollbackPreflight(jobId!)
+                      setRollbackPreflightData(result)
+                    } catch {
+                      setRollbackPreflightData({ available: false, reason: 'Failed to check backup on target server' })
+                    } finally {
+                      setRollbackPreflightLoading(false)
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md
+                             transition-all duration-150 border border-sig-yellow/25 bg-sig-yellow/10 text-sig-yellow
+                             hover:bg-sig-yellow/15 hover:border-sig-yellow/40"
+                >
+                  <RotateCcw size={12} /> Rollback
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={async () => {
+                setRefreshing(true)
+                await Promise.all([refetchStatus(), refetchLogs()])
+                setRefreshing(false)
+                toast.success('Refreshed')
+              }}
+              className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md
+                         transition-all duration-150 border border-wiz-cream/25 bg-wiz-cream/10 text-wiz-cream
+                         hover:bg-wiz-cream/15 hover:border-wiz-cream/40"
+            >
+              <RefreshCw size={12} className={clsx(refreshing && 'animate-spin')} /> Refresh
             </button>
             {isAbortable && (
               <button type="button" onClick={() => setShowAbortModal(true)} className="btn-danger gap-1.5">
@@ -342,57 +741,163 @@ export default function JobDetailPage() {
           </div>
         </div>
 
-        {/* ── Status Row ── */}
+        {/* ── Unified Status Banner ── */}
         <div className={clsx(
-          'flex items-center gap-4 p-4 rounded-xl border bg-wiz-surface border-wiz-border',
+          'flex items-center gap-4 px-5 py-3.5 rounded-xl border bg-wiz-surface',
+          `border-${statusColor}/20`,
           isLive && 'animate-pulse-green border-sig-green/20',
         )}>
-          <div className="flex items-center gap-6 flex-1">
-            <div>
-              <p className="section-label mb-1.5">Lifecycle</p>
-              <StatusBadge status={status.jobStatus} pulse size="md" />
-            </div>
-            <div className="w-px h-8 bg-wiz-border" />
-            <div>
-              <p className="section-label mb-1.5">Execution</p>
-              <StatusBadge status={status.executionState} size="md" />
-            </div>
+          <StatusBadge status={status.jobStatus} pulse size="md" />
+          <div className="flex-1">
+            <p className={clsx('text-sm font-semibold', `text-${statusColor}`)}>{statusLabel}</p>
+            {status.createdAt && (
+              <p className="text-xs text-wiz-muted mt-0.5">
+                {new Date(status.createdAt).toLocaleString(undefined, {
+                  month: 'short', day: 'numeric',
+                  hour: '2-digit', minute: '2-digit', second: '2-digit',
+                })}
+                {duration && <span className="text-wiz-dim"> · {duration}</span>}
+              </p>
+            )}
           </div>
+          {appName && (
+            <Link
+              to={`/apps/${encodeURIComponent(appName)}`}
+              className="flex items-center gap-1.5 text-xs text-wiz-muted hover:text-wiz-gold transition-colors"
+              title="View all deployments for this application"
+            >
+              <Layers size={12} />
+              <span className="font-mono">{appName}</span>
+              <ExternalLink size={10} />
+            </Link>
+          )}
         </div>
 
-        {/* ── Main Layout: Left sidebar + Right log viewer ── */}
+        {/* ── Main Layout ── */}
         <div className="grid grid-cols-3 gap-6">
 
-          {/* ── Left column: Metadata + Steps ── */}
-          <div className="col-span-1 flex flex-col">
+          {/* ── Left column ── */}
+          <div className="col-span-1 flex flex-col gap-3">
 
-            {/* Job Metadata */}
-            <div className="wiz-card p-0 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-wiz-border bg-wiz-panel/50">
-                <Server size={13} className="text-wiz-gold" />
-                <p className="section-label">Job Metadata</p>
-              </div>
-              <div className="px-4 divide-y divide-wiz-border/40">
-                <MetaRow icon={<Hash size={13} />}     label="Job ID"    value={jobId!}  mono />
-                <MetaRow icon={<Box size={13} />}      label="Status"    value={<StatusBadge status={status.jobStatus} size="sm" />} />
-                <MetaRow icon={<Terminal size={13} />} label="Execution" value={<StatusBadge status={status.executionState} size="sm" />} />
-              </div>
-              <div className="px-4 py-3 border-t border-wiz-border/40 bg-wiz-panel/20">
-                <div className="flex items-center gap-1.5 text-2xs text-wiz-dim font-mono">
-                  <Globe size={11} />
-                  <span>runner-service-ms</span>
-                </div>
-              </div>
+            {/* Deployment Phases — primary content */}
+            <div className="rounded-xl border border-wiz-border overflow-hidden border-l-2 border-l-sig-green/50">
+              <button
+                type="button"
+                onClick={() => {/* always open */}}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left border-b border-wiz-border/60 bg-sig-green/8"
+              >
+                <FlagTriangleRight size={12} className="text-wiz-muted" />
+                <span className="section-label flex-1">DEPLOYMENT PHASES</span>
+                <span className="text-2xs font-mono text-wiz-dim">{sections.length} steps</span>
+              </button>
+              <PhasesContent
+                sections={sections}
+                lifecycleState={status.jobStatus}
+                isLive={isLive}
+                selectedPhase={selectedPhase}
+                onSelectPhase={setSelectedPhase}
+              />
             </div>
 
-            {/* Steps Sidebar */}
-            <StepsSidebar
-              sections={sections}
-              selectedIndex={selectedStepIndex}
-              onSelect={setSelectedStepIndex}
-              isLive={isLive}
-              jobLifecycle={status.jobStatus}
-            />
+            {/* Job Metadata — hidden while live, auto-expanded on completion */}
+            {!isLive && <div className="rounded-xl border border-wiz-border overflow-hidden border-l-2 border-l-wiz-gold/50">
+              <button
+                type="button"
+                onClick={() => setMetaOpen(!metaOpen)}
+                className={clsx(
+                  'w-full flex items-center gap-2.5 px-4 py-2.5 text-left border-b border-wiz-border/60 transition-colors',
+                  metaOpen ? 'bg-wiz-gold/8' : 'bg-wiz-panel/60',
+                )}
+              >
+                <Server size={12} className="text-wiz-muted" />
+                <span className="section-label flex-1">JOB METADATA</span>
+                <ChevronDown
+                  size={11}
+                  className={clsx('text-wiz-dim transition-transform duration-200', !metaOpen && '-rotate-90')}
+                />
+              </button>
+              {metaOpen && (
+                <div className="px-4 py-1.5">
+                  <MetaRow icon={<Hash size={11} />}              label="Job ID"      value={jobId!} mono />
+                  {appName && (
+                    <MetaRow icon={<Layers size={11} />}          label="Application" value={appName} />
+                  )}
+                  {activeEnv && (
+                    <MetaRow icon={<Layers size={11} />}          label="Environment" value={<EnvBadge env={activeEnv} />} />
+                  )}
+                  {status.createdAt && (
+                    <MetaRow icon={<Calendar size={11} />}        label="Started"     value={
+                      new Date(status.createdAt).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                      })
+                    } />
+                  )}
+                  <MetaRow icon={<FlagTriangleRight size={11} />} label="Lifecycle"   value={<StatusBadge status={status.jobStatus} size="sm" />} />
+                  <div className="flex items-center gap-1.5 py-2 text-2xs text-wiz-dim font-mono">
+                    <Globe size={10} /><span>runner-service-ms</span>
+                  </div>
+                </div>
+              )}
+            </div>}
+
+            {/* Environment Status — hidden while job is live to avoid false alarm from historical failures */}
+            {appName && !isLive && (
+              <div className="rounded-xl border border-wiz-border overflow-hidden border-l-2 border-l-wiz-gold/30">
+                <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-wiz-border/60 bg-wiz-panel/60">
+                  <Globe size={12} className="text-wiz-muted" />
+                  <span className="section-label flex-1">ENVIRONMENT STATUS</span>
+                  <Link
+                    to={`/apps/${encodeURIComponent(appName)}`}
+                    className="text-2xs text-wiz-muted hover:text-wiz-gold transition-colors font-mono"
+                  >
+                    View all
+                  </Link>
+                </div>
+                <div className="divide-y divide-wiz-border/30">
+                  {ALL_ENVS.map(env => {
+                    const latest = envStatus[env]
+                    const isCurrent = env === activeEnv && latest?.jobId === jobId
+                    const cfg = envCfg(env)
+
+                    return (
+                      <div
+                        key={env}
+                        className={clsx(
+                          'flex items-center gap-3 px-4 py-2.5',
+                          isCurrent && 'bg-wiz-gold/5',
+                        )}
+                      >
+                        <EnvBadge env={env} />
+                        <div className="flex-1 min-w-0">
+                          {latest ? (
+                            <div className="flex items-center gap-2">
+                              <StatusBadge status={latest.lifecycleStatus} size="sm" />
+                              <span className="text-2xs text-wiz-dim font-mono">
+                                {timeAgo(latest.createdAt)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-2xs text-wiz-dim/50 font-mono">No deploys</span>
+                          )}
+                        </div>
+                        {isCurrent ? (
+                          <span className="text-2xs text-wiz-gold/60 font-mono">current</span>
+                        ) : latest ? (
+                          <Link
+                            to={`/jobs/${latest.jobId}`}
+                            className="text-2xs text-wiz-muted hover:text-wiz-gold transition-colors font-mono"
+                          >
+                            view
+                          </Link>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
           </div>
 
           {/* ── Right column: Log Viewer ── */}
@@ -400,13 +905,19 @@ export default function JobDetailPage() {
             <div className="flex items-center gap-2 mb-2">
               <p className="section-label">Execution Logs</p>
               {selectedSection && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedStepIndex(-1)}
-                  className="text-2xs font-mono text-wiz-gold hover:text-wiz-gold-light underline underline-offset-2"
-                >
-                  ← Show all
-                </button>
+                <>
+                  <span className="text-2xs font-mono text-wiz-dim">·</span>
+                  <span className="text-2xs font-mono text-wiz-gold">
+                    {selectedSection.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPhase(-1)}
+                    className="text-2xs font-mono text-wiz-muted hover:text-wiz-gold underline underline-offset-2 ml-1"
+                  >
+                    ← All logs
+                  </button>
+                </>
               )}
               {isLive && (
                 <span className="text-2xs font-mono text-sig-yellow animate-blink ml-auto">
@@ -414,6 +925,30 @@ export default function JobDetailPage() {
                 </span>
               )}
             </div>
+            {phaseContextNote && (
+              <div className="flex items-start gap-2.5 mb-2 px-3 py-2.5 rounded-lg bg-sig-green/8 border border-sig-green/20 text-xs text-sig-green">
+                <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
+                <span>{phaseContextNote}</span>
+              </div>
+            )}
+            {sshAuthFailure && (
+              <div className="flex items-start gap-2.5 mb-2 px-3 py-2.5 rounded-lg bg-sig-red/8 border border-sig-red/25 text-xs text-sig-red">
+                <ShieldAlert size={13} className="flex-shrink-0 mt-0.5 shrink-0" />
+                <div className="flex flex-col gap-1">
+                  <span className="font-semibold">SSH Authentication Failed — Public Key Not Authorised</span>
+                  <span className="text-wiz-muted">
+                    The runner's <span className="font-mono text-sig-red/80">{sshAuthFailure.env} ED25519 public key</span> is not in the target server's{' '}
+                    <span className="font-mono text-sig-red/80">~/.ssh/authorized_keys</span>. To fix:
+                  </span>
+                  <ol className="list-decimal list-inside space-y-0.5 text-wiz-muted mt-0.5">
+                    <li>Go to <strong className="text-wiz-cream">New Deploy → Step 1 (Target Server)</strong></li>
+                    <li>Copy the <strong className="text-wiz-cream">{sshAuthFailure.env} public key</strong> from the SSH Keys panel</li>
+                    <li>Append it to <span className="font-mono">~/.ssh/authorized_keys</span> on your target server</li>
+                    <li>Run <strong className="text-wiz-cream">Test Connection</strong> to confirm access, then retry</li>
+                  </ol>
+                </div>
+              </div>
+            )}
             <LogViewer
               logs={logs ?? ''}
               isLoading={logsLoading || isLive}
@@ -428,3 +963,20 @@ export default function JobDetailPage() {
     </>
   )
 }
+
+const DEPLOY_PHASE_LABELS = [
+  'Deployment Job Initialization',
+  'Artifact Packaging',
+  'Transfer to Server',
+  'Remote Deployment',
+  'Stability Check',
+  'Cleanup',
+]
+
+const ROLLBACK_PHASE_LABELS = [
+  'Rollback Job Initialized',
+  'Verifying Backup on Target',
+  'Executing Remote Rollback',
+  'Stability Check',
+  'Cleanup',
+]

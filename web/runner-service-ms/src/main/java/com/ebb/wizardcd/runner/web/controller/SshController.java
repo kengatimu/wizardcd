@@ -58,7 +58,7 @@ public class SshController {
     /**
      * Returns the per-environment ED25519 public keys.
      * Keys are generated on demand if they don't exist yet.
-     * Response shape: { "SIT": "ssh-ed25519 AAAA...", "UAT": "...", "PROD": "..." }
+     * Response shape: { "DEV": "ssh-ed25519 AAAA...", "SIT": "...", "UAT": "...", "PROD": "..." }
      */
     @GetMapping("/runner/public-keys")
     public ResponseEntity<Map<String, String>> getPublicKeys() {

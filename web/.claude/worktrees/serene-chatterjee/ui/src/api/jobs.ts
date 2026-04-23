@@ -123,9 +123,108 @@ export async function fetchRunnerPublicKeys(): Promise<Record<string, string>> {
   return data
 }
 
+/**
+ * Fetch the original DeploymentRequest config used for a specific job.
+ * Returns the full config that was submitted at deployment time.
+ * Used by the re-deploy flow to pre-populate the wizard.
+ */
+export async function fetchJobConfig(jobId: string): Promise<DeploymentRequest> {
+  const { data } = await apiClient.get<DeploymentRequest>(`/jobs/${jobId}/config`)
+  return data
+}
+
+/**
+ * Re-deploy: submits a new deployment using a previous job's saved config
+ * with a new JAR file. Returns the new job response.
+ */
+export async function redeployJob(
+  originalJobId: string,
+  jarArtifact: File,
+  libZip?: File,
+  certZips?: File[],
+  extraZips?: File[],
+  onUploadProgress?: (loaded: number, total: number) => void,
+): Promise<JobResponse> {
+  const formData = new FormData()
+  formData.append('jarArtifact', jarArtifact, jarArtifact.name)
+  if (libZip) formData.append('libZip', libZip, libZip.name)
+  certZips?.forEach((f) => formData.append('certZips', f, f.name))
+  extraZips?.forEach((f) => formData.append('extraZips', f, f.name))
+
+  const { data } = await apiClient.post<JobResponse>(`/jobs/${originalJobId}/redeploy`, formData, {
+    timeout: 0,
+    onUploadProgress: (e) => {
+      if (onUploadProgress && e.total) onUploadProgress(e.loaded, e.total)
+    },
+  })
+  return data
+}
+
+/**
+ * Rollback: restores the last-successful backup on the target server
+ * using a previous job's saved config for SSH details.
+ */
+export async function rollbackJob(originalJobId: string): Promise<JobResponse> {
+  const { data } = await apiClient.post<JobResponse>(`/jobs/${originalJobId}/rollback`)
+  return data
+}
+
+/**
+ * Rollback preflight: checks if a last-successful backup exists on the target
+ * and returns backup details (size, date) for the confirmation modal.
+ */
+export interface RollbackPreflightResult {
+  available:   boolean
+  backupSize?: string
+  backupDate?: string
+  backupPath?: string
+  targetHost?: string
+  reason?:     string
+}
+
+export async function rollbackPreflight(jobId: string): Promise<RollbackPreflightResult> {
+  const { data } = await apiClient.get<RollbackPreflightResult>(`/jobs/${jobId}/rollback/preflight`)
+  return data
+}
+
+// ── Pre-flight check ──────────────────────────────────────────────────
+
+export interface PreflightResult {
+  targetReachable:        boolean
+  writable:               boolean
+  diskAvailable:          string | null    // e.g. "12G"
+  diskUsedPercent:        string | null    // e.g. "45%"
+  // Last-successful backup (protected, never rotated — for safe rollback)
+  lastSuccessfulExists:   boolean
+  lastSuccessfulTimestamp: string | null
+  lastSuccessfulPath:     string | null
+  // Release backups (rotated by maxBackups)
+  releaseBackupCount:     number
+  latestReleaseTimestamp: string | null
+  releasesPath:           string | null
+  message:                string | null
+}
+
+/**
+ * Run pre-flight checks on the target server: permissions, disk space, backup status.
+ */
+export async function runPreflight(params: {
+  sshUser:        string
+  sshHost:        string
+  sshPort:        number
+  environment:    string
+  targetBasePath: string
+  appName:        string
+}): Promise<PreflightResult> {
+  const { data } = await apiClient.post<PreflightResult>('/ssh/preflight', params)
+  return data
+}
+
 export interface SshTestResult {
-  success: boolean
-  message: string
+  success:            boolean
+  message:            string
+  /** Java binary paths found on the target server. Empty array if none or detection failed. */
+  javaInstallations:  string[]
 }
 
 /**

@@ -1,0 +1,144 @@
+# -------------------------------------------------------
+# OS FILES (Global)
+# -------------------------------------------------------
+
+# macOS
+.DS_Store
+**/.DS_Store
+.DS_Store
+**/**/.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# -------------------------------------------------------
+# EDITORS / IDEs
+# -------------------------------------------------------
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# -------------------------------------------------------
+# LOGS
+# -------------------------------------------------------
+
+*.log
+logs/
+deployment_logs/
+
+# -------------------------------------------------------
+# TEMP FILES
+# -------------------------------------------------------
+
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# -------------------------------------------------------
+# BUILD / ARTIFACT OUTPUTS (IMPORTANT)
+# -------------------------------------------------------
+
+# Generated during pipeline runs
+newFiles/
+modifiedFiles/
+deletedFiles/
+finacleFileType/
+
+# Archives
+*.tar.gz
+*.zip
+*.gz
+
+# Artifact staging / publishing dirs
+publish*/
+artifact/
+build/
+dist/
+
+# -------------------------------------------------------
+# DEPLOYMENT GENERATED FILES
+# -------------------------------------------------------
+
+deployment-manifest.txt
+metadata.json
+
+# Backup directories (if accidentally created locally)
+backup/
+backup_*/
+*.backup
+
+# -------------------------------------------------------
+# SCRIPT EXECUTION OUTPUTS
+# -------------------------------------------------------
+
+*.out
+*.pid
+
+# -------------------------------------------------------
+# ENV / SECRETS (CRITICAL)
+# -------------------------------------------------------
+
+.env
+.env.*
+*.key
+*.pem
+*.crt
+*.p12
+*.jks
+
+# -------------------------------------------------------
+# AZURE PIPELINE LOCAL NOISE
+# -------------------------------------------------------
+
+.azure/
+.azure-pipelines/
+
+# -------------------------------------------------------
+# SHELL SCRIPT SAFETY
+# -------------------------------------------------------
+
+# Prevent accidental commits of runtime-generated scripts
+Temp_Script_Directory/
+
+# -------------------------------------------------------
+# NODE (if frontend assets ever come in)
+# -------------------------------------------------------
+
+node_modules/
+
+# -------------------------------------------------------
+# JAVA (if any tools introduced later)
+# -------------------------------------------------------
+
+target/
+*.class
+
+# -------------------------------------------------------
+# MISC
+# -------------------------------------------------------
+
+*.bak
+*.old
+*.orig
+#.gitignore
+
+
+*.txt
+*.claude/
+*.md

@@ -1,4 +1,15 @@
 /** @type {import('tailwindcss').Config} */
+
+/*  Helper: reference a CSS custom property as an rgb() colour.
+ *  Tailwind calls this function with { opacityValue } for /NN variants.
+ *  e.g. bg-wiz-bg/60 → background-color: rgb(var(--wiz-bg) / 0.6)       */
+function c(varName) {
+  return ({ opacityValue }) =>
+    opacityValue !== undefined
+      ? `rgb(var(${varName}) / ${opacityValue})`
+      : `rgb(var(${varName}))`
+}
+
 export default {
   content: [
     "./index.html",
@@ -8,39 +19,43 @@ export default {
     extend: {
       colors: {
         // ── WizardCD Brand Backgrounds ─────────────────────────────
-        'wiz-bg':           '#080B14',
-        'wiz-surface':      '#0D1120',
-        'wiz-raised':       '#111827',
-        'wiz-panel':        '#161D2E',
+        'wiz-bg':             c('--wiz-bg'),
+        'wiz-surface':        c('--wiz-surface'),
+        'wiz-raised':         c('--wiz-raised'),
+        'wiz-panel':          c('--wiz-panel'),
         // ── Borders ────────────────────────────────────────────────
-        'wiz-border':       '#1B2840',
-        'wiz-border-mid':   '#243452',
-        'wiz-border-strong':'#2E4068',
-        // ── Gold Accent (from "CD" in logo) ────────────────────────
-        'wiz-gold':         '#C9A84C',
-        'wiz-gold-light':   '#D4B560',
-        'wiz-gold-dim':     '#1A1608',
-        // ── Violet (wizard theme) ───────────────────────────────────
-        'wiz-violet':       '#6B46A0',
-        'wiz-violet-dim':   '#120D1E',
+        'wiz-border':         c('--wiz-border'),
+        'wiz-border-mid':     c('--wiz-border-mid'),
+        'wiz-border-strong':  c('--wiz-border-strong'),
+        // ── Gold Accent (from "CD" in logo — primary CTA/actions) ──
+        'wiz-gold':           c('--wiz-gold'),
+        'wiz-gold-light':     c('--wiz-gold-light'),
+        'wiz-gold-dim':       c('--wiz-gold-dim'),
+        // ── Teal Accent (from "CONTINUOUS MAGIC" — info/links/hover) ─
+        'wiz-teal':           c('--wiz-teal'),
+        'wiz-teal-light':     c('--wiz-teal-light'),
+        'wiz-teal-dim':       c('--wiz-teal-dim'),
+        // ── Violet (wizard theme) ──────────────────────────────────
+        'wiz-violet':         c('--wiz-violet'),
+        'wiz-violet-dim':     c('--wiz-violet-dim'),
         // ── Typography ─────────────────────────────────────────────
-        'wiz-cream':        '#E8DCCA',
-        'wiz-gray':         '#A8A49C',
-        'wiz-muted':        '#9E9893',   // lifted to ~6.4:1 on body, ~5.1:1 on card bg
-        'wiz-dim':          '#878280',   // lifted to ~5.4:1 on body, ~4.3:1 on card bg — WCAG AA
+        'wiz-cream':          c('--wiz-cream'),
+        'wiz-gray':           c('--wiz-gray'),
+        'wiz-muted':          c('--wiz-muted'),
+        'wiz-dim':            c('--wiz-dim'),
         // ── Signal Colours ─────────────────────────────────────────
-        'sig-green':        '#22C55E',
-        'sig-green-dim':    '#071A10',
-        'sig-red':          '#EF4444',
-        'sig-red-dim':      '#1E0909',
-        'sig-yellow':       '#F59E0B',
-        'sig-yellow-dim':   '#1E1605',
-        'sig-blue':         '#60A5FA',
-        'sig-blue-dim':     '#08111E',
-        'sig-orange':       '#FB923C',
-        'sig-orange-dim':   '#1E0E05',
-        'sig-purple':       '#A855F7',
-        'sig-purple-dim':   '#150820',
+        'sig-green':          c('--sig-green'),
+        'sig-green-dim':      c('--sig-green-dim'),
+        'sig-red':            c('--sig-red'),
+        'sig-red-dim':        c('--sig-red-dim'),
+        'sig-yellow':         c('--sig-yellow'),
+        'sig-yellow-dim':     c('--sig-yellow-dim'),
+        'sig-blue':           c('--sig-blue'),
+        'sig-blue-dim':       c('--sig-blue-dim'),
+        'sig-orange':         c('--sig-orange'),
+        'sig-orange-dim':     c('--sig-orange-dim'),
+        'sig-purple':         c('--sig-purple'),
+        'sig-purple-dim':     c('--sig-purple-dim'),
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -48,28 +63,29 @@ export default {
       },
       fontSize: {
         '2xs': ['11px', '15px'],
-        xs:    ['12px', '17px'],
-        sm:    ['13px', '19px'],
-        base:  ['14px', '22px'],
-        md:    ['15px', '23px'],
-        lg:    ['16px', '24px'],
-        xl:    ['18px', '26px'],
+        xs:    ['13px', '18px'],
+        sm:    ['14px', '20px'],
+        base:  ['15px', '22px'],
+        md:    ['16px', '24px'],
+        lg:    ['17px', '26px'],
+        xl:    ['19px', '27px'],
         '2xl': ['22px', '30px'],
         '3xl': ['28px', '36px'],
       },
       boxShadow: {
-        'gold':     '0 0 20px rgba(201, 168, 76, 0.15), 0 0 40px rgba(201, 168, 76, 0.05)',
-        'gold-sm':  '0 0 10px rgba(201, 168, 76, 0.12)',
+        'gold':     '0 0 20px rgba(var(--wiz-gold) / 0.15), 0 0 40px rgba(var(--wiz-gold) / 0.05)',
+        'gold-sm':  '0 0 10px rgba(var(--wiz-gold) / 0.12)',
         'panel':    '0 4px 32px rgba(0, 0, 0, 0.50)',
         'card':     '0 2px 16px rgba(0, 0, 0, 0.40)',
         'inset-top':'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+        'light-card': '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
       },
       backgroundImage: {
-        'card-gradient':    'linear-gradient(180deg, #111827 0%, #0D1120 100%)',
-        'surface-gradient': 'linear-gradient(180deg, #0D1120 0%, #080B14 100%)',
-        'gold-gradient':    'linear-gradient(135deg, #C9A84C 0%, #D4B560 50%, #C9A84C 100%)',
-        'sidebar-gradient': 'linear-gradient(180deg, #0D1120 0%, #080B14 100%)',
-        'status-running':   'linear-gradient(90deg, rgba(245, 158, 11, 0.08) 0%, transparent 100%)',
+        'card-gradient':    'linear-gradient(180deg, rgb(var(--wiz-raised)) 0%, rgb(var(--wiz-surface)) 100%)',
+        'surface-gradient': 'linear-gradient(180deg, rgb(var(--wiz-surface)) 0%, rgb(var(--wiz-bg)) 100%)',
+        'gold-gradient':    'linear-gradient(135deg, rgb(var(--wiz-gold)) 0%, rgb(var(--wiz-gold-light)) 50%, rgb(var(--wiz-gold)) 100%)',
+        'sidebar-gradient': 'linear-gradient(180deg, rgb(var(--wiz-surface)) 0%, rgb(var(--wiz-bg)) 100%)',
+        'status-running':   'linear-gradient(90deg, rgba(var(--sig-yellow) / 0.08) 0%, transparent 100%)',
       },
       keyframes: {
         'fade-in': {
@@ -85,12 +101,12 @@ export default {
           '100%': { opacity: '1', transform: 'translateX(0)' },
         },
         'pulse-gold': {
-          '0%, 100%': { boxShadow: '0 0 8px rgba(201, 168, 76, 0.20)' },
-          '50%':       { boxShadow: '0 0 24px rgba(201, 168, 76, 0.45)' },
+          '0%, 100%': { boxShadow: '0 0 8px rgba(var(--wiz-gold) / 0.20)' },
+          '50%':       { boxShadow: '0 0 24px rgba(var(--wiz-gold) / 0.45)' },
         },
         'pulse-green': {
-          '0%, 100%': { boxShadow: '0 0 6px rgba(34, 197, 94, 0.25)' },
-          '50%':       { boxShadow: '0 0 16px rgba(34, 197, 94, 0.50)' },
+          '0%, 100%': { boxShadow: '0 0 6px rgba(var(--sig-green) / 0.25)' },
+          '50%':       { boxShadow: '0 0 16px rgba(var(--sig-green) / 0.50)' },
         },
         shimmer: {
           '0%':   { backgroundPosition: '-200% 0' },

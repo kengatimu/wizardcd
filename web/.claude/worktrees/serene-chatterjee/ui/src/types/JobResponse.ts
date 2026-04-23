@@ -18,4 +18,8 @@ export interface JobResponse {
   jobStatus:      JobLifecycleStatus
   executionState: JobExecutionStatus
   stateHistory?:  StateTransition[]
+  // Enriched from metadata.json — populated by GET /jobs/{jobId}/status
+  application?:   string
+  environment?:   string
+  createdAt?:     string   // ISO 8601
 }

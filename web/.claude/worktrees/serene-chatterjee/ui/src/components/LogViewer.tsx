@@ -9,6 +9,7 @@ import {
   type LogSection,
   detectLevel,
   lineClass,
+  formatLogLine,
   formatSectionDuration,
   parseLogSections,
 } from '../utils/logParser'
@@ -122,32 +123,114 @@ function SectionPanel({
       </button>
 
       {expanded && (
-        <div
-          ref={contentRef}
-          className="max-h-72 overflow-y-auto scrollbar-thin border-t border-wiz-border/20 bg-wiz-bg/30"
-        >
-          {section.lines.length === 0 ? (
-            <div className="px-4 py-2 text-2xs font-mono text-wiz-dim italic">
-              No output for this step.
-            </div>
-          ) : (
-            <div className="py-1">
-              {section.lines.map((line, j) => {
-                if (!line.trim()) return null
-                const level = detectLevel(line)
-                return (
-                  <div key={j} className={clsx(lineClass(level), 'text-2xs leading-relaxed')}>
-                    <span className="text-wiz-dim select-none mr-3 inline-block w-8 text-right font-mono">
-                      {section.lineStart + j}
-                    </span>
-                    {line}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <>
+          {/* Azure-style section header — pinned above scroll area */}
+          <SectionHeader title={section.title} status={status} durationMs={durationMs} />
+
+          {/* Scrollable log lines */}
+          <div
+            ref={contentRef}
+            className="max-h-72 overflow-y-auto scrollbar-thin bg-wiz-bg/30"
+          >
+            {section.lines.length === 0 ? (
+              <div className="px-4 py-2 text-2xs font-mono text-wiz-dim italic">
+                No output for this step.
+              </div>
+            ) : (
+              <div className="py-1">
+                {section.lines.map((line, j) => {
+                  if (!line.trim()) return null
+                  const level = detectLevel(line)
+                  const fmt   = formatLogLine(line)
+                  return (
+                    <div key={j} className={clsx(lineClass(level), 'flex items-start text-2xs leading-relaxed')}>
+                      <span className="text-wiz-dim/50 select-none font-mono shrink-0 w-8 text-right mr-2">
+                        {section.lineStart + j}
+                      </span>
+                      <span className="font-mono shrink-0 w-16 mr-3 select-none text-wiz-dim/40">
+                        {fmt.time ?? ''}
+                      </span>
+                      <span className="font-mono flex-1 min-w-0 break-words">
+                        {fmt.message || ' '}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section footer — pinned below scroll area */}
+          <SectionFooter title={section.title} status={status} />
+        </>
       )}
+    </div>
+  )
+}
+
+// ── Section header / footer banners ──────────────────────────────
+
+type SectionStatus = 'success' | 'warn' | 'error' | 'running'
+
+const SEP_BAR = '='.repeat(78)
+
+function statusLabel(s: SectionStatus): string {
+  switch (s) {
+    case 'success': return 'Completed successfully'
+    case 'error':   return 'Failed'
+    case 'warn':    return 'Completed with warnings'
+    default:        return 'Running...'
+  }
+}
+
+function statusColor(s: SectionStatus): string {
+  switch (s) {
+    case 'success': return 'text-sig-green'
+    case 'error':   return 'text-sig-red'
+    case 'warn':    return 'text-sig-yellow'
+    default:        return 'text-sig-yellow animate-pulse'
+  }
+}
+
+function SectionHeader({ title, status, durationMs }: {
+  title:      string
+  status:     SectionStatus
+  durationMs: number | null
+}) {
+  return (
+    <div className="font-mono text-2xs px-4 pt-2 pb-2 select-none bg-wiz-bg/40 border-b border-wiz-border/20">
+      <div className="text-wiz-dim/20 overflow-hidden whitespace-nowrap mb-1.5 tracking-widest">{SEP_BAR}</div>
+      <div className="space-y-0.5">
+        <div className="flex gap-2">
+          <span className="w-20 shrink-0 text-wiz-dim/50">Section</span>
+          <span className="text-wiz-dim/30 shrink-0">:</span>
+          <span className="text-wiz-cream/80">{title}</span>
+        </div>
+        {durationMs !== null && durationMs >= 0 && (
+          <div className="flex gap-2">
+            <span className="w-20 shrink-0 text-wiz-dim/50">Duration</span>
+            <span className="text-wiz-dim/30 shrink-0">:</span>
+            <span className="text-wiz-muted">{formatSectionDuration(durationMs)}</span>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <span className="w-20 shrink-0 text-wiz-dim/50">Status</span>
+          <span className="text-wiz-dim/30 shrink-0">:</span>
+          <span className={statusColor(status)}>{statusLabel(status)}</span>
+        </div>
+      </div>
+      <div className="text-wiz-dim/20 overflow-hidden whitespace-nowrap mt-1.5 tracking-widest">{SEP_BAR}</div>
+    </div>
+  )
+}
+
+function SectionFooter({ title, status }: { title: string; status: SectionStatus }) {
+  return (
+    <div className="font-mono text-2xs px-4 py-1.5 select-none bg-wiz-bg/40 border-t border-wiz-border/20 flex items-center gap-2 flex-wrap">
+      <span className="text-wiz-dim/50 uppercase tracking-wide">Section</span>
+      <span className="text-wiz-dim/30">—</span>
+      <span className="text-wiz-cream/70">{title}</span>
+      <span className={clsx(statusColor(status), 'font-semibold')}>{statusLabel(status)}</span>
     </div>
   )
 }
@@ -164,13 +247,20 @@ function FlatLines({
   return (
     <div className="py-2">
       {lines.map((line, i) => {
+        if (!line.trim()) return null
         const level = detectLevel(line)
+        const fmt   = formatLogLine(line)
         return (
-          <div key={i} className={lineClass(level)}>
-            <span className="text-wiz-dim select-none mr-3 text-2xs inline-block w-8 text-right">
+          <div key={i} className={clsx(lineClass(level), 'flex items-start')}>
+            <span className="text-wiz-dim/50 select-none font-mono text-2xs shrink-0 w-8 text-right mr-2">
               {lineOffset + i + 1}
             </span>
-            {line || ' '}
+            <span className="font-mono text-2xs shrink-0 w-16 mr-3 select-none text-wiz-dim/40">
+              {fmt.time ?? ''}
+            </span>
+            <span className="font-mono text-2xs flex-1 min-w-0 break-words">
+              {fmt.message || ' '}
+            </span>
           </div>
         )
       })}
@@ -346,17 +436,35 @@ export default function LogViewer({
 
   if (isFocused) {
     // ── Step-focused mode ──
+    const focusedStatus: SectionStatus =
+      isLoading                   ? 'running' :
+      selectedSection!.hasError   ? 'error'   :
+      selectedSection!.hasWarn    ? 'warn'     : 'success'
+
     body = (
-      <div ref={containerRef} onScroll={handleScroll} className={bodyClass}>
-        {focusedLines.length === 0
-          ? <div className="flex items-center justify-center h-full text-wiz-muted text-xs font-mono italic">
-              No output for this step.
-            </div>
-          : <FlatLines
-              lines={focusedLines}
-              lineOffset={selectedSection!.lineStart - 1}
-            />
-        }
+      <div className="flex flex-col log-console border border-wiz-border rounded-b-lg border-t-0" style={{ height: undefined }}>
+        {/* Azure-style header — outside scroll */}
+        <SectionHeader
+          title={selectedSection!.title}
+          status={focusedStatus}
+          durationMs={null}
+        />
+
+        {/* Scrollable lines */}
+        <div ref={containerRef} onScroll={handleScroll} className={clsx('flex-1 overflow-y-auto scrollbar-thin', height)}>
+          {focusedLines.length === 0
+            ? <div className="flex items-center justify-center h-full text-wiz-muted text-xs font-mono italic">
+                No output for this step.
+              </div>
+            : <FlatLines
+                lines={focusedLines}
+                lineOffset={selectedSection!.lineStart - 1}
+              />
+          }
+        </div>
+
+        {/* Footer — outside scroll */}
+        <SectionFooter title={selectedSection!.title} status={focusedStatus} />
       </div>
     )
   } else if (rawMode || !hasSections) {
@@ -392,10 +500,12 @@ export default function LogViewer({
                   <div className="max-h-48 overflow-y-auto scrollbar-thin border-t border-wiz-border/20 bg-wiz-bg/30 py-1">
                     {prelude.filter(l => l.trim()).map((line, j) => {
                       const level = detectLevel(line)
+                      const fmt   = formatLogLine(line)
                       return (
-                        <div key={j} className={clsx(lineClass(level), 'text-2xs leading-relaxed')}>
-                          <span className="text-wiz-dim select-none mr-3 inline-block w-8 text-right font-mono">{j + 1}</span>
-                          {line}
+                        <div key={j} className={clsx(lineClass(level), 'flex items-start text-2xs leading-relaxed')}>
+                          <span className="text-wiz-dim/50 select-none font-mono shrink-0 w-8 text-right mr-2">{j + 1}</span>
+                          <span className="font-mono shrink-0 w-16 mr-3 select-none text-wiz-dim/40">{fmt.time ?? ''}</span>
+                          <span className="font-mono flex-1 min-w-0 break-words">{fmt.message || ' '}</span>
                         </div>
                       )
                     })}

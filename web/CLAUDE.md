@@ -89,9 +89,9 @@ web/
 ├── runner-service-ms/              # Spring Boot 3.x, Java 21
 │   └── src/main/java/com/ebb/wizardcd/runner/
 │       ├── web/controller/
-│       │   ├── RunnerController.java    POST /jobs, GET /jobs, GET /jobs/:id/status, GET /jobs/:id/logs
+│       │   ├── RunnerController.java    POST /jobs, GET /jobs, GET /jobs/:id/status, GET /jobs/:id/logs, POST /jobs/:id/redeploy, POST /jobs/:id/rollback, GET /jobs/:id/rollback/preflight, GET /jobs/:id/config
 │       │   ├── AbortController.java     POST /jobs/:id/abort
-│       │   └── SshController.java       POST /ssh/test, GET /runner/public-keys, GET /runner/info
+│       │   └── SshController.java       POST /ssh/test, POST /ssh/preflight, GET /runner/public-keys, GET /runner/info
 │       ├── dto/
 │       │   ├── DeploymentRequest.java   (with CertPath + ExtraDir nested classes)
 │       │   ├── JobResponse.java
@@ -113,13 +113,23 @@ web/
 │           └── ProcessExecutorServiceImpl.java  Process timeout/abort
 ├── ui/                             # React 19 + TypeScript + Vite + Tailwind CSS
 │   └── src/
-│       ├── pages/DeployPage.tsx    ← main 6-step wizard
-│       ├── pages/JobDetailPage.tsx ← job detail: StepsSidebar (left) + LogViewer (right)
-│       ├── pages/DashboardPage.tsx ← control plane with metrics + jobs table
+│       ├── pages/DeployPage.tsx    ← main 4-step wizard (Target Server / Application / Deployment Options / Review & Deploy)
+│       ├── pages/JobDetailPage.tsx ← job detail: StepsSidebar (left) + LogViewer (right) + re-deploy/rollback buttons
+│       ├── pages/DashboardPage.tsx ← control plane with metrics + jobs table + re-deploy/rollback buttons
+│       ├── pages/ApplicationPage.tsx ← per-app view at /apps/:appName (env cards + deployment history)
+│       ├── pages/SettingsPage.tsx  ← preferences (auto-persist, no save button)
 │       ├── types/DeploymentRequest.ts  ← must mirror Java DTO exactly
-│       ├── api/jobs.ts             ← submitJob, fetchRunnerPublicKeys, fetchRunnerInfo, etc.
+│       ├── types/JobSummary.ts     ← includes jobType: 'deploy' | 'redeploy' | 'rollback'
+│       ├── api/jobs.ts             ← submitJob, redeployJob, rollbackJob, rollbackPreflight, runPreflight, fetchJobConfig, etc.
 │       ├── utils/logParser.ts      ← parseLogSections, LogSection, detectLevel, formatSectionDuration
-│       └── components/             FormField, DynamicList, ToggleSwitch, MiniUpload, LogViewer, etc.
+│       ├── utils/jarUtils.ts       ← detectJarType() shared by DeployPage + RedeployModal
+│       ├── hooks/useNotifications.ts ← polls jobs, detects terminal transitions, localStorage persistence
+│       ├── components/MissionControl.tsx   ← deploy wizard right sidebar (summary + context blocks)
+│       ├── components/RedeployModal.tsx    ← re-deploy modal (new JAR, reuse stored config)
+│       ├── components/RollbackModal.tsx    ← rollback modal (uses rollbackPreflight for backup info)
+│       ├── components/NotificationDropdown.tsx ← job-type-aware notification panel
+│       ├── components/LogViewer.tsx ← sectioned/raw/focused log display
+│       └── components/             FormField, DynamicList, ToggleSwitch, StatusBadge, SectionCard, etc.
 ├── documents/                      # Reference docs and deployment guides
 │   ├── wizardcd-project-overview.md
 │   ├── deploying-runner-service-ms-aws-ec2.sh   ← runner VM setup guide
@@ -190,7 +200,7 @@ wizardcd-client-sg:
 ├── runner-service-ms-0.0.1-SNAPSHOT.jar
 ├── runner/deploy.sh  (+ all other .sh scripts)
 ├── workspace/jobs/<jobId>/   (created per deployment)
-│   ├── input/deployment-config.yml + JAR + lib/ + certs/ + extra-dirs/
+│   ├── input/deployment-config.yml + request.json + JAR + lib/ + certs/ + extra-dirs/
 │   ├── build/<app>-<env>.tar.gz + stage/
 │   ├── logs/deploy.log  package.log  ssh.log
 │   └── wrappers/tanuki/
@@ -258,10 +268,15 @@ VITE_APP_ENV=UAT
 | `GET` | `/jobs/:id/status` | Lifecycle + execution state |
 | `GET` | `/jobs/:id/logs` | Last N lines of deploy.log (`?tail=200`) |
 | `POST` | `/jobs/:id/abort` | Abort running job |
+| `POST` | `/jobs/:id/redeploy` | Re-deploy with new JAR, reuse stored config — multipart/form-data |
+| `POST` | `/jobs/:id/rollback` | Rollback to last-successful backup |
+| `GET` | `/jobs/:id/rollback/preflight` | Check rollback availability + backup details |
+| `GET` | `/jobs/:id/config` | Retrieve stored `DeploymentRequest` JSON (`request.json`) |
 | `GET` | `/jobs/summary` | Dashboard metrics |
 | `GET` | `/runner/public-keys` | `{SIT, UAT, PROD}` public key strings |
 | `GET` | `/runner/info` | Runner public IP |
 | `POST` | `/ssh/test` | Test SSH connectivity runner → target |
+| `POST` | `/ssh/preflight` | Pre-flight checks: connectivity, write perms, disk, backups |
 
 ### Multipart POST /jobs parts
 ```
@@ -337,7 +352,7 @@ CREATED → VALIDATING → PREPARING_WORKSPACE → RUNNING → SUCCESS
 9. `scp TARBALL → /tmp/<app>-<env>.tar.gz` on target
 10. If `cert_paths` → loop: `ssh mkdir -p <targetPath>` + `scp <CERT_LOCAL>/. → <targetPath>/`
 11. If `extra_dirs` → loop: `ssh mkdir -p <target_path>` + `scp <EXTRA_LOCAL>/. → <target_path>/`
-12. `ssh "bash -s" < application-deployment.sh <APP> <ENV> <HOST> <BASE_PATH> <PORT> <JAVA_VER> <USER> <BACKUP> <MAX_BACKUPS>`
+12. `ssh "bash -s" < application-deployment.sh <APP> <ENV> <HOST> <BASE_PATH> <PORT> <JAVA_VER> <USER> <BACKUP> <MAX_BACKUPS> <STABILITY_WINDOW>`
 
 ### Phase 3 — Bash (application-deployment.sh on target VM)
 
@@ -348,7 +363,7 @@ CREATED → VALIDATING → PREPARING_WORKSPACE → RUNNING → SUCCESS
 5. `deploy_directory` for `bin/`, `conf/`, `lib/`
 6. Deploy any extra dirs from DROP_DIR (beyond bin/conf/lib)
 7. `start_app()` → run `<app>-wrapper.sh start`
-8. **Stabilization phase** (20s): check wrapper status=STARTED, PID file exists, process alive, port bound
+8. **Stabilization phase** (configurable 5–120s, default 20s): check wrapper status=STARTED, PID file exists, process alive, port bound — progress logged as "Monitoring: Xs/Ys (Z%)"
 9. Clean up DROP_DIR + stale tarballs in /tmp
 
 ---
@@ -419,6 +434,8 @@ apps:
       backup:
         perform_backup: true
         max_backups: 5
+      deployment_options:
+        stability_window: 20   # seconds (5–120, default 20)
 ```
 
 ---
@@ -445,6 +462,7 @@ interface DeploymentRequest {
   certPaths: CertPath[];
   sshUser; sshHost; sshPort; targetBasePath;
   performBackup; maxBackups;
+  stabilityWindow: number;   // 5–120 seconds, default 20
 }
 ```
 > ❌ `optionalPaths: string[]` — **COMPLETELY REMOVED**. Never reintroduce.
@@ -517,13 +535,14 @@ scp -i "$SSH_KEY" -P "$SSH_PORT" -r "${LOCAL}/." "${SSH_USER}@${SSH_HOST}:${REMO
 
 ---
 
-## DeployPage.tsx — Wizard Steps (3-Step Redesign — COMPLETE)
+## DeployPage.tsx — Wizard Steps (4-Step Design — COMPLETE)
 
 | # | Label | Key Panels |
 |---|-------|-----------|
-| 01 | Target Server | SSH Target Config panel: Environment dropdown + SSH USER/HOST/PORT + **Java Installation sub-section** (detect button auto-appears when SSH fields filled; auto-populates from connection test result); Firewall Setup panel (runner IP + copy + per-platform table); SSH Keys panel (copy/setup script + Test Connection) — **Next gated on ✓ connection test** |
-| 02 | Application | JAR upload (auto-fills appName, mainClass, jarName, serverPort from manifest + app config), lib ZIP upload (thin JAR only — shown conditionally), Runtime (runAsUser, serverPort, **targetBasePath as "Deploy Path"**) |
-| 03 | Deployment Options | Backup (toggle + maxBackups 1–5), Log Rotation (maxSize, maxFiles), Server Files (Certificates + Additional Directories — merged panel), JVM Configuration (GC, heap, container, workload profile, flags preview) |
+| 01 | Target Server | SSH Target Config panel: Environment dropdown + SSH USER/HOST/PORT + **Java Installation sub-section** (detect button auto-appears when SSH fields filled; auto-populates from connection test result); Firewall Setup panel (runner IP + copy + per-platform table); SSH Keys panel (copy/setup script); Verify Connection panel (pre-flight checklist) — **Next gated on ✓ connection test** |
+| 02 | Application | JAR upload (auto-fills appName, mainClass, jarName, serverPort from manifest + app config), lib ZIP upload (thin JAR only — shown conditionally), Runtime (runAsUser, serverPort, **targetBasePath as "Deploy Path"**) + **Profile mismatch warning** (detects spring.profiles.active from JAR vs selected environment) |
+| 03 | Deployment Options | Backup (toggle + maxBackups 1–5), Stability Window (presets 10/20/30/60s + custom 5–120), Log Rotation (maxSize, maxFiles), Server Files (Certificates + Additional Directories — merged panel), JVM Configuration (GC, heap, container, workload profile, flags preview) |
+| 04 | Review & Deploy | 3 review panels (Target Server / Application / Deployment Options) with Edit links back to each step; PROD warning banner; Deploy button |
 
 ### New Step 2 — Application Panel Details
 
@@ -667,7 +686,7 @@ Lines before first header → `prelude[]`.
 - Panel shell: `rounded-xl border border-wiz-border border-l-2 border-l-<color>/50 bg-wiz-panel overflow-hidden`
 - Panel header: `flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-<color>-dim/30`
 - Panel body: `p-5 flex flex-col gap-5`
-- Tab row: `flex gap-2 overflow-x-auto pb-1` ← NO `flex-wrap` — 3 tabs: Target Server / Application / Deployment Options
+- Tab row: `grid grid-cols-4 gap-2` — 4 tabs: Target Server / Application / Deployment Options / Review & Deploy
 - Colours: `sig-blue`=certs/SSH, `sig-green`=success, `sig-red`=error, `sig-yellow`=incomplete, `sig-purple`=PROD
 
 ---
@@ -846,6 +865,10 @@ Lines before first header → `prelude[]`.
 | `DeployPage.tsx` `buildRequest()` | Shape of `DeploymentRequest.ts` interfaces |
 | `JobExecutionStatus.java` stateHistory/completedAt | `types/JobResponse.ts` StateTransition / `types/JobSummary.ts` completedAt |
 | `JobResponse.java` application/environment/createdAt | `types/JobResponse.ts` application/environment/createdAt |
+| `JobSummary.java` jobType field | `types/JobSummary.ts` jobType |
+| `JobMetadata.java` jobType field | Backend re-deploy/rollback endpoints set this |
+| `RunnerController.java` redeploy/rollback endpoints | `api/jobs.ts` redeployJob/rollbackJob/rollbackPreflight |
+| `SshController.java` /ssh/preflight | `api/jobs.ts` runPreflight |
 
 ---
 
@@ -968,25 +991,177 @@ zip -r lib-deps.zip lib/    # creates lib/lib/*.jar in workspace, but find still
 #### Backend Validation Hardening
 - [x] `DeploymentValidatorServiceImpl.java` — xms/xmx now OPTIONAL (ergonomic defaults); format validated only when provided; added missing validations for jarName, runAsUser, targetBasePath, maxLogSize, maxLogFiles
 
+### Session — Re-deploy + Rollback + Notifications (2026-03-22)
+
+#### Re-deploy Flow — Full Stack (COMPLETE)
+- [x] `RunnerWorkspaceServiceImpl.java` — saves `request.json` (original DeploymentRequest) alongside `deployment-config.yml` in job workspace
+- [x] `RunnerController.java` — `POST /jobs/:id/redeploy` endpoint: loads stored config from `request.json`, accepts new JAR + optional lib/certs/extras via multipart, creates new job with `jobType="redeploy"`
+- [x] `RunnerController.java` — `GET /jobs/:id/config` endpoint: returns stored `DeploymentRequest` JSON
+- [x] `api/jobs.ts` — `redeployJob()` + `fetchJobConfig()` functions
+- [x] `RedeployModal.tsx` — NEW component: JAR upload + drag-drop, JAR type detection via `detectJarType()`, conditional lib ZIP upload for thin JARs, per-file upload progress tracking, environment badge
+- [x] `DashboardPage.tsx` — re-deploy button on successful terminal jobs in table rows
+- [x] `JobDetailPage.tsx` — re-deploy button in job detail header
+
+#### Rollback Flow — Full Stack (COMPLETE)
+- [x] `RunnerController.java` — `POST /jobs/:id/rollback` endpoint: loads original config, creates rollback job with `jobType="rollback"`
+- [x] `RunnerController.java` — `GET /jobs/:id/rollback/preflight` endpoint: SSH checks `backup/last-successful/latest.tar.gz` on target; returns `{ available, backupSize, backupDate, backupPath, targetHost, reason }`
+- [x] `RunnerServiceImpl.java` — `runRollback()` method for rollback job execution
+- [x] `api/jobs.ts` — `rollbackJob()` + `rollbackPreflight()` functions + `RollbackPreflightResult` interface
+- [x] `RollbackModal.tsx` — NEW component: shows backup info from preflight, PROD warning, 3-step rollback sequence, confirmation
+- [x] `DashboardPage.tsx` — rollback button on successful terminal jobs
+- [x] `JobDetailPage.tsx` — rollback button + DeploymentPhases detects rollback jobs (different phase labels)
+
+#### Pre-flight Checks — Full Stack (COMPLETE)
+- [x] `SshController.java` — `POST /ssh/preflight` endpoint: SSH-based checks (connectivity, write perms, disk space, backup files, release count)
+- [x] `api/jobs.ts` — `runPreflight()` function + `PreflightResult` interface
+- [x] `MissionControl.tsx` — Step 4 context block shows pre-flight check results (target reachable, permissions, disk, backup status, rollback availability)
+
+#### Job Type Tracking
+- [x] `JobMetadata.java` — added `jobType` field ("deploy", "redeploy", "rollback"); backward-compatible (null defaults to "deploy")
+- [x] `JobSummary.java` — added `jobType` field with getter defaulting null to "deploy"
+- [x] `types/JobSummary.ts` — added `jobType?: 'deploy' | 'redeploy' | 'rollback'`
+
+#### Notification System — Job Type Awareness
+- [x] `hooks/useNotifications.ts` — captures `job.jobType` when creating notifications; exports `JobType` type
+- [x] `NotificationDropdown.tsx` — job-type-specific labels matrix: deploy/redeploy/rollback × SUCCESS/FAILED/ABORTED; per-type icons (Rocket=deploy, RefreshCw=redeploy, RotateCcw=rollback)
+
+#### JAR Utilities
+- [x] `utils/jarUtils.ts` — NEW: `detectJarType(file): Promise<'fat' | 'thin'>` — checks for `BOOT-INF/` in ZIP; shared by DeployPage + RedeployModal
+
+#### Upload UX
+- [x] `RedeployModal.tsx` — "Uploading…" button text during upload phase (not "Deploying…")
+
+### Session — Validation UX + Draft Restore (2026-03-23)
+
+#### Live Field Validation with Error Banners
+- [x] `DeployPage.tsx` — **`FIELD_LABELS`** map: human-readable names for all required form fields
+- [x] `DeployPage.tsx` — **`StepErrorBanner`** component: inline red banner at top of each step listing missing required fields by name
+- [x] `DeployPage.tsx` — **`departed` state** (`Set<number>`): tracks which steps the user has navigated AWAY from; errors only show on departed steps (prevents premature display on first visit)
+- [x] `DeployPage.tsx` — **`errors` as `useMemo`**: replaces `useState` — recomputes whenever form/step/departed changes; only returns errors when `departed.has(step)`
+- [x] `DeployPage.tsx` — **Navigation functions updated**: `goTo()`, `handleNext()`, `handlePrev()` all mark current step as departed before transitioning
+- [x] `DeployPage.tsx` — **`handleSubmit` validation**: marks all steps as departed, finds first incomplete step, navigates there with toast error listing incomplete step labels
+- [x] `DeployPage.tsx` — **Red borders on fields**: `error` prop passed to all `RowInput`/`RowSelect`/`RowField` components; `wiz-input-error` CSS class applied when truthy
+- [x] `StepErrorBanner` added to all 3 step content blocks (Steps 1–3)
+
+#### Draft Restore Choice Banner
+- [x] `DeployPage.tsx` — **`draftBanner` state**: `{ appName, jarName, stepLabel } | null`
+- [x] `DeployPage.tsx` — **`resetToFresh()` callback**: clears session storage + resets all form/wizard state to initial
+- [x] `DeployPage.tsx` — **Draft restore banner JSX**: gold border banner with "Continue" (green) and "Start Fresh" (neutral) buttons; shows app name + step label + file re-upload reminder
+- [x] `DeployPage.tsx` — **Replaces auto-dismiss toast**: draft restore now shows actionable banner instead of passive toast notification
+- [x] `DeployPage.tsx` — **Mutual exclusion**: draft banner and Recent Deployments card never show simultaneously (`!draftBanner` condition on history card)
+
+#### Profile Mismatch Detection (existing, still working)
+- [x] `DeployPage.tsx` — **`parseServerPort()`** detects `spring.profiles.active` from JAR's default config files
+- [x] `DeployPage.tsx` — **`portDetection` state**: stores `{ source, profile }` from port detection
+- [x] `DeployPage.tsx` — **Profile mismatch warning card**: shown in Step 2 Port field when detected profile ≠ selected environment; two action paths: "Continue with ENV" (dismiss) or "Go to Step 1" (navigate to SSH Target Config to change environment and re-test)
+- [x] `DeployPage.tsx` — **`portMismatchDismissed` state**: suppresses warning after user acknowledges
+
+---
+
+## MissionControl.tsx — Deploy Sidebar
+
+A **read-only contextual sidebar** on the right side of the wizard. Shows:
+
+### Deploy Summary (always visible)
+- Environment, SSH target, install path, Java version
+- JAR type (fat/thin), main class, port
+- Backup config, stability window, log rotation
+
+### Context Blocks (step-specific)
+| Step | Block | Content |
+|------|-------|---------|
+| 1 | Connection | Runner → SSH → target server visual diagram |
+| 2 | JAR Analysis | Type, main class, port, app name with ✓ hints |
+| 3 | JVM Preview | GC, container mode, first 12 flags + "+N more" |
+| 4 | Pre-flight Check | Target reachable, permissions, disk, backup status, rollback availability, "What happens next" sequence |
+
+### Helper Functions
+- `javaLabel(path)` — extracts JVM dir name before /bin/java
+- `simpleClassName(fqcn)` — returns simple class name
+- `abbreviateJarName(jarName)` — strips version/SNAPSHOT suffix
+- `abbreviatePath(path)` — abbreviates long paths to fit ~30 chars
+
+---
+
+## Re-deploy Flow — Architecture
+
+### How it works
+1. Every successful deploy saves `request.json` in `workspace/jobs/<jobId>/input/`
+2. `POST /jobs/:id/redeploy` loads the original config, accepts new JAR/lib/certs/extras
+3. Creates a new job with `jobType="redeploy"`, reusing all config from the original
+4. Standard deploy pipeline runs with the new artifacts
+
+### RedeployModal.tsx
+- Triggered from Dashboard table rows and JobDetailPage header (successful jobs only)
+- JAR upload with drag-drop; detects fat/thin via `detectJarType()`
+- Conditional lib ZIP upload when thin JAR detected
+- Per-file upload progress bars
+- Shows source job reference
+
+### RollbackModal.tsx
+- Triggered from Dashboard table rows and JobDetailPage header
+- Pre-loads backup info via `GET /jobs/:id/rollback/preflight`
+- Shows: backup date, size, target host
+- PROD-specific warning banner
+- "What happens" — 3-step rollback sequence
+
+---
+
+### Session — Validation UX + Draft Restore (2026-03-23)
+
+#### Live Field Validation with Error Banners
+- [x] `DeployPage.tsx` — **`FIELD_LABELS`** map: human-readable names for all required form fields
+- [x] `DeployPage.tsx` — **`StepErrorBanner`** component: inline red banner at top of each step listing missing required fields by name
+- [x] `DeployPage.tsx` — **`departed` state** (`Set<number>`): tracks which steps the user has navigated AWAY from; errors only show on departed steps (prevents premature display on first visit)
+- [x] `DeployPage.tsx` — **`errors` as `useMemo`**: replaces `useState` — recomputes whenever form/step/departed changes; only returns errors when `departed.has(step)`
+- [x] `DeployPage.tsx` — **Navigation functions updated**: `goTo()`, `handleNext()`, `handlePrev()` all mark current step as departed before transitioning
+- [x] `DeployPage.tsx` — **`handleSubmit` validation**: marks all steps as departed, finds first incomplete step, navigates there with toast error listing incomplete step labels
+- [x] `DeployPage.tsx` — **Red borders on fields**: `error` prop passed to all `RowInput`/`RowSelect`/`RowField` components; `wiz-input-error` CSS class applied when truthy
+- [x] `StepErrorBanner` added to all 3 step content blocks (Steps 1–3)
+
+#### Draft Restore Choice Banner
+- [x] `DeployPage.tsx` — **`draftBanner` state**: `{ appName, jarName, stepLabel } | null`
+- [x] `DeployPage.tsx` — **`resetToFresh()` callback**: clears session storage + resets all form/wizard state to initial
+- [x] `DeployPage.tsx` — **Draft restore banner JSX**: gold border banner with "Continue" (green) and "Start Fresh" (neutral) buttons; shows app name + step label + file re-upload reminder
+- [x] `DeployPage.tsx` — **Replaces auto-dismiss toast**: draft restore now shows actionable banner instead of passive toast notification
+- [x] `DeployPage.tsx` — **Mutual exclusion**: draft banner and Recent Deployments card never show simultaneously (`!draftBanner` condition on history card)
+
 ---
 
 ## Pending / Known Issues
 
-None currently.
+- **Runner log formatting**: Runner backend logs have triple timestamps/levels. Could be simplified to match UI log format. Discussed but not yet implemented.
+- **Per-file upload progress in RedeployModal JSX**: state/handler logic done, JSX not wired
+- **Rollback confirmation popup**: showing backup info BEFORE clicking rollback — discussed, not implemented
 
 ---
 
-## Upcoming: Re-deploy Flow (Phase 2 & 3 — Not Yet Implemented)
+## Platform Roadmap (Phases 4–15)
 
-### Phase 2 — Backend additions
-- [ ] `RunnerWorkspaceServiceImpl` — save `request.json` alongside `deployment-config.yml` in job workspace
-- [ ] New endpoint: `GET /jobs/:id/config` → returns stored `DeploymentRequest` JSON
+Full detailed plan: `documents/wizardcd-platform-roadmap.md`
 
-### Phase 3 — Re-deploy flow
-- [ ] New endpoint: `POST /jobs/:id/redeploy` (new JAR only, reuses stored config)
-- [ ] "Re-deploy" button on Dashboard + Job Detail page
-- [ ] Minimal upload modal — no full wizard needed for repeat deploys
+> **Security philosophy:** Security is woven into EVERY phase (input validation, encryption, RBAC, audit) PLUS a dedicated hardening phase (11.5).
+
+| Phase | Name | Key Deliverables | Effort |
+|-------|------|-----------------|--------|
+| **4** | Database Foundation | PostgreSQL + JPA + Flyway, core schema, migration from file-based storage | 4–5 days |
+| **5** | App Registry + Config Mgmt + Orgs + Onboarding | CRUD API, saved app/env configs, **per-env config overrides** (YAML/properties/appsettings without rebuilding JARs), organizations + teams foundation, first-time setup wizard + contextual help | 6–8 days |
+| **6** | Auth & SSO | GitHub/Google/Azure OAuth, **SAML 2.0 + LDAP/AD** for enterprise, JWT, RBAC, CSRF, input sanitisation, brute-force lockout | 6–8 days |
+| **7** | Secret Management | AES-256-GCM encrypted secrets, 5 providers (Built-in/AWS/Vault/Azure/GCP), per-env scoping, injection, audit log | 13–15 days |
+| **8** | Deployment Strategies | In-Place (current), Blue-Green, Canary, Rolling — multi-VM + load balancer management | 8–10 days |
+| **9** | Pipelines + Scheduled Deploys | DEV→SIT→UAT→PROD promotion, approval gates, artifact storage, deployment windows, **scheduled deployments** (timezone-aware) | 7–9 days |
+| **10** | Integrations + CLI + API Docs | Slack/Teams, webhooks (in/out), GitHub/Azure DevOps/GitLab/Bitbucket triggers, email, **`wizardcd` CLI tool**, **Swagger/OpenAPI docs** | 9–11 days |
+| **11** | Analytics + Health & Status | DORA metrics, deploy comparison, health monitoring, platform usage dashboard, audit log, **service health status page** (HTTP/TCP/Process checks, uptime tracking, incident correlation) | 7–9 days |
+| **11.5** | Security Hardening, Compliance & Platform DR | TLS/HTTPS, rate limiting, artifact integrity (SHA-256 + GPG + vuln scanning), intrusion detection (12 event types), emergency kill switch, file integrity monitoring, **platform disaster recovery** (DB backups, config export/import, self-monitoring), security dashboard, CORS/headers | 8–10 days |
+| **12** | Multi-Language Runtime | .NET, Python, Node.js, Go, Custom runtimes via RuntimeAdapter interface | 10–14 days |
+| **13** | Parallel Jobs + Multi-VM + Dependencies | Thread pool executor, app+env concurrency locks, multi-VM targets (sequential/parallel/batched), job queue, **service dependencies + deploy chains** | 7–9 days |
+| **14** | Multi-Runner Scaling *(future — as user adoption grows)* | Distributed runner instances, pg_advisory_lock, shared storage (EFS), heartbeat/drain, admin UI | 8–10 days |
+| **15** | Subscriptions & Billing | Subscription tiers, feature gating, Stripe billing, revenue/cost dashboard, limit enforcement | 4–5 days |
+
+**Total: ~97–123 days, 274 UI acceptance tests across 13 phases**
+
+**Next up: Phase 4 — Database Foundation**
 
 ---
 
-*Last updated: 2026-03-21 — run `/update-memory` after each session*
+*Last updated: 2026-03-24 — run `/update-memory` after each session*
