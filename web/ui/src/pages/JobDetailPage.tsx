@@ -28,9 +28,10 @@ import {
 // ── Environment config ─────────────────────────────────────────────
 
 const ENV_CFG: Record<string, { badge: string; border: string; header: string; dim: string }> = {
+  DEV:  { badge: 'bg-sig-green/20  text-sig-green',  border: 'border-l-sig-green',   header: 'bg-sig-green/5',   dim: 'border-l-sig-green/20'   },
+  SIT:  { badge: 'bg-sig-blue/20   text-sig-blue',   border: 'border-l-sig-blue',    header: 'bg-sig-blue/5',    dim: 'border-l-sig-blue/20'    },
   UAT:  { badge: 'bg-sig-yellow/20 text-sig-yellow', border: 'border-l-sig-yellow',  header: 'bg-sig-yellow/5',  dim: 'border-l-sig-yellow/20'  },
   PROD: { badge: 'bg-sig-purple/20 text-sig-purple', border: 'border-l-sig-purple',  header: 'bg-sig-purple/5',  dim: 'border-l-sig-purple/20'  },
-  SIT:  { badge: 'bg-sig-blue/20   text-sig-blue',   border: 'border-l-sig-blue',    header: 'bg-sig-blue/5',    dim: 'border-l-sig-blue/20'    },
 }
 const FALLBACK_CFG = { badge: 'bg-wiz-border/20 text-wiz-muted', border: 'border-l-wiz-gold', header: 'bg-wiz-surface/20', dim: 'border-l-wiz-border/20' }
 function envCfg(env?: string | null) { return (env && ENV_CFG[env]) ? ENV_CFG[env] : FALLBACK_CFG }
@@ -429,7 +430,7 @@ function totalDuration(createdAt?: string, completedAt?: string): string | null 
 // ── Main Page ──────────────────────────────────────────────────────
 
 const ABORTABLE: JobLifecycleStatus[] = ['CREATED', 'VALIDATING', 'PREPARING_WORKSPACE', 'RUNNING']
-const ALL_ENVS = ['SIT', 'UAT', 'PROD']
+const ALL_ENVS = ['DEV', 'SIT', 'UAT', 'PROD']
 
 export default function JobDetailPage() {
   const { jobId }   = useParams<{ jobId: string }>()

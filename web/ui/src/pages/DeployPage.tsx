@@ -38,6 +38,7 @@ interface ExtraDirUpload {
 // ── Per-environment SSH key panel style tokens ────────────────────
 
 const ENV_KEY_STYLE = {
+  DEV:  { border: 'border-l-sig-green/60',  dot: 'bg-sig-green',  text: 'text-sig-green',  header: 'bg-sig-green-dim',  badge: 'border-sig-green/30 bg-sig-green-dim/40'    },
   SIT:  { border: 'border-l-sig-blue/60',   dot: 'bg-sig-blue',   text: 'text-sig-blue',   header: 'bg-sig-blue-dim',   badge: 'border-sig-blue/30 bg-sig-blue-dim/40'     },
   UAT:  { border: 'border-l-sig-yellow/60', dot: 'bg-sig-yellow', text: 'text-sig-yellow', header: 'bg-sig-yellow-dim', badge: 'border-sig-yellow/30 bg-sig-yellow-dim/40'  },
   PROD: { border: 'border-l-sig-purple/60', dot: 'bg-sig-purple', text: 'text-sig-purple', header: 'bg-sig-purple-dim', badge: 'border-sig-purple/30 bg-sig-purple-dim/40'  },
@@ -84,7 +85,7 @@ interface FormState {
 
 function getDefaultEnv(): string {
   const stored = localStorage.getItem('wiz-active-env')
-  return stored && ['SIT', 'UAT', 'PROD'].includes(stored)
+  return stored && ['DEV', 'SIT', 'UAT', 'PROD'].includes(stored)
     ? stored
     : (import.meta.env.VITE_APP_ENV ?? 'SIT')
 }
@@ -2011,6 +2012,7 @@ export default function DeployPage() {
                       setActiveEnv(e.target.value as ActiveEnv)
                     }}
                     options={[
+                      { value: 'DEV',  label: 'DEV — Development' },
                       { value: 'SIT',  label: 'SIT — System Integration Testing' },
                       { value: 'UAT',  label: 'UAT — User Acceptance Testing' },
                       { value: 'PROD', label: 'PROD — Production' },

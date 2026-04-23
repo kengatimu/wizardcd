@@ -14,6 +14,7 @@ import clsx from 'clsx'
 // ── Environment badge ─────────────────────────────────────────────
 
 const ENV_STYLES: Record<string, string> = {
+  DEV:  'bg-sig-green-dim text-sig-green border-sig-green/25',
   SIT:  'bg-sig-blue-dim text-sig-blue border-sig-blue/25',
   UAT:  'bg-sig-yellow-dim text-sig-yellow border-sig-yellow/25',
   PROD: 'bg-sig-purple-dim text-sig-purple border-sig-purple/25',
@@ -125,7 +126,7 @@ function formatDuration(createdAt: string, completedAt?: string, lifecycleStatus
 
 // ── Filter types ─────────────────────────────────────────────────
 
-type EnvFilter    = '' | 'SIT' | 'UAT' | 'PROD'
+type EnvFilter    = '' | 'DEV' | 'SIT' | 'UAT' | 'PROD'
 type StatusFilter = '' | 'SUCCESS' | 'FAILED' | 'RUNNING' | 'ABORTED'
 
 // ── Main Page ────────────────────────────────────────────────────
@@ -309,13 +310,15 @@ export default function DashboardPage() {
                 'bg-wiz-bg border rounded-lg px-3 py-2 text-xs font-mono font-semibold',
                 'focus:outline-none focus:border-wiz-gold/50 focus:ring-1 focus:ring-wiz-gold/20 transition-all cursor-pointer',
                 envFilter
-                  ? envFilter === 'SIT'  ? 'border-sig-blue/40 text-sig-blue'
+                  ? envFilter === 'DEV'  ? 'border-sig-green/40 text-sig-green'
+                  : envFilter === 'SIT'  ? 'border-sig-blue/40 text-sig-blue'
                   : envFilter === 'UAT'  ? 'border-sig-yellow/40 text-sig-yellow'
                   : 'border-sig-purple/40 text-sig-purple'
                   : 'border-wiz-border text-wiz-muted',
               )}
             >
               <option value="">All Environments</option>
+              <option value="DEV">DEV</option>
               <option value="SIT">SIT</option>
               <option value="UAT">UAT</option>
               <option value="PROD">PROD</option>

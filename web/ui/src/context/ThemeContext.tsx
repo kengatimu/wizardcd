@@ -9,9 +9,9 @@ import {
 } from 'react'
 
 type Theme = 'dark' | 'light'
-export type ActiveEnv = 'SIT' | 'UAT' | 'PROD'
+export type ActiveEnv = 'DEV' | 'SIT' | 'UAT' | 'PROD'
 
-const VALID_ENVS: ActiveEnv[] = ['SIT', 'UAT', 'PROD']
+const VALID_ENVS: ActiveEnv[] = ['DEV', 'SIT', 'UAT', 'PROD']
 
 const FALLBACK_ENV: ActiveEnv =
   (VALID_ENVS.includes(import.meta.env.VITE_APP_ENV as ActiveEnv)
@@ -23,9 +23,19 @@ function readEnv(): ActiveEnv {
   return stored && VALID_ENVS.includes(stored) ? stored : FALLBACK_ENV
 }
 
+const THEME_MIGRATION_KEY = 'wiz-theme-v2-migrated'
+
 function readTheme(): Theme {
+  // One-time migration: clear old dark preference from pre-light-theme era.
+  // After migration, the toggle works normally and choice is persisted.
+  if (!localStorage.getItem(THEME_MIGRATION_KEY)) {
+    localStorage.setItem(THEME_MIGRATION_KEY, '1')
+    localStorage.setItem('wiz-theme', 'light')
+    return 'light'
+  }
   const stored = localStorage.getItem('wiz-theme') as Theme | null
-  return stored === 'light' ? 'light' : 'dark'
+  if (!stored) return 'light'
+  return stored === 'dark' ? 'dark' : 'light'
 }
 
 interface ThemeContextValue {
@@ -36,7 +46,7 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme:        'dark',
+  theme:        'light',
   toggleTheme:  () => {},
   activeEnv:    'SIT',
   setActiveEnv: () => {},

@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" class="light" data-theme="light">
   <head>
-    <!-- Apply light-mode class synchronously before first paint to prevent flash of wrong theme -->
-    <script>try{if(localStorage.getItem('wiz-theme')==='light'){document.documentElement.classList.add('light');document.documentElement.setAttribute('data-theme','light');}}catch(e){}</script>
+    <!-- Apply theme class synchronously before first paint to prevent flash -->
+    <script>try{if(!localStorage.getItem('wiz-theme-v2-migrated')){localStorage.setItem('wiz-theme-v2-migrated','1');localStorage.setItem('wiz-theme','light');}var t=localStorage.getItem('wiz-theme');if(t==='dark'){document.documentElement.classList.remove('light');document.documentElement.setAttribute('data-theme','dark');}else{document.documentElement.classList.add('light');document.documentElement.setAttribute('data-theme','light');}}catch(e){}</script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="WizardCD — Config-driven deployment automation platform" />

@@ -1,6 +1,7 @@
 import { NavLink, Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Wand2, Settings, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
+import { useTheme } from '../context/ThemeContext'
 
 interface NavItemDef {
   to:     string
@@ -65,36 +66,22 @@ function SettingsLink() {
 }
 
 export default function Sidebar() {
+  const { theme } = useTheme()
+  const logoSrc = theme === 'light' ? '/wizardCD-logo-light.png' : '/wizardCD-logo.png'
+
   return (
-    /*
-     * bg-wiz-surface gives a dark (#0D1120) background in dark mode and
-     * white (#FFFFFF) in light mode — the sidebar now follows the theme.
-     * The logo banner keeps its own always-dark gradient so the PNG
-     * (which has a dark background) always looks crisp.
-     */
     <aside className="w-64 flex-shrink-0 flex flex-col bg-wiz-surface border-r border-wiz-border">
 
-      {/* ── Logo Banner ────────────────────────────────────────────
-           h-28 (112px) — must match Header's h-28 exactly so their
-           border-b lines form one continuous horizontal rule.
-           Logo area is always dark: the PNG has a dark background and
-           anchoring it to a fixed dark strip looks intentional in both
-           light and dark page modes.
-           PNG is 1488×720 (2.07:1); scaled to 256px wide → 124px
-           rendered height, 12px vertical crop — all content visible.
-           flex + items-stretch: img stretches to fill the full 112px
-           container — no inline baseline gap.
-      ──────────────────────────────────────────────────────────── */}
+      {/* ── Logo Banner ──────────────────────────────────────────── */}
       <Link
         to="/"
         className="h-28 flex-shrink-0 flex items-stretch overflow-hidden
-                   border-b border-wiz-border
+                   border-b border-wiz-border bg-wiz-surface
                    transition-opacity duration-150 hover:opacity-90"
-        style={{ background: 'linear-gradient(180deg, #0D1120 0%, #080B14 100%)' }}
         title="Go to Dashboard"
       >
         <img
-          src="/wizardCD-logo.png"
+          src={logoSrc}
           alt="WizardCD — Deployment Control Plane"
           className="w-full h-full object-cover"
           style={{ objectPosition: 'center center' }}

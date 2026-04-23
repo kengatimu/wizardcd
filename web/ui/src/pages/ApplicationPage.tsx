@@ -30,12 +30,13 @@ function formatDuration(start: string, end?: string): string {
 // ── Environment styling ────────────────────────────────────────────────
 
 const ENV_CFG: Record<string, { badge: string; border: string; bg: string }> = {
+  DEV:  { badge: 'bg-sig-green/20 text-sig-green',    border: 'border-l-sig-green',  bg: 'bg-sig-green/5'  },
   SIT:  { badge: 'bg-sig-blue/20 text-sig-blue',     border: 'border-l-sig-blue',   bg: 'bg-sig-blue/5'   },
   UAT:  { badge: 'bg-sig-yellow/20 text-sig-yellow',  border: 'border-l-sig-yellow', bg: 'bg-sig-yellow/5' },
   PROD: { badge: 'bg-sig-purple/20 text-sig-purple',  border: 'border-l-sig-purple', bg: 'bg-sig-purple/5' },
 }
 
-const ENVS = ['SIT', 'UAT', 'PROD'] as const
+const ENVS = ['DEV', 'SIT', 'UAT', 'PROD'] as const
 
 const TERMINAL_STATUSES = new Set(['SUCCESS', 'FAILED', 'ABORTED'])
 

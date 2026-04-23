@@ -23,23 +23,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         position="bottom-right"
         toastOptions={{
           duration: 4000,
-          style: {
-            background: '#111827',
-            color: '#E8DCCA',
-            border: '1px solid #243452',
-            borderRadius: '8px',
-            fontSize: '13px',
-            fontFamily: 'Inter, system-ui, sans-serif',
-            padding: '12px 16px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.50)',
-          },
+          className: 'wiz-toast',
           success: {
-            iconTheme: { primary: '#22C55E', secondary: '#071A10' },
-            style: { borderColor: 'rgba(34,197,94,0.25)' },
+            iconTheme: { primary: '#16A34A', secondary: '#ECFDF5' },
           },
           error: {
-            iconTheme: { primary: '#EF4444', secondary: '#1E0909' },
-            style: { borderColor: 'rgba(239,68,68,0.25)' },
+            iconTheme: { primary: '#DC2626', secondary: '#FEF2F2' },
           },
         }}
       />

@@ -1,14 +1,68 @@
 /* ================================================================
    WizardCD — Global Stylesheet
    Enterprise Control Plane UI
+   ================================================================
+   Theme system: CSS custom properties + Tailwind color references.
+   All colours in tailwind.config.js use c('--var-name') which generates
+   rgb(var(--var-name) / <alpha>) — so bg-wiz-bg/60, text-wiz-cream/80
+   etc. ALL automatically update when the variables change.
    ================================================================ */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── Base Layer ────────────────────────────────────────────────── */
+/* ================================================================
+   DARK THEME (default)
+   ================================================================ */
 @layer base {
+  :root {
+    /* ── Backgrounds ───────────────────────────────── */
+    --wiz-bg:             8 11 20;         /* #080B14 */
+    --wiz-surface:        13 17 32;        /* #0D1120 */
+    --wiz-raised:         17 24 39;        /* #111827 */
+    --wiz-panel:          22 29 46;        /* #161D2E */
+
+    /* ── Borders ───────────────────────────────────── */
+    --wiz-border:         27 40 64;        /* #1B2840 */
+    --wiz-border-mid:     36 52 82;        /* #243452 */
+    --wiz-border-strong:  46 64 104;       /* #2E4068 */
+
+    /* ── Gold Accent ───────────────────────────────── */
+    --wiz-gold:           201 168 76;      /* #C9A84C */
+    --wiz-gold-light:     212 181 96;      /* #D4B560 */
+    --wiz-gold-dim:       26 22 8;         /* #1A1608 */
+
+    /* ── Teal Accent ───────────────────────────────── */
+    --wiz-teal:           42 157 143;      /* #2A9D8F */
+    --wiz-teal-light:     64 181 166;      /* #40B5A6 */
+    --wiz-teal-dim:       10 26 23;        /* #0A1A17 */
+
+    /* ── Violet ────────────────────────────────────── */
+    --wiz-violet:         107 70 160;      /* #6B46A0 */
+    --wiz-violet-dim:     18 13 30;        /* #120D1E */
+
+    /* ── Typography ────────────────────────────────── */
+    --wiz-cream:          242 230 212;     /* #F2E6D4 */
+    --wiz-gray:           221 217 209;     /* #DDD9D1 */
+    --wiz-muted:          204 200 192;     /* #CCC8C0 */
+    --wiz-dim:            180 176 168;     /* #B4B0A8 */
+
+    /* ── Signal Colours ────────────────────────────── */
+    --sig-green:          34 197 94;       /* #22C55E */
+    --sig-green-dim:      7 26 16;         /* #071A10 */
+    --sig-red:            239 68 68;       /* #EF4444 */
+    --sig-red-dim:        30 9 9;          /* #1E0909 */
+    --sig-yellow:         245 158 11;      /* #F59E0B */
+    --sig-yellow-dim:     30 22 5;         /* #1E1605 */
+    --sig-blue:           96 165 250;      /* #60A5FA */
+    --sig-blue-dim:       8 17 30;         /* #08111E */
+    --sig-orange:         251 146 60;      /* #FB923C */
+    --sig-orange-dim:     30 14 5;         /* #1E0E05 */
+    --sig-purple:         168 85 247;      /* #A855F7 */
+    --sig-purple-dim:     21 8 32;         /* #150820 */
+  }
+
   *,
   *::before,
   *::after {
@@ -23,8 +77,8 @@
 
   body {
     margin: 0;
-    background-color: #080B14;
-    color: #E8DCCA;
+    background-color: rgb(var(--wiz-bg));
+    color: rgb(var(--wiz-cream));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-size: 15px;
     -webkit-font-smoothing: antialiased;
@@ -42,28 +96,15 @@
   }
 
   /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: #080B14;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #243452;
-    border-radius: 3px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #2E4068;
-  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: rgb(var(--wiz-bg)); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--wiz-border-mid)); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--wiz-border-strong)); }
 
   /* Selection */
   ::selection {
-    background: rgba(201, 168, 76, 0.20);
-    color: #E8DCCA;
+    background: rgba(var(--wiz-gold) / 0.20);
+    color: rgb(var(--wiz-cream));
   }
 }
 
@@ -85,21 +126,18 @@
   }
 
   .wiz-input::placeholder {
-    color: #6E6A64;
+    color: rgb(var(--wiz-muted) / 0.6);
     opacity: 1;
   }
 
-  /* ── Autofill override — Chrome overrides bg with bright white/yellow.
-     The only reliable fix is inset box-shadow (autofill cannot override it).
-     The 5000s transition delay prevents the autofill flash on load.      ── */
   .wiz-input:-webkit-autofill,
   .wiz-input:-webkit-autofill:hover,
   .wiz-input:-webkit-autofill:focus,
   .wiz-input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 1000px #080B14 inset !important;
-    box-shadow:         0 0 0 1000px #080B14 inset !important;
-    -webkit-text-fill-color: #E8DCCA !important;
-    caret-color: #E8DCCA;
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--wiz-bg)) inset !important;
+    box-shadow:         0 0 0 1000px rgb(var(--wiz-bg)) inset !important;
+    -webkit-text-fill-color: rgb(var(--wiz-cream)) !important;
+    caret-color: rgb(var(--wiz-cream));
     transition: background-color 5000s ease-in-out 0s;
   }
 
@@ -107,7 +145,6 @@
     @apply opacity-40 cursor-not-allowed;
   }
 
-  /* ── Hide number-input spinners — they render white on dark bg ── */
   .wiz-input[type="number"]::-webkit-outer-spin-button,
   .wiz-input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -124,7 +161,6 @@
   /* ── Select Base ── */
   .wiz-select {
     @apply wiz-input appearance-none cursor-pointer;
-    /* Chevron uses wiz-muted (#B8B4AC) — matches the updated global token */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23B8B4AC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
@@ -190,7 +226,6 @@
            shadow-card shadow-inset-top
            transition-colors duration-200;
   }
-
   .wiz-card:hover {
     @apply border-wiz-border-mid;
   }
@@ -218,27 +253,14 @@
            font-mono text-xs
            overflow-y-auto;
   }
-
   .log-line {
     @apply px-4 py-0.5 leading-5 text-wiz-gray
            hover:bg-wiz-surface/50 transition-colors duration-100;
   }
-
-  .log-line-error {
-    @apply text-sig-red;
-  }
-
-  .log-line-warn {
-    @apply text-sig-yellow;
-  }
-
-  .log-line-info {
-    @apply text-sig-blue;
-  }
-
-  .log-line-success {
-    @apply text-sig-green;
-  }
+  .log-line-error   { @apply text-sig-red; }
+  .log-line-warn    { @apply text-sig-yellow; }
+  .log-line-info    { @apply text-sig-blue; }
+  .log-line-success { @apply text-sig-green; }
 
   /* ── Metric card accent borders ── */
   .metric-total   { @apply border-t-2 border-t-sig-blue; }
@@ -246,38 +268,39 @@
   .metric-success { @apply border-t-2 border-t-sig-green; }
   .metric-failed  { @apply border-t-2 border-t-sig-red; }
   .metric-aborted { @apply border-t-2 border-t-wiz-muted; }
+
+  /* ── Toast notifications (theme-aware) ── */
+  .wiz-toast {
+    @apply bg-wiz-panel text-wiz-cream border border-wiz-border
+           font-sans text-sm;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+  }
 }
 
 /* ── Utility Layer ──────────────────────────────────────────────── */
 @layer utilities {
   .text-gold {
-    color: #C9A84C;
+    color: rgb(var(--wiz-gold));
   }
-
   .border-gold {
-    border-color: rgba(201, 168, 76, 0.30);
+    border-color: rgba(var(--wiz-gold) / 0.30);
   }
-
   .ring-gold {
-    --tw-ring-color: rgba(201, 168, 76, 0.20);
+    --tw-ring-color: rgba(var(--wiz-gold) / 0.20);
   }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 4px;
-  }
-
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #243452;
+    background: rgb(var(--wiz-border-mid));
     border-radius: 2px;
   }
-
-  /* Gold shimmer for loading skeleton */
   .skeleton {
     background: linear-gradient(
       90deg,
-      #111827 25%,
-      #1B2840 50%,
-      #111827 75%
+      rgb(var(--wiz-raised)) 25%,
+      rgb(var(--wiz-border)) 50%,
+      rgb(var(--wiz-raised)) 75%
     );
     background-size: 200% 100%;
     animation: shimmer 1.5s linear infinite;
@@ -285,196 +308,112 @@
 }
 
 /* ================================================================
-   LIGHT MODE OVERRIDES
-   Applied when ThemeContext toggles the .light class on <html>.
-   Using a CSS class (not [data-theme] attribute) as the hook gives
-   more reliable cascade behaviour across all browsers.
-   The sidebar uses bg-wiz-surface and therefore follows the theme.
-   Only the logo banner keeps its own always-dark inline style so the
-   dark-background PNG always looks sharp in both modes.
+   LIGHT THEME — "Warm Light"
+   ================================================================
+   Overrides CSS custom properties. Because ALL Tailwind colour
+   classes reference these variables, every opacity variant
+   (bg-wiz-bg/60, text-wiz-cream/80, border-wiz-border/40, etc.)
+   automatically picks up the light values. ONE override → 60+ classes fixed.
    ================================================================ */
 
-/* ── Body & Root ────────────────────────────────────────────────── */
-.light body {
-  background-color: #DDE1EE;   /* blue-slate — panels (white) stand out clearly */
-  color: #0D1220;
+.light {
+  /* ── Backgrounds ─────────────────────────────────── */
+  --wiz-bg:             246 245 242;       /* #F6F5F2 page bg */
+  --wiz-surface:        255 255 255;       /* #FFFFFF sidebar/header */
+  --wiz-raised:         246 245 242;       /* #F6F5F2 hover states */
+  --wiz-panel:          255 255 255;       /* #FFFFFF cards */
+
+  /* ── Borders ─────────────────────────────────────── */
+  --wiz-border:         228 225 220;       /* #E4E1DC warm border */
+  --wiz-border-mid:     210 206 200;       /* #D2CEC8 medium */
+  --wiz-border-strong:  186 182 174;       /* #BAB6AE strong */
+
+  /* ── Gold Accent — rich & visible on white ───────── */
+  --wiz-gold:           142 108 12;        /* #8E6C0C deep gold */
+  --wiz-gold-light:     168 130 20;        /* #A88214 hover */
+  --wiz-gold-dim:       253 247 231;       /* #FDF7E7 gold tint bg */
+
+  /* ── Teal Accent ─────────────────────────────────── */
+  --wiz-teal:           18 110 98;         /* #126E62 deep teal */
+  --wiz-teal-light:     32 140 127;        /* #208C7F hover */
+  --wiz-teal-dim:       234 251 248;       /* #EAFBF8 teal tint bg */
+
+  /* ── Violet ──────────────────────────────────────── */
+  --wiz-violet:         92 55 142;         /* #5C378E */
+  --wiz-violet-dim:     248 243 255;       /* #F8F3FF */
+
+  /* ── Typography ──────────────────────────────────── */
+  --wiz-cream:          20 20 35;          /* #141423 primary text */
+  --wiz-gray:           48 48 66;          /* #303042 body text */
+  --wiz-muted:          88 88 110;         /* #58586E secondary */
+  --wiz-dim:            130 130 150;       /* #828296 de-emphasised */
+
+  /* ── Signal colours — saturated for white bg ─────── */
+  --sig-green:          22 163 74;         /* #16A34A */
+  --sig-green-dim:      236 253 245;       /* #ECFDF5 */
+  --sig-red:            220 38 38;         /* #DC2626 */
+  --sig-red-dim:        254 242 242;       /* #FEF2F2 */
+  --sig-yellow:         202 106 2;         /* #CA6A02 darker amber */
+  --sig-yellow-dim:     255 249 232;       /* #FFF9E8 */
+  --sig-blue:           30 86 210;         /* #1E56D2 */
+  --sig-blue-dim:       237 244 255;       /* #EDF4FF */
+  --sig-orange:         210 76 10;         /* #D24C0A */
+  --sig-orange-dim:     255 244 234;       /* #FFF4EA */
+  --sig-purple:         126 42 210;        /* #7E2AD2 */
+  --sig-purple-dim:     247 242 255;       /* #F7F2FF */
 }
 
-/* ── Scrollbar ──────────────────────────────────────────────────── */
-.light ::-webkit-scrollbar-track {
-  background: #D4D8EC;
-}
-.light ::-webkit-scrollbar-thumb {
-  background: #A0A8C4;
-}
-.light ::-webkit-scrollbar-thumb:hover {
-  background: #8088AC;
-}
-
-/* ── Selection ──────────────────────────────────────────────────── */
-.light ::selection {
-  background: rgba(201, 168, 76, 0.30);
-  color: #0D1220;
-}
-
-/* ── Background Utilities ───────────────────────────────────────── */
-/* Clear depth hierarchy: sidebar < page bg < raised < panel */
-.light .bg-wiz-bg      { background-color: #DDE1EE !important; }  /* page content bg */
-.light .bg-wiz-surface { background-color: #CDD1E4 !important; }  /* sidebar — distinctly darker */
-.light .bg-wiz-raised  { background-color: #D8DCF0 !important; }  /* table headers, hover bg */
-.light .bg-wiz-panel   { background-color: #FFFFFF !important; }  /* card panels — clean white */
-/* bg-wiz-border used as a visual separator bar */
-.light .bg-wiz-border  { background-color: #B4BCDA !important; }
-/* Gold dim — warm tint for gold-panel focus backgrounds */
-.light .bg-wiz-gold-dim { background-color: #F5E8B0 !important; }
-
-/* ── Opacity-variant panel-header backgrounds ───────────────────── */
-/* bg-wiz-raised\/30 is used for gold-labelled panel headers.
-   On a white panel we need the tint to be warm & clearly visible. */
-.light .bg-wiz-raised\/30 {
-  background-color: rgba(210, 200, 155, 0.35) !important;  /* warm gold wash */
-}
-/* bg-sig-blue-dim\/40 is the Firewall Setup panel header */
-.light .bg-sig-blue-dim\/40 {
-  background-color: rgba(80, 140, 220, 0.14) !important;   /* visible blue wash */
-}
-
-/* ── Signal Dim Backgrounds ─────────────────────────────────────── */
-/* Saturated enough that even /30–/40 opacity on white is clearly visible */
-.light .bg-sig-green-dim  { background-color: #A8ECC0 !important; }
-.light .bg-sig-red-dim    { background-color: #F8A8A8 !important; }
-.light .bg-sig-yellow-dim { background-color: #F8D870 !important; }
-.light .bg-sig-blue-dim   { background-color: #A0C8F8 !important; }
-.light .bg-sig-orange-dim { background-color: #FAB878 !important; }
-.light .bg-sig-purple-dim { background-color: #CCA0F8 !important; }
-
-/* ── Text Utilities ─────────────────────────────────────────────── */
-.light .text-wiz-cream { color: #0D1220 !important; }   /* near-black primary text */
-.light .text-wiz-gray  { color: #252D4C !important; }   /* dark navy for labels */
-.light .text-wiz-muted { color: #4A5270 !important; }   /* mid-navy for hints */
-.light .text-wiz-dim   { color: #6878A0 !important; }   /* softer for de-emphasis */
-
-/* ── Signal & Brand Colours — dark variants for light backgrounds ─ */
-/* These neon/pastel shades are designed for dark mode; replace with
-   saturated-dark equivalents so they're readable on white panels.   */
-.light .text-wiz-gold   { color: #7A5200 !important; }   /* dark amber */
-.light .text-sig-blue   { color: #1050C0 !important; }   /* deep blue */
-.light .text-sig-yellow { color: #865600 !important; }   /* dark amber-yellow */
-.light .text-sig-green  { color: #096628 !important; }   /* deep green */
-.light .text-sig-red    { color: #B41010 !important; }   /* deep red */
-.light .text-sig-purple { color: #5808B8 !important; }   /* deep purple */
-.light .text-sig-orange { color: #8A4200 !important; }   /* dark orange */
-
-/* ── Border Utilities ───────────────────────────────────────────── */
-.light .border-wiz-border        { border-color: #AEB6D4 !important; }
-.light .border-wiz-border-mid    { border-color: #8E98BC !important; }
-.light .border-wiz-border-strong { border-color: #6E7AA4 !important; }
-
-/* ── Component Class Overrides ──────────────────────────────────── */
-
-/* Card — clearly elevated above the blue-slate page background */
-.light .wiz-card {
-  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFF 100%) !important;
-  border-color: #B4BCDA !important;
-  box-shadow:
-    0 4px 24px rgba(20, 50, 130, 0.09),
-    0 1px 4px  rgba(20, 50, 130, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
-}
-.light .wiz-card:hover {
-  border-color: #8E98BC !important;
-}
-
-/* Input — slightly blue-tinted white, stands out from panel */
+/* ── Light mode: inputs white with visible border ──────────────── */
 .light .wiz-input {
-  background-color: #F6F8FF !important;
-  border-color: #AEB6D4 !important;
-  color: #0D1220 !important;
-}
-.light .wiz-input::placeholder {
-  color: #7888B0 !important;
+  background-color: #FFFFFF !important;
+  border-color: rgb(var(--wiz-border-mid)) !important;
 }
 .light .wiz-input:focus {
-  border-color: #C9A84C !important;
-  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.15) !important;
-  background-color: #FFFDF7 !important;
-}
-
-/* Input autofill — keep light-mode bg on autofilled fields */
-.light .wiz-input:-webkit-autofill,
-.light .wiz-input:-webkit-autofill:hover,
-.light .wiz-input:-webkit-autofill:focus,
-.light .wiz-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #F6F8FF inset !important;
-  box-shadow:         0 0 0 1000px #F6F8FF inset !important;
-  -webkit-text-fill-color: #0D1220 !important;
-  caret-color: #0D1220;
-}
-
-/* Select — dark navy chevron for contrast on light bg */
-.light .wiz-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23252D4C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
-}
-
-/* Secondary Button */
-.light .btn-secondary {
   background-color: #FFFFFF !important;
-  border-color: #AEB6D4 !important;
-  color: #252D4C !important;
+  border-color: rgb(var(--wiz-gold)) !important;
 }
-.light .btn-secondary:hover:not(:disabled) {
-  background-color: #EEF1FF !important;
-  border-color: #8E98BC !important;
-  color: #0D1220 !important;
+.light .wiz-input::placeholder {
+  color: rgb(var(--wiz-dim)) !important;
 }
 
-/* Ghost Button */
-.light .btn-ghost {
-  color: #4A5270 !important;
-}
-.light .btn-ghost:hover {
-  background-color: #D8DCF0 !important;
-  color: #252D4C !important;
+/* ── Light mode: select chevron uses dark stroke ──────────────── */
+.light .wiz-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23303042' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
 }
 
-/* Icon Button */
-.light .btn-icon {
-  color: #4A5270 !important;
-}
-.light .btn-icon:hover {
-  background-color: #D8DCF0 !important;
-  color: #252D4C !important;
+/* ── Light mode: card shadow ──────────────────────────────────── */
+.light .wiz-card {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03) !important;
 }
 
-/* Section Label */
-.light .section-label {
-  color: #4A5270 !important;
+/* ── Light mode: panels get subtle shadow ─────────────────────── */
+.light .wiz-card,
+.light [class*="bg-wiz-panel"] {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03);
 }
 
-/* Divider */
-.light .wiz-divider {
-  border-color: #B4BCDA !important;
+/* ── Light mode: primary button white text ────────────────────── */
+.light .btn-primary {
+  color: #FFFFFF !important;
 }
 
-/* Log Console */
-.light .log-console {
-  background-color: #F2F5FF !important;
-  border-color: #AEB6D4 !important;
-}
-.light .log-line {
-  color: #252D4C !important;
-}
-.light .log-line:hover {
-  background-color: rgba(174, 182, 212, 0.25) !important;
+/* ── Light mode: sidebar subtle left shadow for depth ─────────── */
+.light aside {
+  box-shadow: 1px 0 4px rgba(0,0,0,0.04);
 }
 
-/* Skeleton Shimmer */
-.light .skeleton {
-  background: linear-gradient(
-    90deg,
-    #D4D8EC 25%,
-    #E4E8F8 50%,
-    #D4D8EC 75%
-  ) !important;
-  background-size: 200% 100% !important;
+/* ── Light mode: header subtle bottom shadow ──────────────────── */
+.light header {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
+
+/* ── Light mode: selection colour ─────────────────────────────── */
+.light ::selection {
+  background: rgba(18, 110, 98, 0.15);
+  color: rgb(var(--wiz-cream));
+}
+
+/* ── Light mode: scrollbar ────────────────────────────────────── */
+.light ::-webkit-scrollbar-track { background: rgb(var(--wiz-bg)); }
+.light ::-webkit-scrollbar-thumb { background: rgb(var(--wiz-border-mid)); border-radius: 3px; }
+.light ::-webkit-scrollbar-thumb:hover { background: rgb(var(--wiz-border-strong)); }

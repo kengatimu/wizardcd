@@ -7,12 +7,14 @@ import { useNotifications } from '../hooks/useNotifications'
 import NotificationDropdown from '../components/NotificationDropdown'
 
 const ENV_STYLE: Record<string, string> = {
+  DEV:  'bg-sig-green-dim  text-sig-green  border border-sig-green/20',
   SIT:  'bg-sig-blue-dim   text-sig-blue   border border-sig-blue/20',
   UAT:  'bg-sig-yellow-dim text-sig-yellow border border-sig-yellow/20',
   PROD: 'bg-sig-purple-dim text-sig-purple border border-sig-purple/20',
 }
 
 const ENV_TOOLTIP: Record<string, string> = {
+  DEV:  'Development — click to manage in Settings',
   SIT:  'System Integration Testing — click to manage in Settings',
   UAT:  'User Acceptance Testing — click to manage in Settings',
   PROD: 'Production — click to manage in Settings',
