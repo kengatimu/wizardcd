@@ -1,11 +1,7 @@
 /* ================================================================
    WizardCD — Global Stylesheet
-   Enterprise Control Plane UI
-   ================================================================
-   Theme system: CSS custom properties + Tailwind color references.
-   All colours in tailwind.config.js use c('--var-name') which generates
-   rgb(var(--var-name) / <alpha>) — so bg-wiz-bg/60, text-wiz-cream/80
-   etc. ALL automatically update when the variables change.
+   Brand: navy #0D2240 · crimson #8B1A1A · warm cream #F9F8F6
+   Type:  Inter (UI) · Libre Baskerville (headings) · JetBrains Mono (code)
    ================================================================ */
 
 @tailwind base;
@@ -13,54 +9,93 @@
 @tailwind utilities;
 
 /* ================================================================
-   DARK THEME (default)
+   DESIGN TOKENS — CSS Custom Properties
+   Single source of truth. All Tailwind classes reference these via
+   the c() helper in tailwind.config.js.
    ================================================================ */
 @layer base {
   :root {
     /* ── Backgrounds ───────────────────────────────── */
-    --wiz-bg:             8 11 20;         /* #080B14 */
-    --wiz-surface:        13 17 32;        /* #0D1120 */
-    --wiz-raised:         17 24 39;        /* #111827 */
-    --wiz-panel:          22 29 46;        /* #161D2E */
+    --wiz-bg:             249 248 246;   /* #F9F8F6 — warm off-white page       */
+    --wiz-surface:        255 255 255;   /* #FFFFFF — white card / input surface */
+    --wiz-raised:         248 246 241;   /* #F8F6F1 — raised / hover             */
+    --wiz-panel:          13 34 64;      /* #0D2240 — NAVY (sidebar, dark panels) */
 
     /* ── Borders ───────────────────────────────────── */
-    --wiz-border:         27 40 64;        /* #1B2840 */
-    --wiz-border-mid:     36 52 82;        /* #243452 */
-    --wiz-border-strong:  46 64 104;       /* #2E4068 */
+    --wiz-border:         234 230 223;   /* #EAE6DF — stone                      */
+    --wiz-border-mid:     200 192 180;   /* #C8C0B4                              */
+    --wiz-border-strong:  160 150 135;   /* #A09687                              */
 
-    /* ── Gold Accent ───────────────────────────────── */
-    --wiz-gold:           201 168 76;      /* #C9A84C */
-    --wiz-gold-light:     212 181 96;      /* #D4B560 */
-    --wiz-gold-dim:       26 22 8;         /* #1A1608 */
+    /* ── Primary Accent — Crimson ─────────────────── */
+    --wiz-gold:           139 26 26;     /* #8B1A1A — crimson (light bg uses)    */
+    --wiz-gold-light:     122 21 21;     /* #7A1515 — crimson hover/darker       */
+    --wiz-gold-dim:       253 243 243;   /* #FDF3F3 — crimson tint background    */
 
-    /* ── Teal Accent ───────────────────────────────── */
-    --wiz-teal:           42 157 143;      /* #2A9D8F */
-    --wiz-teal-light:     64 181 166;      /* #40B5A6 */
-    --wiz-teal-dim:       10 26 23;        /* #0A1A17 */
+    /* ── Crimson-dark for navy surface ────────────── */
+    --wiz-teal:           212 64 64;     /* #D44040 — brightened crimson on navy */
+    --wiz-teal-light:     220 80 80;     /* #DC5050                              */
+    --wiz-teal-dim:       44 12 12;      /* dark navy tint (not for light bg)    */
 
-    /* ── Violet ────────────────────────────────────── */
-    --wiz-violet:         107 70 160;      /* #6B46A0 */
-    --wiz-violet-dim:     18 13 30;        /* #120D1E */
+    /* ── Typography ──────────────────────────────────
+       Tones tuned for sharp readability on the warm cream page bg.
+       Primary text carries a faint navy tint so body copy feels related
+       to the brand wordmark rather than reading as anonymous grey.
+       Muted tiers are darker than a literal grey ramp — they still feel
+       "muted" because the text size + uppercase tracking does that work,
+       but the contrast holds up under WCAG AA (4.5:1+) at all tiers. */
+    --wiz-cream:          30 30 50;      /* #1E1E32 — primary body, navy-tinted near-black (was #333333) */
+    --wiz-gray:           65 65 85;      /* #414155 — secondary text                                     */
+    --wiz-muted:          90 90 108;     /* #5A5A6C — muted labels, hints (was #666666 — too grey)       */
+    --wiz-dim:            128 128 145;   /* #808091 — placeholders (was #999999, failed AA at 2.8:1)     */
 
-    /* ── Typography ────────────────────────────────── */
-    --wiz-cream:          242 230 212;     /* #F2E6D4 */
-    --wiz-gray:           221 217 209;     /* #DDD9D1 */
-    --wiz-muted:          204 200 192;     /* #CCC8C0 */
-    --wiz-dim:            180 176 168;     /* #B4B0A8 */
+    /* ── Violet (kept for PROD env) ───────────────── */
+    --wiz-violet:         124 58 237;    /* #7C3AED */
+    --wiz-violet-dim:     245 243 255;   /* #F5F3FF */
 
-    /* ── Signal Colours ────────────────────────────── */
-    --sig-green:          34 197 94;       /* #22C55E */
-    --sig-green-dim:      7 26 16;         /* #071A10 */
-    --sig-red:            239 68 68;       /* #EF4444 */
-    --sig-red-dim:        30 9 9;          /* #1E0909 */
-    --sig-yellow:         245 158 11;      /* #F59E0B */
-    --sig-yellow-dim:     30 22 5;         /* #1E1605 */
-    --sig-blue:           96 165 250;      /* #60A5FA */
-    --sig-blue-dim:       8 17 30;         /* #08111E */
-    --sig-orange:         251 146 60;      /* #FB923C */
-    --sig-orange-dim:     30 14 5;         /* #1E0E05 */
-    --sig-purple:         168 85 247;      /* #A855F7 */
-    --sig-purple-dim:     21 8 32;         /* #150820 */
+    /* ── Signal colours — calibrated for white bg ── */
+    --sig-green:          22 163 74;     /* #16A34A */
+    --sig-green-dim:      240 253 244;   /* #F0FDF4 */
+    --sig-red:            220 38 38;     /* #DC2626 */
+    --sig-red-dim:        254 242 242;   /* #FEF2F2 */
+    --sig-yellow:         217 119 6;     /* #D97706 */
+    --sig-yellow-dim:     255 251 235;   /* #FFFBEB */
+    --sig-blue:           37 99 235;     /* #2563EB */
+    --sig-blue-dim:       239 246 255;   /* #EFF6FF */
+    --sig-orange:         234 88 12;     /* #EA580C */
+    --sig-orange-dim:     255 247 237;   /* #FFF7ED */
+    --sig-purple:         124 58 237;    /* #7C3AED */
+    --sig-purple-dim:     245 243 255;   /* #F5F3FF */
+  }
+
+  /* ── Dark terminal scope ─────────────────────────────────────────
+     Applied to the LogViewer wrapper. Redefines every colour token
+     so ALL Tailwind classes inside resolve to dark-terminal values —
+     one class updates 60+ colour usages with zero arbitrary values. */
+  .log-dark {
+    --wiz-bg:            13  17  23;   /* #0D1117 — terminal body (deepest dark)   */
+    --wiz-surface:       22  27  34;   /* #161B22 — toolbar, section buttons       */
+    --wiz-raised:        33  38  45;   /* #21262D — hover                          */
+    --wiz-panel:         22  27  34;
+    --wiz-border:        48  54  61;   /* #30363D */
+    --wiz-border-mid:    68  76  86;   /* #444C56 */
+    --wiz-border-strong: 86  95 106;   /* #565F6A */
+    --wiz-cream:        236 240 246;   /* #ECF0F6 — primary log text (slightly brighter for crisper read)  */
+    --wiz-gray:         210 217 224;   /* #D2D9E0 — secondary                                              */
+    --wiz-muted:        160 168 180;   /* #A0A8B4 — muted labels (was #8B949E — too dim)                   */
+    --wiz-dim:          130 138 150;   /* #828A96 — placeholders (was #6E7681 — too dim, failed AA on dark) */
+    --wiz-gold:         210 168  85;   /* lighter gold on dark bg                  */
+    --wiz-gold-dim:      38  32   8;
+    --wiz-gold-light:   220 185 110;
+    --sig-green:         63 185  80;   /* #3FB950 — vivid green on dark            */
+    --sig-green-dim:      9  20  11;
+    --sig-red:          255 123 114;   /* #FF7B72 — soft red on dark               */
+    --sig-red-dim:       38  13  11;
+    --sig-yellow:       227 179  65;   /* #E3B341 — amber on dark                  */
+    --sig-yellow-dim:    38  29   8;
+    --sig-blue:         121 192 255;   /* #79C0FF */
+    --sig-blue-dim:      13  17  38;
+    --sig-purple:       188 140 255;
+    --sig-purple-dim:    20  13  38;
   }
 
   *,
@@ -78,14 +113,37 @@
   body {
     margin: 0;
     background-color: rgb(var(--wiz-bg));
+    /* Subtle dot-grid texture — adds depth between the cream page bg and
+       the white card surfaces. Navy dots (matches sidebar) + crimson hint
+       at low opacity so the brand colours feel woven into the surface. */
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(13, 34, 64, 0.07) 1px, transparent 0);
+    background-size: 22px 22px;
+    background-attachment: fixed;
     color: rgb(var(--wiz-cream));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-size: 15px;
+
+    /* Body type — bumped from 12.5px → 13.25px (+6%) for legibility at
+       modern viewport sizes; line-height tightened from 1.85 → 1.6 so
+       paragraphs feel confident rather than airy. */
+    font-size: 13.25px;
+    line-height: 1.6;
+
+    /* Inter stylistic alternates that materially improve clarity:
+         ss02  — disambiguates I / l / 1 and similar shapes
+         cv11  — single-storey 'g' (cleaner at small sizes)
+         tnum  — tabular numerals so digits align in tables/metrics
+         calt  — contextual alternates */
+    font-feature-settings: 'ss02', 'cv11', 'tnum', 'calt';
+
+    /* Cross-browser anti-aliasing + legibility hints */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-synthesis: none;
   }
 
-  /* Hide number input spinners */
+  /* Remove number input spinners */
   input[type='number']::-webkit-inner-spin-button,
   input[type='number']::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -95,136 +153,137 @@
     -moz-appearance: textfield;
   }
 
-  /* Custom scrollbar */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: rgb(var(--wiz-bg)); }
-  ::-webkit-scrollbar-thumb { background: rgb(var(--wiz-border-mid)); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--wiz-border-strong)); }
+  /* Scrollbar — thin, cream/stone */
+  ::-webkit-scrollbar        { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track  { background: rgb(var(--wiz-bg)); }
+  ::-webkit-scrollbar-thumb  { background: rgb(var(--wiz-border)); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--wiz-border-mid)); }
 
   /* Selection */
   ::selection {
-    background: rgba(var(--wiz-gold) / 0.20);
-    color: rgb(var(--wiz-cream));
+    background: rgba(139, 26, 26, 0.10);
+    color: rgb(var(--wiz-panel));
   }
+
+  /* Dark terminal scrollbars — scoped so only LogViewer is affected */
+  .log-dark ::-webkit-scrollbar-track { background: rgb(22 27 34); }
+  .log-dark ::-webkit-scrollbar-thumb { background: rgb(48 54 61); border-radius: 3px; }
+  .log-dark ::-webkit-scrollbar-thumb:hover { background: rgb(68 76 86); }
 }
 
 /* ── Component Layer ────────────────────────────────────────────── */
 @layer components {
 
-  /* ── Section Labels (monospace uppercase) ── */
+  /* ── Section / field labels ─────────────────────────────────────
+     9px, uppercase, crimson, wide tracking. Used in metric cards,
+     table headers, form field labels, panel sub-titles.           */
   .section-label {
-    @apply font-mono text-xs font-semibold uppercase tracking-widest text-wiz-muted;
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgb(var(--wiz-gold));
   }
 
-  /* ── Input Base ── */
+  /* ── Inputs ─────────────────────────────────────────────────── */
   .wiz-input {
-    @apply w-full bg-wiz-bg border border-wiz-border rounded-md
-           px-3 py-2 text-base text-wiz-cream placeholder-wiz-muted
-           font-mono
+    @apply w-full bg-wiz-surface border border-wiz-border rounded
+           px-3 py-1.5 text-base text-wiz-cream placeholder:text-wiz-dim
            transition-all duration-150
-           focus:outline-none focus:border-wiz-gold focus:ring-1 focus:ring-wiz-gold/20;
+           focus:outline-none focus:border-wiz-panel;
   }
-
-  .wiz-input::placeholder {
-    color: rgb(var(--wiz-muted) / 0.6);
-    opacity: 1;
-  }
-
-  .wiz-input:-webkit-autofill,
-  .wiz-input:-webkit-autofill:hover,
-  .wiz-input:-webkit-autofill:focus,
-  .wiz-input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 1000px rgb(var(--wiz-bg)) inset !important;
-    box-shadow:         0 0 0 1000px rgb(var(--wiz-bg)) inset !important;
-    -webkit-text-fill-color: rgb(var(--wiz-cream)) !important;
-    caret-color: rgb(var(--wiz-cream));
-    transition: background-color 5000s ease-in-out 0s;
-  }
-
-  .wiz-input:disabled {
-    @apply opacity-40 cursor-not-allowed;
-  }
-
-  .wiz-input[type="number"]::-webkit-outer-spin-button,
-  .wiz-input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-  .wiz-input[type="number"] {
-    -moz-appearance: textfield;
+  .wiz-input:focus {
+    /* Custom shadow can't be used via @apply — write as plain CSS */
+    box-shadow: 0 0 0 3px rgba(13, 34, 64, 0.08);
   }
 
   .wiz-input-error {
-    @apply border-sig-red focus:border-sig-red focus:ring-sig-red/20;
+    @apply border-wiz-gold focus:border-wiz-gold;
+  }
+  .wiz-input-error:focus {
+    box-shadow: 0 0 0 2px rgba(139, 26, 26, 0.10);
   }
 
-  /* ── Select Base ── */
+  .wiz-input:disabled {
+    @apply bg-wiz-raised text-wiz-dim cursor-not-allowed;
+  }
+
+  /* ── Select ── */
   .wiz-select {
     @apply wiz-input appearance-none cursor-pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23B8B4AC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 36px;
+    background-position: right 10px center;
+    padding-right: 32px;
   }
 
-  /* ── Button Variants ── */
+  /* ── Buttons ─────────────────────────────────────────────────── */
+
+  /* Primary — crimson fill */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2
-           bg-wiz-gold text-wiz-bg
-           font-semibold text-sm
-           px-5 py-2.5 rounded-md
+    @apply inline-flex items-center justify-center gap-1.5
+           bg-wiz-gold text-white
+           font-semibold text-xs tracking-[0.02em]
+           px-4 py-2 rounded
            transition-all duration-150
-           hover:bg-wiz-gold-light hover:shadow-gold-sm
+           hover:bg-wiz-gold-light
            active:scale-[0.98]
-           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-wiz-gold disabled:hover:shadow-none;
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* Secondary — outlined */
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2
-           bg-wiz-raised border border-wiz-border text-wiz-gray
-           font-medium text-sm
-           px-5 py-2.5 rounded-md
+    @apply inline-flex items-center justify-center gap-1.5
+           bg-wiz-surface border border-wiz-border text-wiz-cream
+           font-medium text-xs
+           px-4 py-2 rounded
            transition-all duration-150
-           hover:border-wiz-border-mid hover:text-wiz-cream
+           hover:bg-wiz-raised hover:border-wiz-border-mid
            active:scale-[0.98]
-           disabled:opacity-40 disabled:cursor-not-allowed;
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* Danger — red */
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2
-           bg-sig-red-dim border border-sig-red/30 text-sig-red
-           font-semibold text-sm
-           px-5 py-2.5 rounded-md
+    @apply inline-flex items-center justify-center gap-1.5
+           bg-sig-red text-white
+           font-semibold text-xs
+           px-4 py-2 rounded
            transition-all duration-150
-           hover:bg-sig-red/20 hover:border-sig-red/50
+           hover:bg-sig-red/90
            active:scale-[0.98]
-           disabled:opacity-40 disabled:cursor-not-allowed;
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* Ghost — transparent */
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2
+    @apply inline-flex items-center justify-center gap-1.5
            text-wiz-muted
-           font-medium text-sm
-           px-3 py-2 rounded-md
+           font-medium text-xs
+           px-3 py-2 rounded
            transition-all duration-150
-           hover:bg-wiz-raised hover:text-wiz-gray
+           hover:bg-wiz-raised hover:text-wiz-cream
            active:scale-[0.98];
   }
 
+  /* Icon button */
   .btn-icon {
     @apply inline-flex items-center justify-center
-           w-8 h-8 rounded-md
+           w-8 h-8 rounded
            text-wiz-muted
            transition-all duration-150
-           hover:bg-wiz-raised hover:text-wiz-gray
+           hover:bg-wiz-raised hover:text-wiz-cream
            active:scale-[0.95];
   }
 
-  /* ── Card ── */
+  /* ── Card ─────────────────────────────────────────────────────
+     Clean white card, stone border, very subtle shadow.
+     No gradients, no glows — just depth.                        */
   .wiz-card {
-    @apply bg-card-gradient border border-wiz-border rounded-xl
-           shadow-card shadow-inset-top
+    @apply bg-wiz-surface border border-wiz-border rounded
            transition-colors duration-200;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   }
   .wiz-card:hover {
     @apply border-wiz-border-mid;
@@ -235,185 +294,163 @@
     @apply border-t border-wiz-border/60;
   }
 
-  /* ── Badge base ── */
+  /* ── Badge ── */
   .badge {
     @apply inline-flex items-center gap-1.5
-           font-mono text-xs font-semibold
-           px-2.5 py-1 rounded-md;
+           text-xs font-semibold
+           px-2 py-0.5 rounded-sm;
   }
 
-  /* ── Page fade-in animation ── */
-  .page-enter {
-    @apply animate-fade-in;
-  }
+  /* ── Metric card accent borders (left border, crimson-family) ── */
+  .metric-total   { @apply border-l-[3px] border-l-wiz-gold; }
+  .metric-running { @apply border-l-[3px] border-l-sig-yellow; }
+  .metric-success { @apply border-l-[3px] border-l-sig-green; }
+  .metric-failed  { @apply border-l-[3px] border-l-sig-red; }
+  .metric-aborted { @apply border-l-[3px] border-l-wiz-border-strong; }
 
-  /* ── Log console ── */
+  /* ── Log console ─────────────────────────────────────────────
+     Warm cream background, dark body text, coloured levels.    */
   .log-console {
-    @apply bg-wiz-bg border border-wiz-border rounded-lg
+    @apply bg-wiz-bg border border-wiz-border rounded
            font-mono text-xs
            overflow-y-auto;
   }
-  .log-line {
-    @apply px-4 py-0.5 leading-5 text-wiz-gray
-           hover:bg-wiz-surface/50 transition-colors duration-100;
-  }
+  .log-line         { @apply px-4 py-0.5 leading-5 text-wiz-cream hover:bg-wiz-surface transition-colors duration-75; }
   .log-line-error   { @apply text-sig-red; }
   .log-line-warn    { @apply text-sig-yellow; }
   .log-line-info    { @apply text-sig-blue; }
   .log-line-success { @apply text-sig-green; }
 
-  /* ── Metric card accent borders ── */
-  .metric-total   { @apply border-t-2 border-t-sig-blue; }
-  .metric-running { @apply border-t-2 border-t-sig-yellow; }
-  .metric-success { @apply border-t-2 border-t-sig-green; }
-  .metric-failed  { @apply border-t-2 border-t-sig-red; }
-  .metric-aborted { @apply border-t-2 border-t-wiz-muted; }
-
-  /* ── Toast notifications (theme-aware) ── */
+  /* ── Toast ── */
   .wiz-toast {
-    @apply bg-wiz-panel text-wiz-cream border border-wiz-border
-           font-sans text-sm;
-    border-radius: 8px !important;
-    padding: 12px 16px !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+    @apply bg-wiz-surface text-wiz-cream border border-wiz-border
+           font-sans text-xs;
+    border-radius: 4px !important;
+    padding: 10px 14px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.10) !important;
+  }
+
+  /* ── Page enter animation ── */
+  .page-enter {
+    @apply animate-fade-in;
   }
 }
 
 /* ── Utility Layer ──────────────────────────────────────────────── */
 @layer utilities {
-  .text-gold {
-    color: rgb(var(--wiz-gold));
-  }
-  .border-gold {
-    border-color: rgba(var(--wiz-gold) / 0.30);
-  }
-  .ring-gold {
-    --tw-ring-color: rgba(var(--wiz-gold) / 0.20);
-  }
-  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgb(var(--wiz-border-mid));
-    border-radius: 2px;
-  }
+
+  /* Skeleton loader */
   .skeleton {
     background: linear-gradient(
       90deg,
       rgb(var(--wiz-raised)) 25%,
-      rgb(var(--wiz-border)) 50%,
+      rgb(var(--wiz-border))  50%,
       rgb(var(--wiz-raised)) 75%
     );
     background-size: 200% 100%;
     animation: shimmer 1.5s linear infinite;
   }
+
+  /* Thin scrollbar variant */
+  .scrollbar-thin::-webkit-scrollbar       { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--wiz-border-mid));
+    border-radius: 2px;
+  }
+
+  /* Font-family utilities */
+  .font-serif { font-family: 'Libre Baskerville', Georgia, serif; }
+  .font-inter { font-family: 'Inter', system-ui, sans-serif; }
 }
 
-/* ================================================================
-   LIGHT THEME — "Warm Light"
-   ================================================================
-   Overrides CSS custom properties. Because ALL Tailwind colour
-   classes reference these variables, every opacity variant
-   (bg-wiz-bg/60, text-wiz-cream/80, border-wiz-border/40, etc.)
-   automatically picks up the light values. ONE override → 60+ classes fixed.
-   ================================================================ */
+/* ── Sidebar nav-item animations ───────────────────────────────────
+   Icon-specific motion that fires on hover. Defined globally so the
+   group-hover selectors can find them. */
 
-.light {
-  /* ── Backgrounds ─────────────────────────────────── */
-  --wiz-bg:             246 245 242;       /* #F6F5F2 page bg */
-  --wiz-surface:        255 255 255;       /* #FFFFFF sidebar/header */
-  --wiz-raised:         246 245 242;       /* #F6F5F2 hover states */
-  --wiz-panel:          255 255 255;       /* #FFFFFF cards */
-
-  /* ── Borders ─────────────────────────────────────── */
-  --wiz-border:         228 225 220;       /* #E4E1DC warm border */
-  --wiz-border-mid:     210 206 200;       /* #D2CEC8 medium */
-  --wiz-border-strong:  186 182 174;       /* #BAB6AE strong */
-
-  /* ── Gold Accent — rich & visible on white ───────── */
-  --wiz-gold:           142 108 12;        /* #8E6C0C deep gold */
-  --wiz-gold-light:     168 130 20;        /* #A88214 hover */
-  --wiz-gold-dim:       253 247 231;       /* #FDF7E7 gold tint bg */
-
-  /* ── Teal Accent ─────────────────────────────────── */
-  --wiz-teal:           18 110 98;         /* #126E62 deep teal */
-  --wiz-teal-light:     32 140 127;        /* #208C7F hover */
-  --wiz-teal-dim:       234 251 248;       /* #EAFBF8 teal tint bg */
-
-  /* ── Violet ──────────────────────────────────────── */
-  --wiz-violet:         92 55 142;         /* #5C378E */
-  --wiz-violet-dim:     248 243 255;       /* #F8F3FF */
-
-  /* ── Typography ──────────────────────────────────── */
-  --wiz-cream:          20 20 35;          /* #141423 primary text */
-  --wiz-gray:           48 48 66;          /* #303042 body text */
-  --wiz-muted:          88 88 110;         /* #58586E secondary */
-  --wiz-dim:            130 130 150;       /* #828296 de-emphasised */
-
-  /* ── Signal colours — saturated for white bg ─────── */
-  --sig-green:          22 163 74;         /* #16A34A */
-  --sig-green-dim:      236 253 245;       /* #ECFDF5 */
-  --sig-red:            220 38 38;         /* #DC2626 */
-  --sig-red-dim:        254 242 242;       /* #FEF2F2 */
-  --sig-yellow:         202 106 2;         /* #CA6A02 darker amber */
-  --sig-yellow-dim:     255 249 232;       /* #FFF9E8 */
-  --sig-blue:           30 86 210;         /* #1E56D2 */
-  --sig-blue-dim:       237 244 255;       /* #EDF4FF */
-  --sig-orange:         210 76 10;         /* #D24C0A */
-  --sig-orange-dim:     255 244 234;       /* #FFF4EA */
-  --sig-purple:         126 42 210;        /* #7E2AD2 */
-  --sig-purple-dim:     247 242 255;       /* #F7F2FF */
+@keyframes wand-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  20%      { transform: rotate(-14deg); }
+  40%      { transform: rotate(12deg); }
+  60%      { transform: rotate(-10deg); }
+  80%      { transform: rotate(8deg); }
 }
 
-/* ── Light mode: inputs white with visible border ──────────────── */
-.light .wiz-input {
-  background-color: #FFFFFF !important;
-  border-color: rgb(var(--wiz-border-mid)) !important;
-}
-.light .wiz-input:focus {
-  background-color: #FFFFFF !important;
-  border-color: rgb(var(--wiz-gold)) !important;
-}
-.light .wiz-input::placeholder {
-  color: rgb(var(--wiz-dim)) !important;
+@keyframes cog-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-/* ── Light mode: select chevron uses dark stroke ──────────────── */
-.light .wiz-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23303042' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+@keyframes shimmer-active {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(220%); }
+  100% { transform: translateX(220%); }
 }
 
-/* ── Light mode: card shadow ──────────────────────────────────── */
-.light .wiz-card {
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03) !important;
+@keyframes float-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.5px); }
 }
 
-/* ── Light mode: panels get subtle shadow ─────────────────────── */
-.light .wiz-card,
-.light [class*="bg-wiz-panel"] {
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03);
+/* Shimmer-text — bright base + crimson highlight that sweeps across.
+   Used by sidebar widget headers so they feel "live" at rest. The
+   base opacity (0.82) keeps the label legible on dark navy bg; the
+   crimson peak draws the eye and ties to the brand. */
+@keyframes shimmer-text {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
 }
 
-/* ── Light mode: primary button white text ────────────────────── */
-.light .btn-primary {
-  color: #FFFFFF !important;
+.shimmer-text {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.82) 0%,
+    rgba(255,255,255,0.82) 30%,
+    #D44040                50%,
+    rgba(255,255,255,0.82) 70%,
+    rgba(255,255,255,0.82) 100%
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer-text 5s linear infinite;
 }
 
-/* ── Light mode: sidebar subtle left shadow for depth ─────────── */
-.light aside {
-  box-shadow: 1px 0 4px rgba(0,0,0,0.04);
+/* Shimmer-line — animated gradient line for sidebar section dividers.
+   Sweeps a crimson highlight along the divider so the label and the
+   line read as one breathing unit. */
+.shimmer-line {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.20) 0%,
+    rgba(212,64,64,0.32)   30%,
+    rgba(255,255,255,0.55) 50%,
+    rgba(212,64,64,0.32)   70%,
+    rgba(255,255,255,0.20) 100%
+  );
+  background-size: 220% 100%;
+  animation: shimmer-text 6s linear infinite;
 }
 
-/* ── Light mode: header subtle bottom shadow ──────────────────── */
-.light header {
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+/* Apply on hover via group-hover */
+.group:hover .anim-wand   { animation: wand-wiggle 0.7s ease-in-out; }
+.group:hover .anim-cog    { animation: cog-rotate  3.5s linear infinite; }
+.group:hover .anim-bob    { animation: float-bob   1.2s ease-in-out infinite; }
+
+/* New Deployment page title — crimson highlight sweeps across the text */
+@keyframes deploy-title-sweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
 }
 
-/* ── Light mode: selection colour ─────────────────────────────── */
-.light ::selection {
-  background: rgba(18, 110, 98, 0.15);
-  color: rgb(var(--wiz-cream));
+/* Wizard progress bar — light sweep glides across the filled portion */
+@keyframes progress-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
 }
 
-/* ── Light mode: scrollbar ────────────────────────────────────── */
-.light ::-webkit-scrollbar-track { background: rgb(var(--wiz-bg)); }
-.light ::-webkit-scrollbar-thumb { background: rgb(var(--wiz-border-mid)); border-radius: 3px; }
-.light ::-webkit-scrollbar-thumb:hover { background: rgb(var(--wiz-border-strong)); }
+/* Subtle float-bob — used for the step progress chip so it gently breathes */
+@keyframes chip-float {
+  0%, 100% { transform: translate(-50%, 0); }
+  50%      { transform: translate(-50%, -2px); }
+}

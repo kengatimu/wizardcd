@@ -19,7 +19,7 @@ export default function SectionCard({
   return (
     <div
       className={clsx(
-        'wiz-card rounded-xl overflow-hidden',
+        'wiz-card overflow-hidden',
         className,
       )}
     >

@@ -20,7 +20,7 @@ const STATUS_CONFIG: Record<string, { dot: string; bg: string; text: string; lab
   SUCCESS:             { dot: 'bg-sig-green',  bg: 'bg-sig-green-dim',  text: 'text-sig-green',  label: 'Success'            },
   FAILED:              { dot: 'bg-sig-red',    bg: 'bg-sig-red-dim',    text: 'text-sig-red',    label: 'Failed'             },
   ABORT_REQUESTED:     { dot: 'bg-sig-orange', bg: 'bg-sig-orange-dim', text: 'text-sig-orange', label: 'Abort Requested'    },
-  ABORTED:             { dot: 'bg-wiz-muted',  bg: 'bg-wiz-panel',      text: 'text-wiz-gray',   label: 'Aborted'            },
+  ABORTED:             { dot: 'bg-wiz-muted',  bg: 'bg-wiz-raised',     text: 'text-wiz-muted',  label: 'Aborted'            },
 
   // ── Execution states ───────────────────────────────────────────
   RECEIVED:        { dot: 'bg-sig-blue',   bg: 'bg-sig-blue-dim',   text: 'text-sig-blue',   label: 'Received'       },
@@ -29,7 +29,7 @@ const STATUS_CONFIG: Record<string, { dot: string; bg: string; text: string; lab
   TIMEOUT:         { dot: 'bg-sig-orange', bg: 'bg-sig-orange-dim', text: 'text-sig-orange', label: 'Timed Out'      },
 
   // Fallback
-  UNKNOWN: { dot: 'bg-wiz-muted', bg: 'bg-wiz-panel', text: 'text-wiz-muted', label: 'Unknown' },
+  UNKNOWN: { dot: 'bg-wiz-muted', bg: 'bg-wiz-raised', text: 'text-wiz-muted', label: 'Unknown' },
 }
 
 function getConfig(status: AnyStatus) {

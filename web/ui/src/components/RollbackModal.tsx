@@ -45,7 +45,7 @@ export default function RollbackModal({ jobId, appName, environment, preflight, 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-wiz-surface border border-wiz-border rounded-2xl shadow-panel max-w-md w-full animate-fade-in">
+      <div className="bg-wiz-surface border border-wiz-border rounded shadow-panel max-w-md w-full animate-fade-in">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-wiz-border/60">
@@ -79,7 +79,7 @@ export default function RollbackModal({ jobId, appName, environment, preflight, 
 
           {/* Warning for PROD */}
           {isProd && (
-            <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-sig-purple/5 border border-sig-purple/20">
+            <div className="flex items-start gap-3 px-4 py-3 rounded bg-sig-purple-dim border border-sig-purple/20">
               <AlertTriangle size={16} className="text-sig-purple flex-shrink-0 mt-0.5" />
               <p className="text-xs text-sig-purple/90">
                 You are rolling back a <span className="font-bold">PRODUCTION</span> application.
@@ -96,14 +96,14 @@ export default function RollbackModal({ jobId, appName, environment, preflight, 
 
           {/* Backup info panel */}
           {preflightLoading && (
-            <div className="rounded-lg bg-wiz-bg/60 border border-wiz-border/15 px-4 py-4 flex items-center gap-3">
+            <div className="rounded bg-wiz-raised border border-wiz-border px-4 py-4 flex items-center gap-3">
               <Loader2 size={14} className="animate-spin text-wiz-muted" />
               <span className="text-xs text-wiz-muted">Checking backup on target server…</span>
             </div>
           )}
 
           {!preflightLoading && preflight && backupAvailable && (
-            <div className="rounded-lg bg-sig-green/5 border border-sig-green/20 px-4 py-3">
+            <div className="rounded bg-sig-green-dim border border-sig-green/20 px-4 py-3">
               <p className="text-2xs text-sig-green/70 uppercase font-mono tracking-wider mb-2 flex items-center gap-1.5">
                 <Archive size={10} /> Last successful backup
               </p>
@@ -128,7 +128,7 @@ export default function RollbackModal({ jobId, appName, environment, preflight, 
           )}
 
           {!preflightLoading && preflight && !backupAvailable && (
-            <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-sig-red/5 border border-sig-red/20">
+            <div className="flex items-start gap-3 px-4 py-3 rounded bg-sig-red-dim border border-sig-red/20">
               <AlertTriangle size={16} className="text-sig-red flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs text-sig-red font-medium">No backup available</p>
@@ -140,7 +140,7 @@ export default function RollbackModal({ jobId, appName, environment, preflight, 
           )}
 
           {/* What happens */}
-          <div className="rounded-lg bg-wiz-bg/60 border border-wiz-border/15 px-4 py-3">
+          <div className="rounded bg-wiz-raised border border-wiz-border px-4 py-3">
             <p className="text-2xs text-wiz-muted/60 uppercase font-mono tracking-wider mb-1.5">What happens</p>
             <ul className="text-xs text-wiz-cream/70 space-y-1.5">
               <li className="flex items-start gap-2">
@@ -174,7 +174,7 @@ export default function RollbackModal({ jobId, appName, environment, preflight, 
             onClick={() => void handleRollback()}
             disabled={submitting || preflightLoading || !backupAvailable}
             className={clsx(
-              'inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md transition-all duration-150',
+              'inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded transition-all duration-150',
               isProd
                 ? 'bg-sig-purple text-white hover:brightness-110'
                 : 'bg-sig-yellow text-wiz-bg hover:brightness-110',

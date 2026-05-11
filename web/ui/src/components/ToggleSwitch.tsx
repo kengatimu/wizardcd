@@ -25,7 +25,7 @@ export default function ToggleSwitch({ checked, onChange, label, hint, disabled 
           'focus:outline-none focus:ring-2 focus:ring-wiz-gold/30',
           checked
             ? 'bg-wiz-gold shadow-gold-sm'
-            : 'bg-wiz-panel border border-wiz-border',
+            : 'bg-wiz-border border border-wiz-border-mid',
         )}
       >
         {/* Thumb */}
@@ -36,8 +36,8 @@ export default function ToggleSwitch({ checked, onChange, label, hint, disabled 
             'transition-transform duration-200',
             'shadow-md',
             checked
-              ? 'translate-x-5 bg-wiz-bg'
-              : 'translate-x-0 bg-wiz-muted',
+              ? 'translate-x-5 bg-white'
+              : 'translate-x-0 bg-wiz-surface',
           )}
         />
       </button>

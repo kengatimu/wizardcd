@@ -1,86 +1,82 @@
 import { useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { Bell, Sun, Moon } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Bell } from 'lucide-react'
 import clsx from 'clsx'
 import { useTheme } from '../context/ThemeContext'
 import { useNotifications } from '../hooks/useNotifications'
 import NotificationDropdown from '../components/NotificationDropdown'
+import { useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 
+// ── Environment pill colours ──────────────────────────────────────
+// Muted tints on white background — not electric, not glowy
 const ENV_STYLE: Record<string, string> = {
-  DEV:  'bg-sig-green-dim  text-sig-green  border border-sig-green/20',
-  SIT:  'bg-sig-blue-dim   text-sig-blue   border border-sig-blue/20',
-  UAT:  'bg-sig-yellow-dim text-sig-yellow border border-sig-yellow/20',
-  PROD: 'bg-sig-purple-dim text-sig-purple border border-sig-purple/20',
-}
-
-const ENV_TOOLTIP: Record<string, string> = {
-  DEV:  'Development — click to manage in Settings',
-  SIT:  'System Integration Testing — click to manage in Settings',
-  UAT:  'User Acceptance Testing — click to manage in Settings',
-  PROD: 'Production — click to manage in Settings',
+  DEV:  'bg-sig-green-dim  text-sig-green  border border-sig-green/30',
+  SIT:  'bg-sig-blue-dim   text-sig-blue   border border-sig-blue/30',
+  UAT:  'bg-sig-yellow-dim text-sig-yellow border border-sig-yellow/30',
+  PROD: 'bg-sig-purple-dim text-sig-purple border border-sig-purple/30',
 }
 
 export default function Header() {
-  const { theme, toggleTheme, activeEnv } = useTheme()
-  const envStyle   = ENV_STYLE[activeEnv]   ?? ENV_STYLE['SIT']
-  const envTooltip = ENV_TOOLTIP[activeEnv] ?? ENV_TOOLTIP['SIT']
+  const { activeEnv } = useTheme()
+  const envStyle = ENV_STYLE[activeEnv] ?? ENV_STYLE['SIT']
+  const navigate = useNavigate()
 
-  const {
-    notifications,
-    unreadCount,
-    markAsRead,
-    markAllAsRead,
-    clearAll,
-  } = useNotifications()
+  const queryClient = useQueryClient()
 
+  const handleHomeClick = () => {
+    navigate('/')
+    void queryClient.invalidateQueries({ queryKey: ['jobs-summary'] })
+    void queryClient.invalidateQueries({ queryKey: ['jobs-list'] })
+    toast.success('Dashboard refreshed')
+  }
+
+  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotifications()
   const [showNotifs, setShowNotifs] = useState(false)
-
-  const toggleNotifs = useCallback(() => {
-    setShowNotifs((prev) => !prev)
-  }, [])
-
-  const closeNotifs = useCallback(() => {
-    setShowNotifs(false)
-  }, [])
+  const toggleNotifs = useCallback(() => setShowNotifs((p) => !p), [])
+  const closeNotifs  = useCallback(() => setShowNotifs(false), [])
 
   return (
-    <header className="h-28 flex-shrink-0 flex items-center justify-between
-                        px-6 bg-wiz-surface border-b border-wiz-border">
+    <header
+      className="h-[64px] flex-shrink-0 flex items-center justify-between
+                 px-7 bg-wiz-surface border-b border-wiz-border"
+      style={{ boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}
+    >
 
-      {/* Left: permanent slogan */}
-      <p className="font-mono text-xs tracking-[0.18em] uppercase text-wiz-gold/90 select-none">
-        One Config. One Command. Continuous Magic.
-      </p>
+      {/* Left: tagline — pure editorial typography, brand voice */}
+      <button
+        type="button"
+        onClick={handleHomeClick}
+        className="select-none cursor-pointer group"
+        title="Go to Dashboard"
+      >
+        <span className="font-serif italic text-[15px] leading-none text-wiz-cream/75 group-hover:text-wiz-cream transition-colors duration-200 whitespace-nowrap">
+          One Config
+          <span className="inline-block w-1 h-1 rounded-full bg-wiz-gold mx-3 align-middle" aria-hidden />
+          One Command
+          <span className="inline-block w-1 h-1 rounded-full bg-wiz-gold mx-3 align-middle" aria-hidden />
+          Continuous Magic
+        </span>
+      </button>
 
-      {/* Right: controls */}
+      {/* Right: env pill + notification bell */}
       <div className="flex items-center gap-2">
 
-        {/* Environment badge */}
+        {/* Environment badge — links to deploy wizard step 1 */}
         <Link
           to="/deploy"
-          className={`inline-flex items-center gap-1.5 font-mono text-xs
-                      font-semibold tracking-wider px-2.5 py-1 rounded-md
-                      transition-opacity duration-150 hover:opacity-80 ${envStyle}`}
-          title="Go to deployment — change environment in Step 1"
+          title={`${activeEnv} environment — go to deployment wizard`}
+          className={clsx(
+            'inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.08em] uppercase',
+            'px-2.5 py-1 rounded transition-opacity duration-150 hover:opacity-80',
+            envStyle,
+          )}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+          <span className="w-[5px] h-[5px] rounded-full bg-current opacity-80" />
           {activeEnv}
         </Link>
 
         <div className="w-px h-4 bg-wiz-border mx-1" />
-
-        {/* Dark / Light toggle */}
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="btn-icon h-8 w-8"
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark'
-            ? <Sun  size={14} className="text-wiz-gold" />
-            : <Moon size={14} className="text-wiz-muted" />
-          }
-        </button>
 
         {/* Notification bell */}
         <div className="relative">
@@ -88,27 +84,26 @@ export default function Header() {
             type="button"
             onClick={toggleNotifs}
             className={clsx(
-              'btn-icon h-8 w-8 relative',
-              showNotifs && 'bg-wiz-raised',
+              'btn-icon',
+              showNotifs && 'bg-wiz-raised text-wiz-gold',
             )}
             title="Notifications"
           >
-            <Bell size={14} className={clsx(
-              showNotifs ? 'text-wiz-gold' : 'text-wiz-muted',
-            )} />
+            <Bell size={14} />
 
-            {/* Unread badge */}
+            {/* Unread count badge */}
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1
-                               flex items-center justify-center rounded-full
-                               bg-sig-red text-white text-[9px] font-bold leading-none
-                               border-2 border-wiz-surface">
+              <span
+                className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1
+                           flex items-center justify-center rounded-full
+                           bg-sig-red text-white text-[8px] font-bold leading-none
+                           border border-wiz-surface"
+              >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
           </button>
 
-          {/* Dropdown */}
           {showNotifs && (
             <NotificationDropdown
               notifications={notifications}
@@ -121,7 +116,6 @@ export default function Header() {
         </div>
 
       </div>
-
     </header>
   )
 }

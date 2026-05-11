@@ -8,7 +8,6 @@ import clsx from 'clsx'
 import {
   type LogSection,
   detectLevel,
-  lineClass,
   formatLogLine,
   formatSectionDuration,
   parseLogSections,
@@ -70,17 +69,21 @@ function SectionPanel({
 
   return (
     <div className={clsx(
-      'border-b border-wiz-border/30 last:border-b-0',
-      status === 'error' && 'border-l-2 border-l-sig-red/40',
+      'border-b border-wiz-border/30 last:border-b-0 border-l-[3px]',
+      status === 'error'   ? 'border-l-sig-red/50'    :
+      status === 'warn'    ? 'border-l-sig-yellow/50'  :
+      status === 'running' ? 'border-l-sig-yellow/50'  :
+                             'border-l-sig-green/40',
     )}>
       <button
         type="button"
         className={clsx(
           'w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
-          status === 'error'   ? 'hover:bg-sig-red-dim/30'    :
-          status === 'warn'    ? 'hover:bg-sig-yellow-dim/20' :
-          status === 'running' ? 'hover:bg-sig-yellow-dim/20' :
-                                 'hover:bg-wiz-surface/30',
+          status === 'error'   ? 'bg-wiz-surface         hover:bg-sig-red/[0.08]'    :
+          status === 'warn'    ? 'bg-sig-yellow/[0.04]  hover:bg-sig-yellow/[0.09]' :
+          status === 'running' ? 'bg-sig-yellow/[0.04]  hover:bg-sig-yellow/[0.09]' :
+          status === 'success' ? 'bg-sig-green/[0.04]   hover:bg-sig-green/[0.08]'  :
+                                 'bg-wiz-surface         hover:bg-wiz-raised',
         )}
         onClick={onToggle}
       >
@@ -130,7 +133,7 @@ function SectionPanel({
           {/* Scrollable log lines */}
           <div
             ref={contentRef}
-            className="max-h-72 overflow-y-auto scrollbar-thin bg-wiz-bg/30"
+            className="max-h-72 overflow-y-auto scrollbar-thin bg-wiz-bg"
           >
             {section.lines.length === 0 ? (
               <div className="px-4 py-2 text-2xs font-mono text-wiz-dim italic">
@@ -138,24 +141,9 @@ function SectionPanel({
               </div>
             ) : (
               <div className="py-1">
-                {section.lines.map((line, j) => {
-                  if (!line.trim()) return null
-                  const level = detectLevel(line)
-                  const fmt   = formatLogLine(line)
-                  return (
-                    <div key={j} className={clsx(lineClass(level), 'flex items-start text-2xs leading-relaxed')}>
-                      <span className="text-wiz-dim/50 select-none font-mono shrink-0 w-8 text-right mr-2">
-                        {section.lineStart + j}
-                      </span>
-                      <span className="font-mono shrink-0 w-16 mr-3 select-none text-wiz-dim/40">
-                        {fmt.time ?? ''}
-                      </span>
-                      <span className="font-mono flex-1 min-w-0 break-words">
-                        {fmt.message || ' '}
-                      </span>
-                    </div>
-                  )
-                })}
+                {section.lines.map((line, j) => (
+                  <LogLineRow key={j} line={line} lineNum={section.lineStart + j} />
+                ))}
               </div>
             )}
           </div>
@@ -198,39 +186,93 @@ function SectionHeader({ title, status, durationMs }: {
   durationMs: number | null
 }) {
   return (
-    <div className="font-mono text-2xs px-4 pt-2 pb-2 select-none bg-wiz-bg/40 border-b border-wiz-border/20">
-      <div className="text-wiz-dim/20 overflow-hidden whitespace-nowrap mb-1.5 tracking-widest">{SEP_BAR}</div>
+    <div className="font-mono text-2xs px-4 pt-2 pb-2 select-none bg-wiz-surface border-b border-wiz-border/40">
+      <div className="text-wiz-border-mid overflow-hidden whitespace-nowrap mb-1.5 tracking-widest">{SEP_BAR}</div>
       <div className="space-y-0.5">
         <div className="flex gap-2">
-          <span className="w-20 shrink-0 text-wiz-dim/50">Section</span>
-          <span className="text-wiz-dim/30 shrink-0">:</span>
-          <span className="text-wiz-cream/80">{title}</span>
+          <span className="w-20 shrink-0 text-wiz-muted">Section</span>
+          <span className="text-wiz-dim/70 shrink-0">:</span>
+          <span className="text-wiz-cream">{title}</span>
         </div>
         {durationMs !== null && durationMs >= 0 && (
           <div className="flex gap-2">
-            <span className="w-20 shrink-0 text-wiz-dim/50">Duration</span>
-            <span className="text-wiz-dim/30 shrink-0">:</span>
-            <span className="text-wiz-muted">{formatSectionDuration(durationMs)}</span>
+            <span className="w-20 shrink-0 text-wiz-muted">Duration</span>
+            <span className="text-wiz-dim/70 shrink-0">:</span>
+            <span className="text-wiz-gray">{formatSectionDuration(durationMs)}</span>
           </div>
         )}
         <div className="flex gap-2">
-          <span className="w-20 shrink-0 text-wiz-dim/50">Status</span>
-          <span className="text-wiz-dim/30 shrink-0">:</span>
+          <span className="w-20 shrink-0 text-wiz-muted">Status</span>
+          <span className="text-wiz-dim/70 shrink-0">:</span>
           <span className={statusColor(status)}>{statusLabel(status)}</span>
         </div>
       </div>
-      <div className="text-wiz-dim/20 overflow-hidden whitespace-nowrap mt-1.5 tracking-widest">{SEP_BAR}</div>
+      <div className="text-wiz-border-mid overflow-hidden whitespace-nowrap mt-1.5 tracking-widest">{SEP_BAR}</div>
     </div>
   )
 }
 
 function SectionFooter({ title, status }: { title: string; status: SectionStatus }) {
   return (
-    <div className="font-mono text-2xs px-4 py-1.5 select-none bg-wiz-bg/40 border-t border-wiz-border/20 flex items-center gap-2 flex-wrap">
-      <span className="text-wiz-dim/50 uppercase tracking-wide">Section</span>
-      <span className="text-wiz-dim/30">—</span>
-      <span className="text-wiz-cream/70">{title}</span>
+    <div className="font-mono text-2xs px-4 py-1.5 select-none bg-wiz-surface border-t border-wiz-border/40 flex items-center gap-2 flex-wrap">
+      <span className="text-wiz-muted uppercase tracking-wide">Section</span>
+      <span className="text-wiz-dim/60">—</span>
+      <span className="text-wiz-gray">{title}</span>
       <span className={clsx(statusColor(status), 'font-semibold')}>{statusLabel(status)}</span>
+    </div>
+  )
+}
+
+// ── Shared log line component ─────────────────────────────────────
+
+function LogLineRow({ line, lineNum }: { line: string; lineNum: number }) {
+  if (!line.trim()) return null
+  const level   = detectLevel(line)
+  const fmt     = formatLogLine(line)
+  const isError = level === 'error'
+  const isWarn  = level === 'warn'
+  const isSucc  = level === 'success'
+  const isInfo  = level === 'info'
+
+  return (
+    <div className={clsx(
+      'group flex items-start transition-colors duration-75',
+      isError ? 'bg-sig-red/[0.06]    hover:bg-sig-red/[0.10]'    :
+      isWarn  ? 'bg-sig-yellow/[0.05] hover:bg-sig-yellow/[0.09]' :
+                'hover:bg-wiz-raised/40',
+    )}>
+      {/* Line number */}
+      <span className="text-wiz-dim/60 select-none font-mono text-2xs shrink-0 w-8 text-right mr-2 py-0.5 leading-4">
+        {lineNum}
+      </span>
+      {/* Timestamp */}
+      <span className="font-mono text-2xs shrink-0 w-14 mr-2 select-none text-wiz-dim/70 py-0.5 leading-4">
+        {fmt.time ?? ''}
+      </span>
+      {/* Level badge — fixed-width slot keeps message column aligned */}
+      <span className="shrink-0 w-8 mr-1.5 flex items-center py-0.5 min-h-[1rem]">
+        {isError && (
+          <span className="font-mono text-[8px] font-bold px-1 py-0.5 rounded leading-none bg-sig-red-dim text-sig-red border border-sig-red/30">
+            ERR
+          </span>
+        )}
+        {isWarn && (
+          <span className="font-mono text-[8px] font-bold px-1 py-0.5 rounded leading-none bg-sig-yellow-dim text-sig-yellow border border-sig-yellow/30">
+            WRN
+          </span>
+        )}
+      </span>
+      {/* Message */}
+      <span className={clsx(
+        'font-mono text-2xs flex-1 min-w-0 break-words py-0.5 leading-4',
+        isError && 'text-sig-red',
+        isWarn  && 'text-sig-yellow/90',
+        isSucc  && 'text-sig-green',
+        isInfo  && 'text-wiz-gray',
+        !isError && !isWarn && !isSucc && !isInfo && 'text-wiz-cream/90',
+      )}>
+        {fmt.message || ' '}
+      </span>
     </div>
   )
 }
@@ -245,25 +287,10 @@ function FlatLines({
   lineOffset?: number
 }) {
   return (
-    <div className="py-2">
-      {lines.map((line, i) => {
-        if (!line.trim()) return null
-        const level = detectLevel(line)
-        const fmt   = formatLogLine(line)
-        return (
-          <div key={i} className={clsx(lineClass(level), 'flex items-start')}>
-            <span className="text-wiz-dim/50 select-none font-mono text-2xs shrink-0 w-8 text-right mr-2">
-              {lineOffset + i + 1}
-            </span>
-            <span className="font-mono text-2xs shrink-0 w-16 mr-3 select-none text-wiz-dim/40">
-              {fmt.time ?? ''}
-            </span>
-            <span className="font-mono text-2xs flex-1 min-w-0 break-words">
-              {fmt.message || ' '}
-            </span>
-          </div>
-        )
-      })}
+    <div className="py-1">
+      {lines.map((line, i) => (
+        <LogLineRow key={i} line={line} lineNum={lineOffset + i + 1} />
+      ))}
     </div>
   )
 }
@@ -346,8 +373,8 @@ export default function LogViewer({
   // ── Toolbar ──
   const toolbar = (
     <div className="flex items-center justify-between
-                    bg-wiz-panel border border-wiz-border border-b-0
-                    rounded-t-lg px-3 py-2">
+                    bg-wiz-surface border border-wiz-border
+                    rounded-t px-3 py-2">
       <div className="flex items-center gap-2 min-w-0">
         <span className="section-label flex-shrink-0">
           {isFocused ? selectedSection!.title.toUpperCase() : 'LOG OUTPUT'}
@@ -421,7 +448,7 @@ export default function LogViewer({
   const bodyClass = clsx(
     'log-console scrollbar-thin',
     height,
-    'rounded-b-lg border-t-0',
+    'rounded-b border-t-0',
     // sectioned view needs no default padding; focused/raw uses default
     !isFocused && hasSections && !rawMode && 'p-0',
   )
@@ -442,7 +469,7 @@ export default function LogViewer({
       selectedSection!.hasWarn    ? 'warn'     : 'success'
 
     body = (
-      <div className="flex flex-col log-console border border-wiz-border rounded-b-lg border-t-0" style={{ height: undefined }}>
+      <div className="flex flex-col bg-wiz-bg border border-wiz-border border-t-0 rounded-b" style={{ height: undefined }}>
         {/* Azure-style header — outside scroll */}
         <SectionHeader
           title={selectedSection!.title}
@@ -484,7 +511,7 @@ export default function LogViewer({
             {prelude.filter(l => l.trim()).length > 0 && (
               <div className="border-b border-wiz-border/30">
                 <button type="button"
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-wiz-surface/30 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left bg-wiz-surface hover:bg-wiz-raised transition-colors"
                   onClick={() => toggleSection(-1)}>
                   <ChevronDown size={13}
                     className={clsx('text-wiz-muted transition-transform duration-200 flex-shrink-0',
@@ -497,18 +524,10 @@ export default function LogViewer({
                   <span className="w-4 flex-shrink-0" />
                 </button>
                 {expandedSet.has(-1) && (
-                  <div className="max-h-48 overflow-y-auto scrollbar-thin border-t border-wiz-border/20 bg-wiz-bg/30 py-1">
-                    {prelude.filter(l => l.trim()).map((line, j) => {
-                      const level = detectLevel(line)
-                      const fmt   = formatLogLine(line)
-                      return (
-                        <div key={j} className={clsx(lineClass(level), 'flex items-start text-2xs leading-relaxed')}>
-                          <span className="text-wiz-dim/50 select-none font-mono shrink-0 w-8 text-right mr-2">{j + 1}</span>
-                          <span className="font-mono shrink-0 w-16 mr-3 select-none text-wiz-dim/40">{fmt.time ?? ''}</span>
-                          <span className="font-mono flex-1 min-w-0 break-words">{fmt.message || ' '}</span>
-                        </div>
-                      )
-                    })}
+                  <div className="max-h-48 overflow-y-auto scrollbar-thin border-t border-wiz-border/30 bg-wiz-bg py-1">
+                    {prelude.filter(l => l.trim()).map((line, j) => (
+                      <LogLineRow key={j} line={line} lineNum={j + 1} />
+                    ))}
                   </div>
                 )}
               </div>
@@ -533,7 +552,7 @@ export default function LogViewer({
   }
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="log-dark flex flex-col gap-0">
       {toolbar}
       {body}
     </div>

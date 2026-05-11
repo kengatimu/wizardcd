@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>WizardCD — Design Concepts v6 (Wordmark Only)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'Inter',sans-serif;
+  background:#ECEAE5;
+  color:#1C1C1C;
+  font-size:14px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Nav ──────────────────────────────────────────── */
+.page-nav{
+  position:sticky;top:0;z-index:200;
+  background:#0D2240;
+  border-bottom:3px solid #8B1A1A;
+  padding:0 40px;
+  display:flex;align-items:center;
+  overflow-x:auto;
+}
+.page-nav .brand{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;font-size:14px;
+  color:#fff;
+  padding:14px 28px 14px 0;
+  margin-right:20px;
+  border-right:1px solid rgba(255,255,255,.12);
+  flex-shrink:0;
+}
+.page-nav .brand em{color:#D44040;font-style:normal;}
+.page-nav a{
+  color:rgba(255,255,255,.45);
+  font-size:11px;font-weight:500;
+  text-decoration:none;
+  padding:14px 14px;white-space:nowrap;
+  border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;
+}
+.page-nav a:hover{color:rgba(255,255,255,.8);}
+.page-nav a.active{color:#fff;border-bottom-color:#D44040;}
+
+/* ── Shared layout ────────────────────────────────── */
+.section{
+  padding:56px 40px 72px;
+  border-bottom:1px solid #D6D0C8;
+  max-width:1000px;margin:0 auto;
+}
+.section-num{
+  font-size:10px;font-weight:700;letter-spacing:.28em;
+  text-transform:uppercase;color:#8B1A1A;margin-bottom:6px;
+}
+.section-title{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;font-size:22px;
+  color:#0D2240;margin-bottom:14px;
+}
+.section-desc{
+  font-size:13.5px;line-height:1.8;color:#555;
+  max-width:580px;margin-bottom:28px;
+}
+.section-desc strong{color:#0D2240;}
+.hr{max-width:1000px;margin:0 auto;border:none;border-top:2px solid #C8C0B4;}
+
+/* ── Logo cards ───────────────────────────────────── */
+.logo-row{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:20px;margin-bottom:32px;
+}
+.logo-card{
+  border-radius:8px;padding:40px 44px;min-height:130px;
+  display:flex;flex-direction:column;justify-content:center;
+}
+.logo-card-label{
+  font-size:10px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;margin-bottom:22px;
+}
+/* dark card — antialiased to match light rendering */
+.dark-card{
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* ── Logo type ────────────────────────────────────── */
+.logo-main{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;font-size:24px;
+  letter-spacing:.01em;line-height:1;
+}
+.logo-parent{
+  font-family:'Inter',sans-serif;
+  font-size:7.5px;font-weight:500;
+  letter-spacing:.18em;text-transform:uppercase;
+  margin-top:11px;
+}
+
+/* ── App Shell ────────────────────────────────────── */
+.app-shell{
+  height:580px;border-radius:10px;overflow:hidden;
+  display:flex;border:1px solid rgba(0,0,0,.12);
+  box-shadow:0 8px 40px rgba(0,0,0,.18);
+  font-family:'Inter',sans-serif;
+}
+.sb{
+  width:210px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  background:#0D2240;
+}
+.sb-logo{
+  padding:24px 20px 20px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+.sb-logo .logo-main{font-size:20px;color:#FFFFFF;}
+.sb-logo .logo-main em{color:#D44040;font-style:normal;}
+.sb-logo .logo-byline{
+  font-family:'Inter',sans-serif;
+  font-size:10px;font-weight:500;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:rgba(255,255,255,.25);
+  margin-top:10px;
+}
+.sb-nav{flex:1;padding:16px 10px;display:flex;flex-direction:column;gap:3px;}
+.sb-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:5px;
+  font-size:13.5px;font-weight:500;
+  color:rgba(255,255,255,.65);
+  cursor:pointer;
+  border-left:3px solid transparent;
+  transition:background .12s;
+}
+.sb-item:hover{background:rgba(255,255,255,.06);}
+.sb-item.active{
+  background:rgba(212,68,68,.18);
+  color:#FFFFFF;
+  border-left-color:#D44040;
+}
+.sb-item .dot{
+  width:6px;height:6px;border-radius:50%;
+  background:currentColor;opacity:.4;flex-shrink:0;
+}
+.sb-item.active .dot{opacity:1;}
+.sb-bottom{
+  padding:12px 10px 16px;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+.sb-bottom .sb-item{font-size:13px;}
+.sb-version{
+  padding:10px 12px 0;
+  font-size:10px;color:rgba(255,255,255,.22);
+  line-height:1.6;font-family:'JetBrains Mono',monospace;
+}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#FAFAF8;}
+.topbar{
+  height:52px;flex-shrink:0;background:#FFFFFF;
+  border-bottom:1px solid #EAE6DF;
+  display:flex;align-items:center;padding:0 24px;gap:14px;
+}
+.tagline{
+  font-size:10px;font-weight:600;letter-spacing:.22em;
+  text-transform:uppercase;color:#999;flex:1;
+}
+.env-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 12px;border-radius:3px;
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  background:#FDF3F3;color:#8B1A1A;border:1px solid #E8C0C0;
+}
+.env-dot{width:5px;height:5px;border-radius:50%;background:#8B1A1A;}
+.content{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:18px;}
+.page-title{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;font-size:20px;
+  color:#0D2240;letter-spacing:-.01em;line-height:1;
+}
+.page-title-rule{width:32px;height:2px;background:#8B1A1A;margin:8px 0 4px;}
+.page-sub{font-size:12.5px;color:#666;}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.metric{
+  background:#FFFFFF;border:1px solid #EAE6DF;
+  border-left:3px solid #8B1A1A;
+  padding:14px 16px;border-radius:3px;
+}
+.metric-label{
+  font-size:9px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:#8B1A1A;margin-bottom:8px;
+}
+.metric-value{
+  font-family:'Libre Baskerville',serif;
+  font-size:26px;font-weight:700;
+  color:#0D2240;line-height:1;letter-spacing:-.02em;
+}
+.metric-sub{font-size:11px;color:#666;margin-top:4px;}
+.metric-value.green{color:#166534;}
+.metric-value.red{color:#991B1B;}
+.table-card{
+  background:#FFFFFF;border:1px solid #EAE6DF;
+  border-radius:3px;overflow:hidden;flex:1;
+}
+.table-head{
+  padding:11px 16px;border-bottom:1px solid #EAE6DF;
+  display:flex;align-items:center;gap:12px;background:#FAFAF8;
+}
+.table-head-label{
+  font-size:9px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:#8B1A1A;flex:1;
+}
+.table-search{
+  background:#FFFFFF;border:1px solid #EAE6DF;
+  border-radius:3px;padding:5px 10px;
+  font-size:12px;color:#333;
+  font-family:'Inter',sans-serif;outline:none;width:160px;
+}
+.deploy-btn{
+  padding:6px 14px;border-radius:3px;
+  background:#8B1A1A;color:#FFFFFF;
+  font-size:12px;font-weight:600;border:none;
+  cursor:pointer;letter-spacing:.02em;
+}
+table{width:100%;border-collapse:collapse;}
+thead th{
+  padding:8px 14px;text-align:left;
+  font-size:9px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:#999;
+  border-bottom:1px solid #EAE6DF;background:#FAFAF8;
+}
+tbody tr{border-bottom:1px solid #EAE6DF;cursor:pointer;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:#F8F6F1;}
+tbody td{padding:10px 14px;font-size:12.5px;color:#333;}
+.job-id{font-family:'JetBrains Mono',monospace;font-size:11px;color:#999;}
+.app-name{color:#0D2240;font-weight:600;}
+.status-ok{color:#166534;font-weight:600;font-size:12px;}
+.status-err{color:#991B1B;font-weight:600;font-size:12px;}
+.env-tag{
+  display:inline-block;padding:2px 7px;border-radius:2px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;
+  background:#FDF3F3;color:#8B1A1A;
+}
+.env-tag.uat{background:#FFF9EB;color:#92400E;}
+
+/* ── Size study ───────────────────────────────────── */
+.size-study{
+  background:#fff;border-radius:8px;padding:28px 32px;
+  border:1px solid #EAE6DF;margin-top:28px;
+}
+.size-study h3{
+  font-size:10px;font-weight:700;letter-spacing:.2em;
+  text-transform:uppercase;color:#999;margin-bottom:20px;
+}
+.size-row{
+  display:flex;align-items:center;gap:28px;
+  padding:14px 0;border-bottom:1px solid #F0EDE8;
+}
+.size-row:last-child{border-bottom:none;}
+.size-label{
+  font-size:11px;color:#888;
+  width:120px;flex-shrink:0;
+  font-weight:500;
+}
+.size-light{font-family:'Libre Baskerville',serif;font-weight:700;letter-spacing:.01em;color:#0D2240;}
+.size-dark-wrap{
+  background:#0D2240;border-radius:4px;
+  padding:6px 12px;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+.size-dark{font-family:'Libre Baskerville',serif;font-weight:700;letter-spacing:.01em;color:#fff;}
+.size-dark em, .size-light em{color:#D44040;font-style:normal;}
+.size-light em{color:#8B1A1A;}
+</style>
+</head>
+<body>
+
+<nav class="page-nav">
+  <div class="brand">Wizard<em>CD</em> — v6</div>
+  <a href="#wordmark-only" class="active">Wordmark Only</a>
+  <a href="#size-study">Size Study</a>
+</nav>
+
+
+<!-- ══════════════════════════════════════════════════
+     WORDMARK ONLY
+══════════════════════════════════════════════════ -->
+<div class="section" id="wordmark-only" style="padding-top:60px;">
+  <div class="section-num">v6 — Direction 01 Flagship</div>
+  <h2 class="section-title">Wordmark Only — No Bar, No Subtitle, No Attribution</h2>
+  <p class="section-desc">
+    <strong>Just the name.</strong> No bar, no "DEPLOYMENT PLATFORM", no "by EBB Systems" in the mark.
+    The wordmark stands completely on its own. EBB authorship lives in the sidebar footer
+    ("Engineered by Bytes Ltd") where it belongs — as a version/credit line, not as part of the identity.
+  </p>
+
+  <!-- Logo cards -->
+  <div class="logo-row">
+    <div class="logo-card" style="background:#FAFAF8;border:1px solid #EAE6DF;">
+      <div class="logo-card-label" style="color:#999;">LIGHT — on white/cream</div>
+      <div class="logo-main" style="color:#0D2240;">Wizard<span style="color:#8B1A1A;">CD</span></div>
+    </div>
+    <div class="logo-card dark-card" style="background:#0D2240;border:1px solid #0D2240;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.3);">DARK — on navy</div>
+      <div class="logo-main" style="color:#FFFFFF;">Wizard<span style="color:#D44040;">CD</span></div>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div class="app-shell">
+    <div class="sb">
+      <!-- Sidebar logo: just the wordmark + byline in version area -->
+      <div class="sb-logo">
+        <div class="logo-main">Wizard<em>CD</em></div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <!-- Attribution moves here as a version/credit line -->
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes Ltd</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div>
+          <div class="page-title">Deployment Activity</div>
+          <div class="page-title-rule"></div>
+          <div class="page-sub">Real-time job tracking and lifecycle management.</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div><div class="metric-sub">All-time</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E;">0</div><div class="metric-sub">No active jobs</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div><div class="metric-sub">Completed</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div><div class="metric-sub">Investigate</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head">
+            <div class="table-head-label">Recent Jobs</div>
+            <input class="table-search" placeholder="Search…"/>
+            <button class="deploy-btn">+ Deploy</button>
+          </div>
+          <table>
+            <thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Lifecycle</th><th>Duration</th></tr></thead>
+            <tbody>
+              <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+              <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+              <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag uat">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Size study -->
+  <div class="size-study" id="size-study">
+    <h3>Size Study — How it holds at every scale</h3>
+    <div class="size-row">
+      <div class="size-label">Page header · 32px</div>
+      <div class="size-light" style="font-size:32px;">Wizard<em>CD</em></div>
+      <div class="size-dark-wrap"><div class="size-dark" style="font-size:32px;">Wizard<em>CD</em></div></div>
+    </div>
+    <div class="size-row">
+      <div class="size-label">Sidebar · 20px</div>
+      <div class="size-light" style="font-size:20px;">Wizard<em>CD</em></div>
+      <div class="size-dark-wrap"><div class="size-dark" style="font-size:20px;">Wizard<em>CD</em></div></div>
+    </div>
+    <div class="size-row">
+      <div class="size-label">Nav bar · 14px</div>
+      <div class="size-light" style="font-size:14px;">Wizard<em>CD</em></div>
+      <div class="size-dark-wrap"><div class="size-dark" style="font-size:14px;">Wizard<em>CD</em></div></div>
+    </div>
+    <div class="size-row">
+      <div class="size-label">Badge / pill · 11px</div>
+      <div class="size-light" style="font-size:11px;">Wizard<em>CD</em></div>
+      <div class="size-dark-wrap"><div class="size-dark" style="font-size:11px;">Wizard<em>CD</em></div></div>
+    </div>
+    <div class="size-row">
+      <div class="size-label">Footer credit · 10px</div>
+      <div class="size-light" style="font-size:10px;">WizardCD</div>
+      <div style="font-size:10px;color:#888;">← no colour split below ~12px, use plain text</div>
+    </div>
+  </div>
+
+</div>
+
+<div style="height:80px;"></div>
+
+<script>
+const links = document.querySelectorAll('.page-nav a');
+const sections = document.querySelectorAll('.section[id],.size-study[id]');
+const obs = new IntersectionObserver(e => {
+  e.forEach(entry => {
+    if(entry.isIntersecting){
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector(`.page-nav a[href="#${entry.target.id}"]`);
+      if(a) a.classList.add('active');
+    }
+  });
+},{threshold:0.4});
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

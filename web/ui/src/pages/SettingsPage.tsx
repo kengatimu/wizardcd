@@ -106,7 +106,7 @@ export default function SettingsPage() {
 
       {/* ── Page Title ── */}
       <div>
-        <h1 className="text-2xl font-bold text-wiz-cream">Settings</h1>
+        <h1 className="text-2xl font-serif font-bold text-wiz-cream">Settings</h1>
         <p className="text-xs text-wiz-muted/50 mt-1">
           Configure WizardCD control plane behaviour and preferences.
         </p>
@@ -157,7 +157,7 @@ export default function SettingsPage() {
           {/* Connection status */}
           {connStatus !== null && (
             <div className={clsx(
-              'flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium',
+              'flex items-center gap-2.5 px-4 py-2.5 rounded text-sm font-medium',
               'border transition-all duration-200',
               connStatus.ok
                 ? 'bg-sig-green-dim border-sig-green/20 text-sig-green'
@@ -190,8 +190,8 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-4">
 
           {/* ── Dashboard inner panel (sig-green) ── */}
-          <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-green/5 flex items-center gap-2">
+          <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-green-dim flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-sig-green flex-shrink-0" />
               <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-green">Dashboard</span>
             </div>
@@ -227,8 +227,8 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Log Viewer inner panel (sig-blue) ── */}
-          <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue/5 flex items-center gap-2">
+          <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue-dim flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-sig-blue flex-shrink-0" />
               <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue">Log Viewer</span>
             </div>
@@ -257,8 +257,8 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Notifications inner panel (wiz-gold) ── */}
-          <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-wiz-gold/60 border-r-wiz-border-strong overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-wiz-gold/5 flex items-center gap-2">
+          <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-wiz-gold/60 border-r-wiz-border-strong overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-wiz-gold-dim flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold flex-shrink-0" />
               <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-wiz-gold">Notifications</span>
             </div>
@@ -287,8 +287,8 @@ export default function SettingsPage() {
           ABOUT (compact footer row)
           ══════════════════════════════════════════════════════════════ */}
 
-      <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-wiz-border/40 bg-wiz-surface/30">
-        <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-wiz-border bg-wiz-bg">
+      <div className="flex items-center gap-4 px-5 py-4 rounded border border-wiz-border bg-wiz-surface">
+        <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden border border-wiz-border bg-wiz-bg">
           <img
             src="/wizardCD-logo.png"
             alt="WizardCD"

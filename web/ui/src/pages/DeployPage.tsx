@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Wand2, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle, Clock, ChevronDown, Info, Search } from 'lucide-react'
 import JSZip from 'jszip'
@@ -15,10 +15,10 @@ import MissionControl, { SIDEBAR_MAX_W } from '../components/MissionControl'
 // ── Step metadata ─────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, num: '01', label: 'Target Server'  },
-  { id: 2, num: '02', label: 'Application'    },
-  { id: 3, num: '03', label: 'Deployment Options' },
-  { id: 4, num: '04', label: 'Review & Deploy' },
+  { id: 1, num: '01', label: 'Target Server',       subtitle: 'Point WizardCD at your server and verify it can reach it over SSH.' },
+  { id: 2, num: '02', label: 'Application',         subtitle: 'Upload your JAR and tell us how the application should run.' },
+  { id: 3, num: '03', label: 'Deployment Options',  subtitle: 'Tune backups, log rotation, JVM flags and any extra files to ship.' },
+  { id: 4, num: '04', label: 'Review & Deploy',     subtitle: 'One last look at every setting before you cast the deployment.' },
 ] as const
 
 // ── File upload helper types ───────────────────────────────────────
@@ -38,10 +38,10 @@ interface ExtraDirUpload {
 // ── Per-environment SSH key panel style tokens ────────────────────
 
 const ENV_KEY_STYLE = {
-  DEV:  { border: 'border-l-sig-green/60',  dot: 'bg-sig-green',  text: 'text-sig-green',  header: 'bg-sig-green-dim',  badge: 'border-sig-green/30 bg-sig-green-dim/40'    },
-  SIT:  { border: 'border-l-sig-blue/60',   dot: 'bg-sig-blue',   text: 'text-sig-blue',   header: 'bg-sig-blue-dim',   badge: 'border-sig-blue/30 bg-sig-blue-dim/40'     },
-  UAT:  { border: 'border-l-sig-yellow/60', dot: 'bg-sig-yellow', text: 'text-sig-yellow', header: 'bg-sig-yellow-dim', badge: 'border-sig-yellow/30 bg-sig-yellow-dim/40'  },
-  PROD: { border: 'border-l-sig-purple/60', dot: 'bg-sig-purple', text: 'text-sig-purple', header: 'bg-sig-purple-dim', badge: 'border-sig-purple/30 bg-sig-purple-dim/40'  },
+  DEV:  { border: 'border-l-sig-green/40',  dot: 'bg-sig-green',  text: 'text-sig-green/85',  header: 'bg-sig-green-dim',  headerLight: 'bg-sig-green-dim/40',  badge: 'border-sig-green/30 bg-sig-green-dim/40'    },
+  SIT:  { border: 'border-l-sig-blue/40',   dot: 'bg-sig-blue',   text: 'text-sig-blue/85',   header: 'bg-sig-blue-dim',   headerLight: 'bg-sig-blue-dim/40',   badge: 'border-sig-blue/30 bg-sig-blue-dim/40'     },
+  UAT:  { border: 'border-l-sig-yellow/40', dot: 'bg-sig-yellow', text: 'text-sig-yellow/85', header: 'bg-sig-yellow-dim', headerLight: 'bg-sig-yellow-dim/40', badge: 'border-sig-yellow/30 bg-sig-yellow-dim/40'  },
+  PROD: { border: 'border-l-sig-purple/40', dot: 'bg-sig-purple', text: 'text-sig-purple/85', header: 'bg-sig-purple-dim', headerLight: 'bg-sig-purple-dim/40', badge: 'border-sig-purple/30 bg-sig-purple-dim/40'  },
 } as const
 
 // ── Form state ────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ function StepErrorBanner({ errors }: { errors: FormErrors }) {
   const keys = Object.keys(errors) as (keyof FormState)[]
   if (keys.length === 0) return null
   return (
-    <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg border border-sig-red/30 bg-sig-red-dim/20 mb-4">
+    <div className="flex items-start gap-2.5 px-4 py-3 rounded border border-sig-red/30 bg-sig-red-dim/20 mb-4">
       <AlertTriangle size={14} className="text-sig-red flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold text-sig-red">Missing required fields</p>
@@ -287,7 +287,7 @@ function ReviewRow({ label, value, mono, badge }: {
       ) : (
         <span
           className={clsx(
-            'flex-1 rounded-md bg-wiz-bg/60 border border-wiz-border/15 px-2.5 py-1',
+            'flex-1 rounded-md bg-wiz-bg border border-wiz-border/15 px-2.5 py-1',
             'text-xs text-wiz-cream/80 break-all font-mono',
           )}
           title={value || '—'}
@@ -300,40 +300,91 @@ function ReviewRow({ label, value, mono, badge }: {
 }
 
 function StepTab({ num, label, status, onClick }: StepTabProps) {
+  const isActive     = status === 'active'
+  const isComplete   = status === 'complete'
+  const isIncomplete = status === 'incomplete'
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={clsx(
-        'flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border font-mono text-xs w-full',
-        'transition-all duration-150 whitespace-nowrap cursor-pointer',
-        status === 'active'
-          ? 'border-wiz-gold       text-wiz-gold    bg-wiz-gold/5          shadow-gold-sm'
-          : status === 'complete'
-          ? 'border-sig-green/40   text-sig-green   bg-sig-green-dim/60    hover:border-sig-green/60  hover:bg-sig-green-dim'
-          : status === 'incomplete'
-          ? 'border-sig-yellow/40  text-sig-yellow  bg-sig-yellow-dim/40   hover:border-sig-yellow/60 hover:bg-sig-yellow-dim'
-          : /* unvisited */
-            'border-wiz-border/50  text-wiz-muted   bg-wiz-bg              hover:border-wiz-border    hover:text-wiz-gray',
-      )}
+      className="group flex items-center gap-2.5 px-2 py-1.5 rounded transition-all duration-200 cursor-pointer min-w-0 hover:bg-wiz-bg/60"
     >
-      {/* Number / icon badge */}
-      <span className={clsx(
-        'flex-shrink-0 flex items-center justify-center',
-        status === 'active'     ? 'text-wiz-gold'   :
-        status === 'complete'   ? 'text-sig-green'  :
-        status === 'incomplete' ? 'text-sig-yellow' :
-                                  'text-wiz-muted',
-      )}>
-        {status === 'complete'
-          ? <Check         size={12} strokeWidth={2.5} />
-          : status === 'incomplete'
-          ? <AlertTriangle size={12} strokeWidth={2.5} />
-          : <span className="font-bold text-xs">{num}</span>
-        }
+      {/* Numbered circle — the visual focal point of each step */}
+      <span className="relative flex-shrink-0">
+        {/* Pulse ring (active only) */}
+        {isActive && (
+          <span
+            className="absolute inset-0 rounded-full bg-wiz-gold/35 animate-ping"
+            style={{ animationDuration: '2s' }}
+            aria-hidden
+          />
+        )}
+
+        <span className={clsx(
+          'relative flex items-center justify-center w-8 h-8 rounded-full border-2 font-mono font-bold text-[12px] transition-all duration-200',
+          isActive
+            ? 'border-wiz-gold bg-wiz-gold text-white shadow-[0_0_0_4px_rgba(139,26,26,0.12),0_2px_8px_rgba(139,26,26,0.30)]'
+            : isComplete
+            ? 'border-sig-green bg-sig-green text-white shadow-[0_2px_6px_rgba(22,163,74,0.25)]'
+            : isIncomplete
+            ? 'border-sig-yellow/60 bg-sig-yellow-dim text-sig-yellow group-hover:border-sig-yellow'
+            : 'border-wiz-border-mid bg-wiz-surface text-wiz-muted group-hover:border-wiz-border-strong group-hover:text-wiz-cream',
+        )}>
+          {isComplete
+            ? <Check size={14} strokeWidth={3} />
+            : isIncomplete
+            ? <AlertTriangle size={13} strokeWidth={2.5} />
+            : num}
+        </span>
       </span>
-      <span className="font-medium">{label}</span>
+
+      {/* Two-line label: meta caption + step name */}
+      <span className="flex flex-col items-start min-w-0">
+        <span className={clsx(
+          'text-[8.5px] font-bold uppercase tracking-[0.16em] leading-none transition-colors',
+          isActive     ? 'text-wiz-gold' :
+          isComplete   ? 'text-sig-green' :
+          isIncomplete ? 'text-sig-yellow' :
+                         'text-wiz-muted',
+        )}>
+          {isComplete   ? 'Done'    :
+           isActive     ? 'Current' :
+           isIncomplete ? 'Issue'   :
+                          `Step ${num}`}
+        </span>
+        <span className={clsx(
+          'text-[12.5px] font-semibold leading-tight mt-0.5 truncate transition-colors',
+          isActive   ? 'text-wiz-cream' :
+          isComplete ? 'text-wiz-cream' :
+                       'text-wiz-muted group-hover:text-wiz-gray',
+        )}>
+          {label}
+        </span>
+      </span>
     </button>
+  )
+}
+
+// ── Step Connector — animated line between step tabs ──────────────
+// Becomes solid green when the step on the LEFT is complete; otherwise
+// stays a subtle dotted neutral line.
+
+interface StepConnectorProps {
+  done: boolean
+}
+
+function StepConnector({ done }: StepConnectorProps) {
+  return (
+    <div className="flex-1 mx-1 relative h-[2px] flex items-center">
+      <div className="absolute inset-x-0 h-[2px] rounded-full bg-wiz-border/60" />
+      <div
+        className={clsx(
+          'absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out',
+          done ? 'bg-sig-green w-full' : 'bg-transparent w-0',
+        )}
+      />
+    </div>
   )
 }
 
@@ -375,7 +426,7 @@ function UploadZone({ value, onChange, error, accept = '.jar,.zip', inputId = 'a
         onClick={() => document.getElementById(inputId)?.click()}
         className={clsx(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[200px] rounded-xl cursor-pointer',
+          'min-h-[200px] rounded cursor-pointer',
           'border-2 border-dashed transition-all duration-150',
           dragging
             ? 'border-wiz-gold   bg-wiz-gold/5'
@@ -466,7 +517,7 @@ function CompactUploadZone({ accept, inputId, onChange, error }: CompactUploadZo
         onDrop={handleDrop}
         onClick={() => document.getElementById(inputId)?.click()}
         className={clsx(
-          'flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer',
+          'flex items-center gap-3 px-4 py-3 rounded cursor-pointer',
           'border-2 border-dashed transition-all duration-150',
           dragging
             ? 'border-wiz-gold bg-wiz-gold/5'
@@ -475,7 +526,7 @@ function CompactUploadZone({ accept, inputId, onChange, error }: CompactUploadZo
             : 'border-wiz-border bg-wiz-bg hover:border-wiz-border-mid hover:bg-wiz-surface',
         )}
       >
-        <div className="w-8 h-8 rounded-lg bg-wiz-raised flex items-center justify-center flex-shrink-0">
+        <div className="w-8 h-8 rounded bg-wiz-raised flex items-center justify-center flex-shrink-0">
           <Upload size={15} className="text-wiz-muted" />
         </div>
         <div className="flex flex-col gap-0.5">
@@ -500,7 +551,7 @@ interface MiniUploadProps {
 function MiniUpload({ value, onChange, accept, inputId }: MiniUploadProps) {
   if (value) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sig-green/40 bg-sig-green-dim text-xs">
+      <div className="flex items-center gap-2 px-3 py-2 rounded border border-sig-green/40 bg-sig-green-dim text-xs">
         <Check size={11} className="text-sig-green flex-shrink-0" />
         <span className="font-mono text-wiz-cream truncate flex-1">{value.name}</span>
         <button
@@ -527,7 +578,7 @@ function MiniUpload({ value, onChange, accept, inputId }: MiniUploadProps) {
         type="button"
         onClick={() => document.getElementById(inputId)?.click()}
         className={clsx(
-          'flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed',
+          'flex items-center gap-1.5 px-3 py-2 rounded border border-dashed',
           'border-wiz-border bg-wiz-bg font-mono text-xs text-wiz-muted',
           'hover:border-wiz-border-mid hover:text-wiz-gray hover:bg-wiz-surface',
           'transition-all duration-150',
@@ -1057,7 +1108,7 @@ function FirewallRulesRow({ runnerPublicIp }: { runnerPublicIp: string }) {
   ]
   return (
     <RowField label="Whitelist Rules" sublabel="Per platform" name="firewallRules">
-      <div className="rounded-lg border border-wiz-border overflow-hidden">
+      <div className="rounded border border-wiz-border overflow-hidden">
         <table className="w-full text-xs font-mono">
           <thead>
             <tr className="bg-wiz-raised border-b border-wiz-border-strong/60">
@@ -1747,18 +1798,33 @@ export default function DeployPage() {
     {/* ── Page header (title + history) — scrolls away naturally ── */}
     <div className="flex flex-col gap-6 max-w-3xl pt-6 mb-4 xl:!max-w-[1132px]">
 
-      {/* ── Page title ── */}
-      <div>
-        <h1 className="text-2xl font-bold text-wiz-cream">New Deployment</h1>
-        <p className="text-sm text-wiz-muted mt-0.5">
-          One Config. One Command. Continuous Magic.
-        </p>
+      {/* ── Page title — animated crimson sweep across the headline ── */}
+      <div className="flex items-end gap-3 pb-2 border-b border-wiz-border/60">
+        <div className="w-1 h-9 rounded-full bg-wiz-gold flex-shrink-0" aria-hidden />
+        <div className="min-w-0">
+          <h1
+            className="text-2xl font-serif font-bold leading-none deploy-title-shimmer"
+            style={{
+              backgroundImage: 'linear-gradient(90deg, #1A1A2E 0%, #1A1A2E 30%, #8B1A1A 50%, #1A1A2E 70%, #1A1A2E 100%)',
+              backgroundSize: '200% 100%',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+              animation: 'deploy-title-sweep 6s linear infinite',
+            }}
+          >
+            New Deployment
+          </h1>
+        </div>
       </div>
 
-      {/* ── Draft restore banner — "Continue" or "Start fresh" ── */}
+      {/* ── Draft restore banner — "Continue" or "Start fresh" ──
+          Informational notice (not a warning), so it lives in the
+          sig-blue family. A 3px left accent gives it visual identity
+          without flooding the row with fill. */}
       {draftBanner && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-wiz-gold/30 bg-wiz-gold-dim animate-fade-in">
-          <Info size={16} className="text-wiz-gold flex-shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3 rounded border border-sig-blue/25 border-l-[3px] border-l-sig-blue/60 bg-sig-blue/5 animate-fade-in">
+          <Info size={16} className="text-sig-blue flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm text-wiz-cream">
               Previous draft restored
@@ -1773,14 +1839,14 @@ export default function DeployPage() {
             <button
               type="button"
               onClick={() => setDraftBanner(null)}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-sig-green/40 bg-sig-green-dim/40 text-sig-green hover:bg-sig-green-dim hover:border-sig-green/60 transition-all"
+              className="text-xs font-medium px-3 py-1.5 rounded border border-sig-green/40 bg-sig-green-dim/40 text-sig-green hover:bg-sig-green-dim hover:border-sig-green/60 transition-all"
             >
               Continue
             </button>
             <button
               type="button"
               onClick={resetToFresh}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-wiz-border/60 text-wiz-muted hover:text-wiz-cream hover:border-wiz-border transition-all"
+              className="text-xs font-medium px-3 py-1.5 rounded border border-wiz-border/60 text-wiz-muted hover:text-wiz-cream hover:border-wiz-border transition-all"
             >
               Start Fresh
             </button>
@@ -1788,96 +1854,133 @@ export default function DeployPage() {
         </div>
       )}
 
-      {/* ── Deploy history card ── */}
+      {/* ── Saved Drafts panel ──
+          Compact, brand-aligned. Crimson left border + warm gradient
+          backdrop ties it to the wizard's design language. Collapses
+          to a single row by default; expands to show drafts on click. */}
       {deployHistory.length > 0 && !historyDismissed && !draftBanner && (
-        <div className="rounded-xl border border-wiz-gold/30 bg-wiz-gold-dim overflow-hidden animate-fade-in">
-
-          {/* Header — clicking it toggles collapse */}
+        <div
+          className="relative rounded-md border border-wiz-border border-l-[3px] border-l-wiz-gold overflow-hidden animate-fade-in"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,1) 0%, rgba(139,26,26,0.05) 100%)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.04)',
+          }}
+        >
+          {/* Header — single compact row */}
           <div className="flex items-center gap-2.5 px-4 py-2.5">
             <button
               type="button"
               onClick={() => setHistoryExpanded(e => !e)}
-              className="flex items-center gap-2.5 flex-1 hover:opacity-80 transition-opacity text-left"
+              className="flex items-center gap-2.5 flex-1 hover:opacity-80 transition-opacity text-left group"
+              aria-expanded={historyExpanded}
             >
-              <Clock size={14} className="text-wiz-gold flex-shrink-0" />
-              <span className="text-sm font-semibold text-wiz-gold flex-1">Recent Deployments</span>
-              <span className="text-2xs font-mono text-wiz-muted">
-                {deployHistory.length} saved
+              {/* Icon chip — clock in tinted gold square */}
+              <span className="flex items-center justify-center w-5 h-5 rounded-md bg-wiz-gold/12 text-wiz-gold flex-shrink-0">
+                <Clock size={11} strokeWidth={2.4} />
+              </span>
+
+              {/* Label + count chip */}
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-wiz-cream/85">
+                Saved Drafts
+              </span>
+              <span className="inline-flex items-center px-1.5 py-[1px] rounded-sm text-[9px] font-mono font-bold tabular-nums bg-wiz-gold/10 text-wiz-gold border border-wiz-gold/30">
+                {deployHistory.length}
+              </span>
+
+              {/* Spacer */}
+              <span className="flex-1" />
+
+              {/* CTA chip — clearer "Resume Draft" call-to-action */}
+              <span className={clsx(
+                'inline-flex items-center gap-1 px-2 py-[3px] rounded-md text-[9.5px] font-bold uppercase tracking-[0.14em] border transition-all duration-150',
+                historyExpanded
+                  ? 'bg-wiz-bg/60 border-wiz-border text-wiz-muted group-hover:bg-wiz-raised'
+                  : 'bg-wiz-gold/8 border-wiz-gold/30 text-wiz-gold group-hover:bg-wiz-gold group-hover:text-white group-hover:border-wiz-gold',
+              )}>
+                <ChevronDown
+                  size={10}
+                  strokeWidth={2.6}
+                  className={clsx(
+                    'transition-transform duration-200',
+                    historyExpanded ? 'rotate-180' : 'rotate-0',
+                  )}
+                />
+                {historyExpanded ? 'Hide' : 'Resume Draft'}
               </span>
             </button>
-            <ChevronDown
-              size={14}
-              onClick={() => setHistoryExpanded(e => !e)}
-              className={clsx(
-                'text-wiz-gold/60 transition-transform duration-200 flex-shrink-0 cursor-pointer',
-                historyExpanded ? 'rotate-0' : '-rotate-90',
-              )}
-            />
+
             <button
               type="button"
               onClick={() => setHistoryDismissed(true)}
-              className="btn-icon h-6 w-6 text-wiz-muted hover:text-sig-red flex-shrink-0"
+              className="btn-icon h-6 w-6 text-wiz-dim hover:text-sig-red hover:bg-sig-red-dim flex-shrink-0"
               aria-label="Dismiss"
+              title="Hide drafts"
             >
-              <X size={12} />
+              <X size={11} />
             </button>
           </div>
 
-          {/* History rows — only when expanded */}
-          {historyExpanded && <div className="divide-y divide-wiz-gold/10 border-t border-wiz-gold/15">
-            {deployHistory.map((entry, i) => {
-              const envColor =
-                entry.environment === 'UAT'  ? 'bg-sig-yellow/15 text-sig-yellow' :
-                entry.environment === 'PROD' ? 'bg-sig-purple/15 text-sig-purple' :
-                                               'bg-sig-blue/15   text-sig-blue'
-              return (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-wiz-gold/5 transition-colors">
-                  {/* Index */}
-                  <span className="text-2xs font-mono text-wiz-dim/50 w-4 shrink-0 text-right">{i + 1}</span>
+          {/* Expanded rows — divided list */}
+          {historyExpanded && (
+            <div className="divide-y divide-wiz-border/40 border-t border-wiz-border/40 bg-wiz-surface/60">
+              {deployHistory.map((entry, i) => {
+                const envColor =
+                  entry.environment === 'DEV'  ? 'bg-sig-green-dim text-sig-green border-sig-green/25' :
+                  entry.environment === 'UAT'  ? 'bg-sig-yellow-dim text-sig-yellow border-sig-yellow/25' :
+                  entry.environment === 'PROD' ? 'bg-sig-purple-dim text-sig-purple border-sig-purple/25' :
+                                                 'bg-sig-blue-dim text-sig-blue border-sig-blue/25'
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-wiz-bg/60 transition-colors group/row"
+                  >
+                    {/* Index */}
+                    <span className="text-2xs font-mono text-wiz-dim w-4 shrink-0 text-right">{i + 1}</span>
 
-                  {/* App name + timestamp */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-wiz-cream truncate leading-snug">
-                      {entry.appName || 'Unknown app'}
-                    </p>
-                    <p className="text-2xs text-wiz-muted mt-0.5">
-                      {entry.sshHost} · {formatRelativeTime(entry.savedAt)}
-                    </p>
+                    {/* App name + meta */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-wiz-cream truncate leading-snug">
+                        {entry.appName || 'Unknown app'}
+                      </p>
+                      <p className="text-2xs text-wiz-muted mt-0.5 font-mono">
+                        {entry.sshHost} · {formatRelativeTime(entry.savedAt)}
+                      </p>
+                    </div>
+
+                    {/* Environment badge */}
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider shrink-0 ${envColor}`}>
+                      {entry.environment}
+                    </span>
+
+                    {/* Pre-fill primary action */}
+                    <button
+                      type="button"
+                      onClick={() => handlePrefill(entry)}
+                      className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold text-wiz-gold bg-wiz-gold/8 hover:bg-wiz-gold hover:text-white border border-wiz-gold/30 hover:border-wiz-gold transition-all duration-150"
+                    >
+                      Pre-fill
+                    </button>
+
+                    {/* Remove */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const updated = deployHistory.filter((_, j) => j !== i)
+                        setDeployHistory(updated)
+                        localStorage.setItem(DEPLOY_HISTORY_KEY, JSON.stringify(updated))
+                      }}
+                      className="btn-icon h-6 w-6 text-wiz-dim hover:text-sig-red hover:bg-sig-red-dim flex-shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity"
+                      aria-label="Remove from list"
+                      title="Remove from list"
+                    >
+                      <X size={11} />
+                    </button>
                   </div>
-
-                  {/* Environment badge */}
-                  <span className={`text-2xs font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${envColor}`}>
-                    {entry.environment}
-                  </span>
-
-                  {/* Pre-fill button */}
-                  <button
-                    type="button"
-                    onClick={() => handlePrefill(entry)}
-                    className="shrink-0 px-3 py-1 rounded-lg border border-wiz-gold/40 bg-wiz-gold/10 text-2xs font-semibold text-wiz-gold hover:bg-wiz-gold/20 transition-colors"
-                  >
-                    Pre-fill
-                  </button>
-
-                  {/* Remove from list */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const updated = deployHistory.filter((_, j) => j !== i)
-                      setDeployHistory(updated)
-                      localStorage.setItem(DEPLOY_HISTORY_KEY, JSON.stringify(updated))
-                    }}
-                    className="btn-icon h-6 w-6 text-wiz-muted/50 hover:text-sig-red hover:bg-sig-red-dim flex-shrink-0"
-                    aria-label="Remove from list"
-                    title="Remove from list"
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>}
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1962,18 +2065,217 @@ export default function DeployPage() {
     ) : (
       <>
 
-      {/* ── Step tabs — spans full content width (form + sidebar) ── */}
-      <div className="sticky top-0 z-50 -mx-6 px-6 bg-wiz-bg border-b border-wiz-border/40">
-        <div className="grid grid-cols-4 gap-1.5 py-3 max-w-3xl xl:!max-w-[1132px]">
-          {STEPS.map((s) => (
-            <StepTab
-              key={s.id}
-              num={s.num}
-              label={s.label}
-              status={getStepStatus(s.id, step, visited, form, jvmConfigEnabled)}
-              onClick={() => goTo(s.id)}
-            />
-          ))}
+      {/* ── Step navigation — wrapped in a proper panel for visual anchoring ──
+          Sticky at the top of the scroll area so users always see where they are. */}
+      <div className="sticky top-0 z-50 -mx-6 px-6 pt-3 pb-3 bg-wiz-bg">
+        <div className="max-w-3xl xl:!max-w-[1132px]">
+          {(() => {
+            const stepStatuses = STEPS.map(s => getStepStatus(s.id, step, visited, form, jvmConfigEnabled))
+            const completed    = stepStatuses.filter(s => s === 'complete').length
+            const progressPct  = (completed / STEPS.length) * 100
+            const isAllDone    = completed === STEPS.length
+            // Hide the floating chip at the extremes — at 0 it collides with
+            // the status pill, and at 100 the "Ready" pill already conveys it.
+            const showChip     = progressPct > 0 && progressPct < 100
+
+            return (
+              <div
+                className="rounded-md border border-wiz-border border-l-[3px] border-l-wiz-gold bg-wiz-surface px-5 pt-3.5 pb-4"
+                style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.04)' }}
+              >
+                {/* ── Status row — left "step + hint" chip, right "complete" pill ── */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  {/* Left chip — two-section: uppercase step label + contextual hint.
+                      The label section keeps the original compact pill identity
+                      (pulse dot + "STEP N OF 4"); a hairline divider opens onto a
+                      hint section that morphs per step (or to the "ready" line
+                      once every step is complete). The hint span is keyed on
+                      `step` so React remounts it and the existing fade-in
+                      keyframe runs on every transition — gives the chip a
+                      living, narrating quality instead of static chrome. */}
+                  <div
+                    className={clsx(
+                      'inline-flex items-stretch rounded-md border min-w-0 transition-all duration-300 overflow-hidden',
+                      isAllDone ? 'border-sig-green/35' : 'border-sig-blue/35',
+                    )}
+                    style={
+                      isAllDone
+                        ? {
+                            // Completion state — left-weighted green wash with depth.
+                            // The gradient fades from richer at the label end to softer
+                            // at the hint end, so the eye reads label → hint naturally.
+                            background:
+                              'linear-gradient(90deg, rgba(22,163,74,0.20) 0%, rgba(22,163,74,0.12) 55%, rgba(22,163,74,0.06) 100%)',
+                            boxShadow:
+                              '0 1px 3px rgba(22,163,74,0.14), 0 0 0 1px rgba(22,163,74,0.04), inset 0 1px 0 rgba(255,255,255,0.55)',
+                          }
+                        : {
+                            // In-progress state — same recipe in informational blue.
+                            // The 1px inner top highlight lifts the chip off the page;
+                            // the soft drop shadow tints with the same hue so the chip
+                            // reads as "filled & sitting on the surface" instead of a
+                            // ghost outline.
+                            background:
+                              'linear-gradient(90deg, rgba(37,99,235,0.20) 0%, rgba(37,99,235,0.12) 55%, rgba(37,99,235,0.06) 100%)',
+                            boxShadow:
+                              '0 1px 3px rgba(37,99,235,0.14), 0 0 0 1px rgba(37,99,235,0.04), inset 0 1px 0 rgba(255,255,255,0.55)',
+                          }
+                    }
+                  >
+                    {/* Label section */}
+                    <div className={clsx(
+                      'flex items-center gap-1.5 px-2 py-1 text-[9.5px] font-bold uppercase tracking-[0.16em] flex-shrink-0',
+                      isAllDone ? 'text-sig-green' : 'text-sig-blue',
+                    )}>
+                      <span className="relative flex w-1.5 h-1.5">
+                        <span
+                          className={clsx(
+                            'absolute inline-flex h-full w-full rounded-full opacity-50 animate-ping',
+                            isAllDone ? 'bg-sig-green' : 'bg-sig-blue',
+                          )}
+                          style={{ animationDuration: '1.8s' }}
+                        />
+                        <span className={clsx(
+                          'relative inline-flex rounded-full h-1.5 w-1.5',
+                          isAllDone ? 'bg-sig-green' : 'bg-sig-blue',
+                        )} />
+                      </span>
+                      {isAllDone ? 'Ready' : `Step ${step} of ${STEPS.length}`}
+                    </div>
+
+                    {/* Hairline divider — colour matches the active accent */}
+                    <div
+                      className={clsx(
+                        'w-px my-1 flex-shrink-0',
+                        isAllDone ? 'bg-sig-green/25' : 'bg-sig-blue/20',
+                      )}
+                      aria-hidden
+                    />
+
+                    {/* Hint section — fades in on every step transition */}
+                    <div
+                      key={`step-hint-${step}-${isAllDone ? 'done' : 'active'}`}
+                      className="flex items-center min-w-0 px-2.5 py-1 animate-fade-in"
+                    >
+                      <span
+                        className="text-[11px] leading-snug font-medium text-wiz-cream/95 truncate"
+                        title={
+                          isAllDone
+                            ? 'Every step is complete — one click away from deploying.'
+                            : STEPS[step - 1]?.subtitle
+                        }
+                      >
+                        {isAllDone
+                          ? 'Every step is complete — one click away from deploying.'
+                          : STEPS[step - 1]?.subtitle}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Right pill — completion count.
+                      Colour story: grey (idle) → blue (in progress) → green (all done).
+                      Green is reserved strictly for 100% complete; partial progress
+                      uses informational blue so it doesn't read as "done". */}
+                  <div className={clsx(
+                    'inline-flex items-center self-center gap-1.5 px-2 py-1 rounded-md border text-[9.5px] font-bold uppercase tracking-[0.16em] flex-shrink-0 transition-colors duration-300',
+                    completed === STEPS.length
+                      ? 'bg-sig-green-dim border-sig-green/30 text-sig-green'
+                      : completed > 0
+                      ? 'bg-sig-blue-dim border-sig-blue/25 text-sig-blue'
+                      : 'bg-wiz-bg/60 border-wiz-border/60 text-wiz-muted',
+                  )}>
+                    <Check
+                      size={11}
+                      strokeWidth={2.8}
+                      className={clsx(
+                        'transition-colors duration-300',
+                        completed === STEPS.length ? 'text-sig-green'
+                        : completed > 0 ? 'text-sig-blue'
+                        : 'text-wiz-dim/40',
+                      )}
+                    />
+                    <span className="font-mono font-bold tabular-nums">{completed}</span>
+                    <span className="opacity-60">/</span>
+                    <span className="font-mono font-bold tabular-nums">{STEPS.length}</span>
+                    <span className="opacity-80">complete</span>
+                  </div>
+                </div>
+
+                {/* ── Progress bar — thick, gradient, with shimmer + floating chip ── */}
+                <div className={clsx('relative mt-1', showChip ? 'mb-5' : 'mb-3')}>
+                  {/* Track */}
+                  <div className="h-2 bg-wiz-border/50 rounded-full overflow-hidden relative">
+                    {/* Filled portion with gradient + shimmer */}
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out overflow-hidden"
+                      style={{
+                        width: `${progressPct}%`,
+                        background: 'linear-gradient(90deg, rgb(22,163,74) 0%, rgb(217,119,6) 50%, rgb(139,26,26) 100%)',
+                      }}
+                    >
+                      {progressPct > 0 && (
+                        <div
+                          className="absolute inset-y-0 w-1/2 rounded-full"
+                          style={{
+                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%)',
+                            animation: 'progress-shimmer 2.4s linear infinite',
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Floating progress chip — only when between 1% and 99% */}
+                  {showChip && (
+                    <div
+                      className="absolute -top-1 transition-all duration-700 ease-out pointer-events-none"
+                      style={{
+                        left: `${progressPct}%`,
+                        animation: 'chip-float 2.5s ease-in-out infinite',
+                        transform: 'translate(-50%, 0)',
+                      }}
+                    >
+                      {/* Marker dot anchored on the bar */}
+                      <div className="absolute -bottom-[3px] left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white border-2 border-wiz-gold shadow-[0_2px_6px_rgba(139,26,26,0.40)]" />
+
+                      {/* Floating percentage chip — rendered above the marker */}
+                      <div className="relative -translate-y-7">
+                        <div
+                          className="inline-flex items-center px-1.5 py-[2px] rounded text-[9.5px] font-mono font-bold tabular-nums whitespace-nowrap bg-wiz-gold text-white"
+                          style={{
+                            boxShadow: '0 4px 10px rgba(139,26,26,0.30), 0 0 0 1.5px rgba(255,255,255,0.95)',
+                          }}
+                        >
+                          {Math.round(progressPct)}%
+                        </div>
+                        <div className="absolute left-1/2 -translate-x-1/2 -bottom-[3px] w-1.5 h-1.5 rotate-45 bg-wiz-gold" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step circles + connectors */}
+                <div className="flex items-center">
+                  {STEPS.map((s, i) => {
+                    const status   = stepStatuses[i]
+                    const prevDone = stepStatuses[i - 1] === 'complete'
+                    const isFirst  = i === 0
+                    return (
+                      <Fragment key={s.id}>
+                        {!isFirst && <StepConnector done={prevDone} />}
+                        <StepTab
+                          num={s.num}
+                          label={s.label}
+                          status={status}
+                          onClick={() => goTo(s.id)}
+                        />
+                      </Fragment>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </div>
 
@@ -1990,12 +2292,11 @@ export default function DeployPage() {
             <div className="flex flex-col gap-5">
               <StepErrorBanner errors={errors} />
 
-              {/* ── SSH TARGET CONFIGURATION PANEL ── */}
-              <div id="ssh-target-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+              {/* ── SSH TARGET CONFIGURATION (panel 1 — green theme) ── */}
+              <div id="ssh-target-panel" className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
                     SSH Target Configuration
                   </h3>
                 </div>
@@ -2018,55 +2319,89 @@ export default function DeployPage() {
                       { value: 'PROD', label: 'PROD — Production' },
                     ]}
                   />
-                  <RowInput
-                    label="SSH User"
-                    sublabel="Login account"
-                    name="sshUser"
+                  {/* ── SSH Endpoint — three inputs fused into one connection-string row ──
+                      Renders as `user @ host : port` because that's the mental
+                      model every SSH user already has. The inputs share borders
+                      so the row reads as one composed control; under the hood
+                      each input remains independently editable, individually
+                      validated (red border via wiz-input-error), and individually
+                      labelled for screen readers. */}
+                  <RowField
+                    label="SSH Endpoint"
+                    sublabel={<span className="font-mono text-[10px] tracking-wide">user @ host : port</span>}
+                    name="sshEndpoint"
                     required
-                    placeholder="deploy"
-                    hint="Linux user the runner uses to SSH in — e.g. deploy, ubuntu, ec2-user"
-                    value={form.sshUser}
-                    onChange={(e) => set('sshUser', e.target.value)}
-                    error={errors.sshUser}
-                  />
-                  <RowInput
-                    label="SSH Host"
-                    sublabel="IP or hostname"
-                    name="sshHost"
-                    required
-                    placeholder="34.201.190.116"
-                    hint="Public IP or DNS hostname the runner uses to reach this server."
-                    value={form.sshHost}
-                    onChange={(e) => set('sshHost', e.target.value)}
-                    error={errors.sshHost}
-                  />
-                  <RowInput
-                    label="SSH Port"
-                    sublabel="Default: 22"
-                    name="sshPort"
-                    required
-                    type="number"
-                    placeholder="22"
-                    hint="Port the SSH service listens on (default: 22)."
-                    value={form.sshPort}
-                    onChange={(e) => set('sshPort', e.target.value)}
-                    error={errors.sshPort}
-                  />
+                    error={errors.sshUser || errors.sshHost || errors.sshPort}
+                    hint="Linux user, public IP/hostname and SSH port. The runner authenticates with the per-environment SSH key."
+                  >
+                    <div className="flex items-stretch w-full">
+                      {/* User — narrow flex */}
+                      <input
+                        id="sshUser"
+                        name="sshUser"
+                        aria-label="SSH user"
+                        placeholder="deploy"
+                        value={form.sshUser}
+                        onChange={(e) => set('sshUser', e.target.value)}
+                        className={clsx(
+                          'wiz-input flex-1 min-w-[80px] rounded-r-none border-r-0 relative z-10 focus:z-20',
+                          errors.sshUser && 'wiz-input-error',
+                        )}
+                      />
+                      {/* @ separator chip */}
+                      <span
+                        className="inline-flex items-center justify-center px-2 border-y border-wiz-border bg-wiz-bg/50 text-wiz-muted font-mono text-sm select-none flex-shrink-0"
+                        aria-hidden
+                      >
+                        @
+                      </span>
+                      {/* Host — widest flex */}
+                      <input
+                        id="sshHost"
+                        name="sshHost"
+                        aria-label="SSH host"
+                        placeholder="34.201.190.116"
+                        value={form.sshHost}
+                        onChange={(e) => set('sshHost', e.target.value)}
+                        className={clsx(
+                          'wiz-input flex-[2] min-w-[140px] rounded-none border-x-0 relative z-10 focus:z-20',
+                          errors.sshHost && 'wiz-input-error',
+                        )}
+                      />
+                      {/* : separator chip */}
+                      <span
+                        className="inline-flex items-center justify-center px-2 border-y border-wiz-border bg-wiz-bg/50 text-wiz-muted font-mono text-sm select-none flex-shrink-0"
+                        aria-hidden
+                      >
+                        :
+                      </span>
+                      {/* Port — fixed narrow width (almost always 2 digits) */}
+                      <input
+                        id="sshPort"
+                        name="sshPort"
+                        aria-label="SSH port"
+                        type="number"
+                        placeholder="22"
+                        value={form.sshPort}
+                        onChange={(e) => set('sshPort', e.target.value)}
+                        className={clsx(
+                          'wiz-input w-[72px] flex-shrink-0 rounded-l-none border-l-0 text-center relative z-10 focus:z-20',
+                          errors.sshPort && 'wiz-input-error',
+                        )}
+                      />
+                    </div>
+                  </RowField>
                 </div>
 
               </div>{/* ── end SSH TARGET CONFIGURATION PANEL ── */}
 
-              {/* ── FIREWALL SETUP PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-panel overflow-hidden">
-                {/* Panel header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/40">
-                  <Shield size={13} className="text-sig-blue opacity-80 flex-shrink-0" />
-                  <div className="flex flex-col gap-0.5">
-                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
-                      Firewall Setup
-                    </h3>
-                    <p className="text-xs text-wiz-muted/60">Open port 22 on your target server's firewall for the WizardCD runner IP</p>
-                  </div>
+              {/* ── FIREWALL SETUP (panel 2 — blue theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                    Firewall Setup
+                  </h3>
                 </div>
                 {/* Panel body */}
                 <div className="divide-y divide-wiz-border/30">
@@ -2079,7 +2414,7 @@ export default function DeployPage() {
                     hint="WizardCD runner's public IP — add this to your server's firewall allow rules."
                   >
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 min-h-[36px] flex items-center bg-wiz-bg border border-wiz-border rounded-lg px-4 font-mono text-sm text-wiz-cream select-all">
+                      <div className="flex-1 min-h-[36px] flex items-center bg-wiz-bg border border-wiz-border rounded px-4 font-mono text-sm text-wiz-cream select-all">
                         {runnerPublicIp
                           ? runnerPublicIp
                           : <span className="text-wiz-muted italic text-xs">Detecting…</span>
@@ -2108,23 +2443,16 @@ export default function DeployPage() {
                 </div>
               </div>
 
-              {/* ── SSH KEYS CONFIGURATION PANEL ── */}
-              <div className={clsx('rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden', envKeyStyle.border)}>
-                {/* Panel header — env badge + subtitle, no inner wrapper needed */}
-                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <div className="flex items-center gap-2.5">
-                    <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', envKeyStyle.dot)} />
-                    <div className="flex flex-col gap-0.5">
-                      <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
-                        SSH Keys Configuration
-                      </h3>
-                      <p className="text-xs text-wiz-muted/60">
-                        Grant the WizardCD <span className="text-wiz-cream/60">{form.environment.toLowerCase()}</span> runner SSH access to{' '}
-                        <span className="font-mono text-wiz-cream/60">{form.sshUser || 'SSH user'}@{form.sshHost || 'target server'}</span>
-                      </p>
-                    </div>
+              {/* ── SSH KEYS CONFIGURATION (panel 3 — crimson theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-gold-dim">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                      SSH Keys Configuration
+                    </h3>
                   </div>
-                  <span className={clsx('font-mono text-sm px-3 py-1.5 rounded-md border-2 font-extrabold flex-shrink-0 tracking-widest', envKeyStyle.text, envKeyStyle.badge)}>
+                  <span className={clsx('font-mono text-[11px] px-2 py-0.5 rounded border font-bold flex-shrink-0 tracking-widest', envKeyStyle.text, envKeyStyle.badge)}>
                     {form.environment}
                   </span>
                 </div>
@@ -2164,7 +2492,7 @@ export default function DeployPage() {
                               {copiedKey ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Key</>}
                             </button>
                           </div>
-                          <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 font-mono text-xs text-wiz-gray break-all leading-relaxed select-all">
+                          <div className="bg-wiz-bg border border-wiz-border rounded px-4 py-3 font-mono text-xs text-wiz-gray break-all leading-relaxed select-all">
                             {envKey || <span className="text-wiz-muted italic">Key not available for {form.environment}</span>}
                           </div>
                         </div>
@@ -2194,7 +2522,7 @@ export default function DeployPage() {
                               {copiedScript ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Script</>}
                             </button>
                           </div>
-                          <div className="bg-wiz-bg border border-wiz-border rounded-lg px-4 py-3 overflow-x-auto">
+                          <div className="bg-wiz-bg border border-wiz-border rounded px-4 py-3 overflow-x-auto">
                             <pre className="font-mono text-xs text-wiz-gray leading-6 whitespace-pre m-0 select-all">{setupScript}</pre>
                           </div>
                           <p className="text-xs text-wiz-muted/50 leading-relaxed">
@@ -2207,31 +2535,26 @@ export default function DeployPage() {
                 </div>
               </div>{/* ── end SSH KEYS CONFIGURATION PANEL ── */}
 
-              {/* ── VERIFY CONNECTION PANEL ── */}
+              {/* ── VERIFY CONNECTION (panel 4 — green, rotation restart) ──
+                  Default green theme; flips to red on test failure. */}
               <div className={clsx(
-                'rounded-xl border border-wiz-border border-l-2 bg-wiz-panel overflow-hidden transition-all duration-300',
-                testConnState === 'ok'   ? 'border-l-sig-green/50' :
-                testConnState === 'fail' ? 'border-l-sig-red/50'   : 'border-l-wiz-border-mid',
+                'rounded border border-wiz-border border-l-2 bg-wiz-surface overflow-hidden transition-all duration-300',
+                testConnState === 'fail' ? 'border-l-sig-red/50' : 'border-l-sig-green/50',
               )}>
-                {/* Panel header — neutral by default, green on ok, red on fail */}
                 <div className={clsx(
                   'flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 transition-colors duration-300',
-                  testConnState === 'ok'   ? 'bg-sig-green-dim/20' :
-                  testConnState === 'fail' ? 'bg-sig-red-dim/20'   : 'bg-wiz-raised/30',
+                  testConnState === 'fail' ? 'bg-sig-red-dim' : 'bg-sig-green-dim',
                 )}>
-                  {testConnState === 'fail'
-                    ? <WifiOff size={13} className="text-sig-red/80 flex-shrink-0 transition-colors duration-300" />
-                    : <Wifi    size={13} className={clsx('flex-shrink-0 transition-colors duration-300', testConnState === 'ok' ? 'text-sig-green/80' : 'text-wiz-muted/60')} />
-                  }
-                  <div className="flex flex-col gap-0.5">
-                    <h3 className={clsx('font-mono font-semibold text-xs uppercase tracking-widest transition-colors duration-300',
-                      testConnState === 'ok'   ? 'text-sig-green' :
-                      testConnState === 'fail' ? 'text-sig-red'   : 'text-wiz-gold',
-                    )}>
-                      Verify Connection
-                    </h3>
-                    <p className="text-xs text-wiz-muted/60">Confirm all setup steps are complete, then test</p>
-                  </div>
+                  <span className={clsx(
+                    'w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors duration-300',
+                    testConnState === 'fail' ? 'bg-sig-red/70' : 'bg-sig-green/70',
+                  )} />
+                  <h3 className={clsx(
+                    'font-mono font-semibold text-xs uppercase tracking-widest transition-colors duration-300',
+                    testConnState === 'fail' ? 'text-sig-red' : 'text-sig-green',
+                  )}>
+                    Verify Connection
+                  </h3>
                 </div>
 
                 {/* Panel body */}
@@ -2301,37 +2624,64 @@ export default function DeployPage() {
                   {/* Divider */}
                   <div className="border-t border-wiz-border/40" />
 
-                  {/* Test button + result */}
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleTestConnection()}
-                      disabled={!form.sshUser || !form.sshHost || !form.sshPort || testConnState === 'testing'}
-                      className={clsx(
-                        'inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-semibold w-fit',
-                        'transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed',
-                        testConnState === 'ok'
-                          ? 'border-sig-green/50 bg-sig-green-dim text-sig-green hover:border-sig-green/70'
-                          : testConnState === 'fail'
-                          ? 'border-sig-red/50 bg-sig-red-dim text-sig-red hover:border-sig-red/70'
-                          : testConnState === 'testing'
-                          ? 'border-sig-blue/30 bg-sig-blue-dim text-sig-blue'
-                          : 'border-sig-blue/40 bg-sig-blue-dim/60 text-sig-blue hover:border-sig-blue/70 hover:bg-sig-blue-dim',
-                      )}
-                    >
-                      {testConnState === 'testing'
-                        ? <><Loader2 size={13} className="animate-spin" /> Testing Connection…</>
-                        : testConnState === 'ok'
-                        ? <><Wifi    size={13} /> Connection OK</>
-                        : testConnState === 'fail'
-                        ? <><WifiOff size={13} /> Retry Test</>
-                        : <><Wifi    size={13} /> Test Connection</>
-                      }
-                    </button>
+                  {/* Test button + result — PROMOTED to primary action.
+                      The single most important button on Step 1: filled crimson
+                      (brand primary), bold + prominent, pulses when ready, and
+                      flips to solid green / solid red on result. */}
+                  <div className="flex flex-col gap-2.5">
+                    {(() => {
+                      const ready = !!form.sshUser && !!form.sshHost && !!form.sshPort
+                      const showPulse = ready && testConnState !== 'ok' && testConnState !== 'fail' && testConnState !== 'testing'
 
-                    <p className="text-xs text-wiz-muted/50 leading-relaxed">
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => void handleTestConnection()}
+                          disabled={!ready || testConnState === 'testing'}
+                          className={clsx(
+                            'group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-bold text-white w-fit overflow-visible',
+                            'transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed',
+                            !((!ready) || testConnState === 'testing') && 'hover:scale-[1.03] active:scale-95',
+                            testConnState === 'ok'      && 'bg-sig-green hover:bg-sig-green/90' ,
+                            testConnState === 'fail'    && 'bg-sig-red hover:bg-sig-red/90' ,
+                            testConnState === 'testing' && 'bg-sig-blue/90 cursor-wait' ,
+                            testConnState !== 'ok' && testConnState !== 'fail' && testConnState !== 'testing' && 'bg-wiz-gold hover:bg-wiz-gold-light' ,
+                          )}
+                          style={{
+                            boxShadow:
+                              testConnState === 'ok'      ? '0 4px 14px rgba(22,163,74,0.38), 0 1px 3px rgba(22,163,74,0.22), inset 0 1px 0 rgba(255,255,255,0.18)' :
+                              testConnState === 'fail'    ? '0 4px 14px rgba(220,38,38,0.38), 0 1px 3px rgba(220,38,38,0.22), inset 0 1px 0 rgba(255,255,255,0.18)' :
+                              testConnState === 'testing' ? '0 4px 12px rgba(37,99,235,0.28), 0 1px 3px rgba(37,99,235,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' :
+                                                            '0 4px 14px rgba(139,26,26,0.36), 0 1px 3px rgba(139,26,26,0.22), inset 0 1px 0 rgba(255,255,255,0.18)',
+                          }}
+                        >
+                          {/* Pulse ring — only when form is ready and test hasn't run.
+                              Calls attention to "do this next". */}
+                          {showPulse && (
+                            <span
+                              className="absolute inset-0 rounded-md bg-wiz-gold/40 animate-ping pointer-events-none"
+                              style={{ animationDuration: '2.2s' }}
+                              aria-hidden
+                            />
+                          )}
+
+                          <span className="relative flex items-center gap-2">
+                            {testConnState === 'testing'
+                              ? <><Loader2 size={14} strokeWidth={2.5} className="animate-spin" /> Testing connection…</>
+                              : testConnState === 'ok'
+                              ? <><Wifi    size={14} strokeWidth={2.5} /> Connection OK</>
+                              : testConnState === 'fail'
+                              ? <><WifiOff size={14} strokeWidth={2.5} /> Retry test</>
+                              : <><Wifi    size={14} strokeWidth={2.5} /> Test Connection</>
+                            }
+                          </span>
+                        </button>
+                      )
+                    })()}
+
+                    <p className="text-xs text-wiz-muted/60 leading-relaxed">
                       {testConnState === 'ok'
-                        ? <span className="text-sig-green">Runner can reach the server successfully.</span>
+                        ? <span className="text-sig-green font-medium">✓ Runner can reach the server successfully — ready to continue.</span>
                         : testConnState === 'fail'
                         ? <span className="text-sig-red">
                             {testConnMsg === 'runner-unreachable'
@@ -2356,13 +2706,13 @@ export default function DeployPage() {
             <div className="flex flex-col gap-5">
               <StepErrorBanner errors={errors} />
 
-              {/* ── APPLICATION PANEL (JAR upload + app details unified) ── */}
-              <div id="app-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+              {/* ── APPLICATION PANEL (panel 1 — green theme) ── */}
+              <div id="app-panel" className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
 
                 {/* Header — always shown */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
                     Application
                   </h3>
                 </div>
@@ -2474,7 +2824,7 @@ export default function DeployPage() {
               {form.jarArtifact && form.jarType === 'thin' && (
                 form.libZip ? (
                   /* ── Uploaded: success state ── */
-                  <div className="animate-fade-in rounded-xl border border-sig-green/40 border-l-2 border-l-sig-green/60 bg-sig-green-dim/10 overflow-hidden">
+                  <div className="animate-fade-in rounded border border-sig-green/40 border-l-2 border-l-sig-green/60 bg-sig-green-dim overflow-hidden">
                     <div className="flex items-center justify-between gap-2 px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <Check size={13} className="text-sig-green flex-shrink-0" strokeWidth={2.5} />
@@ -2497,7 +2847,7 @@ export default function DeployPage() {
                   </div>
                 ) : (
                   /* ── Not yet uploaded: warning state ── */
-                  <div className="animate-fade-in rounded-xl border border-sig-yellow/40 border-l-2 border-l-sig-yellow/60 bg-sig-yellow-dim/20 overflow-hidden">
+                  <div className="animate-fade-in rounded border border-sig-yellow/40 border-l-2 border-l-sig-yellow/60 bg-sig-yellow-dim overflow-hidden">
                     <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-sig-yellow/20 bg-sig-yellow-dim/30">
                       <AlertTriangle size={13} className="text-sig-yellow opacity-80 flex-shrink-0" />
                       <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-yellow">
@@ -2527,11 +2877,11 @@ export default function DeployPage() {
               )}
 
 
-              {/* ── RUNTIME PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+              {/* ── RUNTIME PANEL (panel 2 — blue theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
                     Runtime
                   </h3>
                   <span className="ml-1 text-xs text-wiz-muted/50 font-normal normal-case tracking-normal">· process, port and deploy path</span>
@@ -2577,9 +2927,9 @@ export default function DeployPage() {
                         />
                         {/* Profile mismatch warning card */}
                         {profileMismatch && (
-                          <div className="rounded-lg border border-sig-yellow/35 bg-sig-yellow-dim/10 overflow-hidden">
+                          <div className="rounded border border-sig-yellow/35 bg-sig-yellow-dim overflow-hidden">
                             {/* Card header */}
-                            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-sig-yellow/20 bg-sig-yellow-dim/10">
+                            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-sig-yellow/20 bg-sig-yellow-dim">
                               <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0" />
                               <span className="text-xs font-semibold text-sig-yellow">Profile mismatch detected</span>
                               <span className="ml-auto flex items-center gap-1.5 font-mono text-2xs">
@@ -2602,7 +2952,7 @@ export default function DeployPage() {
                                 <button
                                   type="button"
                                   onClick={() => setPortMismatchDismissed(true)}
-                                  className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border border-sig-green/20 bg-sig-green-dim/10 hover:bg-sig-green-dim/20 hover:border-sig-green/35 transition-all duration-150 text-left group"
+                                  className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border border-sig-green/20 bg-sig-green-dim hover:bg-sig-green-dim hover:border-sig-green/35 transition-all duration-150 text-left group"
                                 >
                                   <Check size={12} className="text-sig-green flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                                   <div className="flex flex-col gap-0.5">
@@ -2668,9 +3018,9 @@ export default function DeployPage() {
               </div>
 
               {/* ── JAVA INSTALLATION PANEL ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+              <div className="rounded border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-surface overflow-hidden">
                 {/* Panel header */}
-                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-gold-dim">
                   <div className="flex items-center gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
                     <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
@@ -2737,7 +3087,7 @@ export default function DeployPage() {
                             document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                           }, 50)
                         }}
-                        className="flex items-center gap-1.5 text-xs font-medium text-sig-yellow/90 border border-sig-yellow/40 rounded-md px-3 py-1.5 bg-sig-yellow-dim/20 hover:bg-sig-yellow-dim/40 hover:border-sig-yellow/60 hover:text-sig-yellow transition-all duration-150"
+                        className="flex items-center gap-1.5 text-xs font-medium text-sig-yellow/90 border border-sig-yellow/40 rounded-md px-3 py-1.5 bg-sig-yellow-dim hover:bg-sig-yellow-dim/40 hover:border-sig-yellow/60 hover:text-sig-yellow transition-all duration-150"
                       >
                         <ArrowLeft size={11} className="flex-shrink-0" />
                         SSH not configured — go to Step 1
@@ -2754,8 +3104,8 @@ export default function DeployPage() {
                     <div className="animate-fade-in px-5 py-4 flex flex-col gap-3">
 
                       {/* Blue info row — always visible once JAR version is known */}
-                      <div className="flex items-center gap-3 px-4 py-3.5 rounded-lg border border-wiz-gold/25 bg-wiz-gold/5">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-wiz-gold/15 border border-wiz-gold/20 flex items-center justify-center">
+                      <div className="flex items-center gap-3 px-4 py-3.5 rounded border border-wiz-gold/25 bg-wiz-gold-dim">
+                        <div className="flex-shrink-0 w-8 h-8 rounded bg-wiz-gold/10 border border-wiz-gold/20 flex items-center justify-center">
                           <Info size={14} className="text-wiz-gold" />
                         </div>
                         <div className="flex flex-col gap-0.5 flex-1 min-w-0">
@@ -2790,7 +3140,7 @@ export default function DeployPage() {
                               document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                             }, 50)
                           }}
-                          className="flex items-center gap-3 px-4 py-3 rounded-lg border border-sig-yellow/30 bg-sig-yellow-dim/10 hover:bg-sig-yellow-dim/20 hover:border-sig-yellow/50 transition-all duration-150 text-left w-full group"
+                          className="flex items-center gap-3 px-4 py-3 rounded border border-sig-yellow/30 bg-sig-yellow-dim hover:bg-sig-yellow-dim hover:border-sig-yellow/50 transition-all duration-150 text-left w-full group"
                         >
                           <div className="flex-shrink-0 w-7 h-7 rounded-md bg-sig-yellow/10 group-hover:bg-sig-yellow/20 border border-sig-yellow/20 group-hover:border-sig-yellow/40 flex items-center justify-center transition-all duration-150">
                             <ArrowLeft size={13} className="text-sig-yellow/70 group-hover:text-sig-yellow transition-colors duration-150" />
@@ -2812,7 +3162,7 @@ export default function DeployPage() {
                   {/* Post-detect: no Java found at all */}
                   {detectedJavas !== null && detectedJavas.length === 0 && (
                     <div className="animate-fade-in px-5 py-4">
-                      <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-sig-yellow-dim/20 border border-sig-yellow/20 text-xs">
+                      <div className="flex items-start gap-2.5 px-4 py-3 rounded bg-sig-yellow-dim border border-sig-yellow/20 text-xs">
                         <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0 mt-0.5" />
                         <div className="flex flex-col gap-1">
                           <span className="font-semibold text-sig-yellow">No Java found on target server</span>
@@ -2836,7 +3186,7 @@ export default function DeployPage() {
                       {/* ── Matched: compact success + collapsible list ── */}
                       {javaAutoMatched === true && (
                         <>
-                          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sig-green-dim/20 border border-sig-green/30">
+                          <div className="flex items-center gap-3 px-4 py-3 rounded bg-sig-green-dim border border-sig-green/30">
                             <div className="flex-shrink-0 w-7 h-7 rounded-md bg-sig-green/15 border border-sig-green/25 flex items-center justify-center">
                               <Check size={13} className="text-sig-green" strokeWidth={2.5} />
                             </div>
@@ -2875,9 +3225,9 @@ export default function DeployPage() {
                                     type="button"
                                     onClick={() => { set('javaCommand', javaPath); set('javaVersion', ver !== null ? String(ver) : '') }}
                                     className={clsx(
-                                      'flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-150',
+                                      'flex items-center justify-between gap-3 px-4 py-3 rounded border text-left transition-all duration-150',
                                       selected
-                                        ? 'border-sig-green/50 bg-sig-green-dim/20'
+                                        ? 'border-sig-green/50 bg-sig-green-dim'
                                         : 'border-wiz-border hover:border-wiz-border-mid bg-wiz-bg hover:bg-wiz-raised/30',
                                     )}
                                   >
@@ -2913,7 +3263,7 @@ export default function DeployPage() {
                       {javaAutoMatched !== true && (
                         <>
                           {javaAutoMatched === false && jarJavaVersion && (
-                            <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-sig-yellow-dim/20 border border-sig-yellow/30 text-xs">
+                            <div className="flex items-start gap-2.5 px-4 py-3 rounded bg-sig-yellow-dim border border-sig-yellow/30 text-xs">
                               <AlertTriangle size={13} className="text-sig-yellow flex-shrink-0 mt-0.5" />
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-semibold text-sig-yellow">Java {jarJavaVersion} not found — select the closest version</span>
@@ -2942,9 +3292,9 @@ export default function DeployPage() {
                                   type="button"
                                   onClick={() => { set('javaCommand', javaPath); set('javaVersion', ver !== null ? String(ver) : '') }}
                                   className={clsx(
-                                    'flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-150',
+                                    'flex items-center justify-between gap-3 px-4 py-3 rounded border text-left transition-all duration-150',
                                     selected
-                                      ? 'border-sig-green/50 bg-sig-green-dim/20'
+                                      ? 'border-sig-green/50 bg-sig-green-dim'
                                       : 'border-wiz-border hover:border-wiz-border-mid bg-wiz-bg hover:bg-wiz-raised/30',
                                   )}
                                 >
@@ -3022,8 +3372,8 @@ export default function DeployPage() {
 
 
               {/* ── BACKUP PANEL ── */}
-              <div id="backup-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim/20">
+              <div id="backup-panel" className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim">
                   <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
                   <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
                     Backup
@@ -3077,7 +3427,7 @@ export default function DeployPage() {
                               type="button"
                               onClick={() => set('maxBackups', n.toString())}
                               className={clsx(
-                                'w-11 h-11 rounded-lg border font-mono font-bold text-sm',
+                                'w-11 h-11 rounded border font-mono font-bold text-sm',
                                 'transition-all duration-150 flex items-center justify-center',
                                 selected
                                   ? 'border-sig-green bg-sig-green/10 text-sig-green'
@@ -3110,7 +3460,7 @@ export default function DeployPage() {
                               type="button"
                               onClick={() => set('stabilityWindow', n.toString())}
                               className={clsx(
-                                'h-9 px-3 rounded-lg border font-mono text-xs',
+                                'h-9 px-3 rounded border font-mono text-xs',
                                 'transition-all duration-150 flex items-center justify-center',
                                 selected
                                   ? 'border-sig-green bg-sig-green/10 text-sig-green'
@@ -3135,7 +3485,7 @@ export default function DeployPage() {
                               set('stabilityWindow', v)
                             }
                           }}
-                          className="w-16 h-9 rounded-lg border border-wiz-border bg-wiz-bg text-center font-mono text-xs text-wiz-cream focus:border-wiz-gold focus:outline-none"
+                          className="w-16 h-9 rounded border border-wiz-border bg-wiz-bg text-center font-mono text-xs text-wiz-cream focus:border-wiz-gold focus:outline-none"
                           title="Custom value (5–120 seconds)"
                         />
                         <span className="text-2xs text-wiz-muted">sec</span>
@@ -3147,11 +3497,11 @@ export default function DeployPage() {
               </div>
 
 
-              {/* ── LOG ROTATION PANEL ── */}
-              <div id="log-rotation-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+              {/* ── LOG ROTATION PANEL (panel 2 — blue theme) ── */}
+              <div id="log-rotation-panel" className="rounded border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
                     Log Rotation
                   </h3>
                 </div>
@@ -3178,13 +3528,13 @@ export default function DeployPage() {
                 </div>
               </div>
 
-              {/* ── SERVER FILES PANEL (Certificates + Additional Directories) ── */}
-              <div className="rounded-xl border border-wiz-border border-l-2 border-l-sig-blue/40 bg-wiz-panel overflow-hidden">
+              {/* ── SERVER FILES PANEL (panel 3 — crimson theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-surface overflow-hidden">
 
                 {/* Outer header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
-                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-gold-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
                     Server Files
                   </h3>
                   <span className="text-wiz-muted/50 text-xs font-normal normal-case tracking-normal">· Optional files to place on the server</span>
@@ -3231,7 +3581,7 @@ export default function DeployPage() {
                   {form.hasCerts && (
                     <div className="px-5 pb-5 flex flex-col gap-4 border-t border-wiz-border/20">
                       {form.certUploads.map((cu, idx) => (
-                        <div key={idx} className="rounded-lg border border-wiz-border-strong overflow-hidden">
+                        <div key={idx} className="rounded border border-wiz-border-strong overflow-hidden">
                           <div className="flex items-center justify-between px-4 py-2 bg-wiz-raised border-b border-wiz-border">
                             <span className="font-mono text-xs text-wiz-muted/70">Certificate {idx + 1}</span>
                             <button
@@ -3339,7 +3689,7 @@ export default function DeployPage() {
                   {form.hasExtraDirs && (
                     <div className="px-5 pb-5 flex flex-col gap-4 border-t border-wiz-border/20">
                       {form.extraDirs.map((ed, idx) => (
-                        <div key={idx} className="rounded-lg border border-wiz-border-strong overflow-hidden">
+                        <div key={idx} className="rounded border border-wiz-border-strong overflow-hidden">
                           <div className="flex items-center justify-between px-4 py-2 bg-wiz-raised border-b border-wiz-border">
                             <span className="font-mono text-xs text-wiz-muted/70">Directory {idx + 1}</span>
                             <button
@@ -3411,13 +3761,13 @@ export default function DeployPage() {
               </div>
 
 
-              {/* ── JVM CONFIGURATION PANEL ── */}
-              <div id="jvm-panel" className="rounded-xl border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-panel overflow-hidden">
+              {/* ── JVM CONFIGURATION PANEL (panel 4 — green, rotation restart) ── */}
+              <div id="jvm-panel" className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
                 {/* Panel header */}
-                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-raised/30">
+                <div className="flex items-center justify-between gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
-                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+                    <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
                       JVM Configuration
                     </h3>
                   </div>
@@ -3451,7 +3801,7 @@ export default function DeployPage() {
                 {/* ── Opt-in gate — shown when JVM config is off ── */}
                 {!jvmConfigEnabled ? (
                   <div className="p-5 flex flex-col gap-4">
-                    <div className="flex items-start gap-3 px-4 py-3.5 rounded-lg bg-wiz-raised/40 border border-wiz-border/50">
+                    <div className="flex items-start gap-3 px-4 py-3.5 rounded bg-wiz-raised border border-wiz-border/50">
                       <svg className="w-4 h-4 text-wiz-gold/70 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
                       </svg>
@@ -3473,7 +3823,7 @@ export default function DeployPage() {
                       type="button"
                       onClick={() => setJvmConfigEnabled(true)}
                       className={clsx(
-                        'flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border',
+                        'flex items-center justify-center gap-2 px-4 py-2.5 rounded border',
                         'border-wiz-gold/30 bg-wiz-gold/5 text-wiz-gold text-xs font-semibold',
                         'hover:border-wiz-gold/50 hover:bg-wiz-gold/10 transition-colors w-full',
                       )}
@@ -3486,7 +3836,7 @@ export default function DeployPage() {
                 <div className="p-5 flex flex-col gap-3">
 
                   {/* ── PANEL 1: MEMORY (sig-blue) ── */}
-                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+                  <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
                       <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue/70">Memory</span>
@@ -3495,7 +3845,7 @@ export default function DeployPage() {
                       <RowField label="Preset" sublabel="Quick-start" name="memPreset">
                         <div className="flex flex-col gap-2">
                           <p className="text-2xs text-wiz-muted/60 leading-relaxed">Each preset configures <span className="font-mono text-sig-blue/60">Xms</span> = <span className="font-mono text-sig-blue/60">Xmx</span> and selects a matching GC strategy.</p>
-                          <div className="grid grid-cols-3 gap-2 rounded-lg bg-wiz-bg/60 border border-wiz-border/20 p-2.5">
+                          <div className="grid grid-cols-3 gap-2 rounded bg-wiz-bg border border-wiz-border/20 p-2.5">
                             {JVM_PRESETS.map((preset) => {
                               const sel = activePreset === preset.id
                               return (
@@ -3512,7 +3862,7 @@ export default function DeployPage() {
                                     setContainerAware(false)
                                   }}
                                   className={clsx(
-                                    'flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-all',
+                                    'flex flex-col gap-1.5 p-3 rounded border text-left transition-all',
                                     sel
                                       ? 'border-sig-blue bg-sig-blue/15 shadow-[0_0_14px_rgba(96,165,250,0.12)] ring-1 ring-sig-blue/25'
                                       : 'border-wiz-border-mid bg-wiz-raised hover:border-sig-blue/50 hover:bg-wiz-raised/80',
@@ -3530,7 +3880,7 @@ export default function DeployPage() {
                               return (
                                 <button type="button" onClick={() => setActivePreset('custom')}
                                   className={clsx(
-                                    'flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-all col-span-2',
+                                    'flex flex-col gap-1.5 p-3 rounded border text-left transition-all col-span-2',
                                     sel
                                       ? 'border-sig-blue bg-sig-blue/15 shadow-[0_0_14px_rgba(96,165,250,0.12)] ring-1 ring-sig-blue/25'
                                       : 'border-dashed border-wiz-border-mid bg-wiz-raised hover:border-sig-blue/50 hover:bg-wiz-raised/80',
@@ -3552,7 +3902,7 @@ export default function DeployPage() {
                             error={errors.xms}
                             hint="Initial and max heap size e.g. 512m or 2g. Leave blank for JVM ergonomic sizing.">
                             <div className="flex items-center gap-2">
-                              <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-blue/40 transition-colors w-28">
+                              <div className="flex rounded overflow-hidden border border-wiz-border/60 focus-within:border-sig-blue/40 transition-colors w-28">
                                 <input type="number" min="1"
                                   className="w-full bg-wiz-bg px-3 py-2 text-sm text-wiz-cream font-mono placeholder-wiz-dim/30 outline-none"
                                   placeholder={heapUnit === 'g' ? '1' : '512'}
@@ -3564,7 +3914,7 @@ export default function DeployPage() {
                                   }}
                                 />
                               </div>
-                              <div className="flex rounded-lg overflow-hidden border border-wiz-border/60">
+                              <div className="flex rounded overflow-hidden border border-wiz-border/60">
                                 {(['m', 'g'] as const).map((u) => (
                                   <button key={u} type="button"
                                     onClick={() => { setHeapUnit(u); if (heapSize) { set('xms', `${heapSize}${u}`); set('xmx', `${heapSize}${u}`) } }}
@@ -3584,7 +3934,7 @@ export default function DeployPage() {
                             <RowField label="Heap Min" sublabel="Xms" name="xms" required error={errors.xms}
                               hint="Initial JVM heap size e.g. 512m or 1g">
                               <div className="flex items-center gap-2">
-                                <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-blue/40 transition-colors w-28">
+                                <div className="flex rounded overflow-hidden border border-wiz-border/60 focus-within:border-sig-blue/40 transition-colors w-28">
                                   <input type="number" min="1"
                                     className="w-full bg-wiz-bg px-3 py-2 text-sm text-wiz-cream font-mono placeholder-wiz-dim/30 outline-none"
                                     placeholder={xmsUnit === 'g' ? '1' : '512'}
@@ -3592,7 +3942,7 @@ export default function DeployPage() {
                                     onChange={(e) => { set('xms', e.target.value ? `${e.target.value}${xmsUnit}` : '') }}
                                   />
                                 </div>
-                                <div className="flex rounded-lg overflow-hidden border border-wiz-border/60">
+                                <div className="flex rounded overflow-hidden border border-wiz-border/60">
                                   {(['m', 'g'] as const).map((u) => (
                                     <button key={u} type="button"
                                       onClick={() => { setXmsUnit(u); const n = heapNum(form.xms); if (n) set('xms', `${n}${u}`) }}
@@ -3607,7 +3957,7 @@ export default function DeployPage() {
                             <RowField label="Heap Max" sublabel="Xmx" name="xmx"
                               hint="Max JVM heap size e.g. 1024m or 2g. Must be ≥ Xms.">
                               <div className="flex items-center gap-2">
-                                <div className={clsx('flex rounded-lg overflow-hidden border transition-colors w-28',
+                                <div className={clsx('flex rounded overflow-hidden border transition-colors w-28',
                                   form.xms && form.xmx && heapMB(form.xms) > heapMB(form.xmx) ? 'border-sig-red/50' : 'border-wiz-border/60 focus-within:border-sig-blue/40')}>
                                   <input type="number" min="1"
                                     className="w-full bg-wiz-bg px-3 py-2 text-sm text-wiz-cream font-mono placeholder-wiz-dim/30 outline-none"
@@ -3616,7 +3966,7 @@ export default function DeployPage() {
                                     onChange={(e) => { set('xmx', e.target.value ? `${e.target.value}${xmxUnit}` : '') }}
                                   />
                                 </div>
-                                <div className="flex rounded-lg overflow-hidden border border-wiz-border/60">
+                                <div className="flex rounded overflow-hidden border border-wiz-border/60">
                                   {(['m', 'g'] as const).map((u) => (
                                     <button key={u} type="button"
                                       onClick={() => { setXmxUnit(u); const n = heapNum(form.xmx); if (n) set('xmx', `${n}${u}`) }}
@@ -3655,7 +4005,7 @@ export default function DeployPage() {
                   </div>
 
                   {/* ── PANEL 2: GARBAGE COLLECTOR (sig-green) ── */}
-                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
+                  <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
                       <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-green/70">Garbage Collector</span>
@@ -3667,7 +4017,7 @@ export default function DeployPage() {
                           const jvNum = parseInt(form.javaVersion?.trim() || '', 10)
                           const hasJv = Number.isFinite(jvNum) && jvNum > 0
                           return (
-                            <div className="grid grid-cols-4 gap-1.5 rounded-lg bg-wiz-bg/60 border border-wiz-border/20 p-2">
+                            <div className="grid grid-cols-4 gap-1.5 rounded bg-wiz-bg border border-wiz-border/20 p-2">
                               {GC_OPTIONS.map((opt) => {
                                 const incompatible = hasJv && opt.minJava > jvNum
                                 const selected = gcType === opt.id
@@ -3681,12 +4031,12 @@ export default function DeployPage() {
                                         else setMaxRamPct('70')
                                       }
                                     }}
-                                    className={clsx('flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border text-center transition-all',
+                                    className={clsx('flex flex-col items-center gap-1 px-2 py-2.5 rounded border text-center transition-all',
                                       selected ? 'border-sig-green/60 bg-sig-green/10 ring-1 ring-sig-green/20'
-                                      : incompatible ? 'border-sig-yellow/30 bg-sig-yellow/5 hover:border-sig-yellow/40'
-                                      : 'border-wiz-border/50 bg-wiz-surface/20 hover:border-sig-green/30 hover:bg-wiz-surface/40')}>
+                                      : incompatible ? 'border-sig-yellow/30 bg-sig-yellow-dim hover:border-sig-yellow/40'
+                                      : 'border-wiz-border bg-wiz-surface hover:border-sig-green/30 hover:bg-wiz-bg')}>
                                     <span className={clsx('text-xs font-bold font-mono',
-                                      selected ? 'text-sig-green' : incompatible ? 'text-sig-yellow/80' : 'text-wiz-cream/90')}>
+                                      selected ? 'text-sig-green' : incompatible ? 'text-sig-yellow/80' : 'text-wiz-cream')}>
                                       {opt.label}
                                     </span>
                                     {opt.minJava > 8 && (
@@ -3706,12 +4056,12 @@ export default function DeployPage() {
                       {gcType === 'G1GC' && (
                         <RowField label="Pause Target" sublabel="G1GC tuning" name="workloadProfile"
                           hint={WORKLOAD_OPTIONS.find(o => o.id === workloadProfile)?.desc}>
-                          <div className="grid grid-cols-4 gap-1.5 rounded-lg bg-wiz-bg/60 border border-wiz-border/20 p-2">
+                          <div className="grid grid-cols-4 gap-1.5 rounded bg-wiz-bg border border-wiz-border/20 p-2">
                             {WORKLOAD_OPTIONS.map((opt) => {
                               const selected = workloadProfile === opt.id
                               return (
                                 <button key={opt.id} type="button" onClick={() => setWorkloadProfile(opt.id)}
-                                  className={clsx('flex flex-col items-center gap-0.5 px-2 py-2.5 rounded-lg border text-center transition-all',
+                                  className={clsx('flex flex-col items-center gap-0.5 px-2 py-2.5 rounded border text-center transition-all',
                                     selected
                                       ? 'border-sig-green/60 bg-sig-green/10 ring-1 ring-sig-green/20'
                                       : 'border-wiz-border/50 bg-wiz-surface/20 hover:border-sig-green/30 hover:bg-wiz-surface/40')}>
@@ -3733,7 +4083,7 @@ export default function DeployPage() {
                   </div>
 
                   {/* ── PANEL 3: CONTAINER (sig-purple) ── */}
-                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-purple/60 border-r-wiz-border-strong overflow-hidden">
+                  <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-purple/60 border-r-wiz-border-strong overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-sig-purple/70 flex-shrink-0" />
                       <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-purple/70">Container</span>
@@ -3754,7 +4104,7 @@ export default function DeployPage() {
                         <RowField label="Max RAM %" sublabel="Heap ceiling" name="maxRamPct"
                           hint={gcType === 'ZGC' ? 'ZGC reserves native memory for page tables — keep at 60–65% to avoid OOM kills.' : gcType === 'Shenandoah' ? 'Shenandoah needs off-heap space for concurrent structures — 65% recommended.' : gcType === 'ParallelGC' ? 'ParallelGC has minimal native overhead — 75–80% is safe for most containers.' : 'G1GC uses moderate native memory for region metadata — 70% is a safe default.'}>
                           <div className="flex items-center gap-2.5">
-                            <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-purple/40 w-24">
+                            <div className="flex rounded overflow-hidden border border-wiz-border/60 focus-within:border-sig-purple/40 w-24">
                               <input type="number" min="40" max="90" step="5"
                                 className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
                                 placeholder="70.0" value={maxRamPct} onChange={(e) => setMaxRamPct(e.target.value)} />
@@ -3774,7 +4124,7 @@ export default function DeployPage() {
                   </div>
 
                   {/* ── PANEL 4: ADVANCED TUNING (sig-orange) ── */}
-                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-orange/60 border-r-wiz-border-strong overflow-hidden">
+                  <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-orange/60 border-r-wiz-border-strong overflow-hidden">
                     <div className="px-4 py-2.5 border-b border-wiz-border/20 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-sig-orange/70 flex-shrink-0" />
@@ -3796,7 +4146,7 @@ export default function DeployPage() {
                           <RowField label="GC Pause" sublabel="MaxGCPauseMillis" name="gcPause"
                             hint={`Overrides the ${workloadProfile === 'HighThroughput' ? '100' : workloadProfile === 'Batch' || workloadProfile === 'MemoryIntensive' ? '500' : '200'}ms target set by your Pause Target profile. Only change if GC logs show the current target isn't being met.`}>
                             <div className="flex items-center gap-2">
-                              <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
+                              <div className="flex rounded overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
                                 <input type="number" min="50" max="5000"
                                   className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
                                   placeholder={workloadProfile === 'HighThroughput' ? '100' : workloadProfile === 'Batch' || workloadProfile === 'MemoryIntensive' ? '500' : '200'}
@@ -3815,7 +4165,7 @@ export default function DeployPage() {
                         <RowField label="Metaspace" sublabel="MaxMetaspaceSize" name="metaspaceSize"
                           hint="Caps memory for loaded class metadata. Set if you see metaspace OOM errors — leave blank to let the JVM grow as needed.">
                           <div className="flex items-center gap-2">
-                            <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
+                            <div className="flex rounded overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
                               <input type="text" id="metaspaceSize"
                                 className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
                                 placeholder="256m" value={metaspaceSize} onChange={(e) => setMetaspaceSize(e.target.value)} />
@@ -3826,7 +4176,7 @@ export default function DeployPage() {
                         <RowField label="Thread Stack" sublabel="-Xss" name="threadStackSize"
                           hint="Memory per thread. Lower to 256k for high-thread-count apps to save memory — increase if you hit StackOverflowError.">
                           <div className="flex items-center gap-2">
-                            <div className="flex rounded-lg overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
+                            <div className="flex rounded overflow-hidden border border-wiz-border/60 focus-within:border-sig-orange/40 w-24">
                               <input type="text" id="threadStackSize"
                                 className="flex-1 bg-wiz-bg px-3 py-1.5 text-sm text-wiz-cream font-mono outline-none w-full placeholder-wiz-dim/30"
                                 placeholder="512k" value={threadStackSize} onChange={(e) => setThreadStackSize(e.target.value)} />
@@ -3838,8 +4188,8 @@ export default function DeployPage() {
                   </div>
 
                   {/* ── PANEL 5 — ADDITIONAL CUSTOM FLAGS (sig-blue) ── */}
-                  <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue/5 flex items-center gap-2">
+                  <div className="rounded border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue-dim flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-sig-blue flex-shrink-0" />
                       <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue">Additional Custom Flags</span>
                     </div>
@@ -3895,18 +4245,18 @@ export default function DeployPage() {
                         <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-wiz-gold/70">Generated JVM Flags</span>
 
                         {derived.errors.length > 0 && derived.errors.map((err, i) => (
-                          <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-md border border-sig-red/30 bg-sig-red/5 text-2xs text-sig-red leading-snug">
+                          <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-md border border-sig-red/30 bg-sig-red-dim text-2xs text-sig-red leading-snug">
                             <span className="flex-shrink-0">✕</span><span>{err}</span>
                           </div>
                         ))}
                         {derived.warnings.length > 0 && derived.warnings.map((warn, i) => (
-                          <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-md border border-sig-yellow/30 bg-sig-yellow/5 text-2xs text-sig-yellow leading-snug">
+                          <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-md border border-sig-yellow/30 bg-sig-yellow-dim text-2xs text-sig-yellow leading-snug">
                             <span className="flex-shrink-0">⚠</span><span>{warn}</span>
                           </div>
                         ))}
 
                         {previewFlags.length > 0 ? (
-                          <div className="rounded-lg bg-wiz-bg/60 border border-wiz-border/20 px-4 py-3">
+                          <div className="rounded bg-wiz-bg border border-wiz-border/20 px-4 py-3">
                             <code className="text-xs font-mono leading-relaxed whitespace-pre-wrap">
                               {previewFlags.map((flag, i) => (
                                 <span key={i}>
@@ -3949,7 +4299,7 @@ export default function DeployPage() {
 
               {/* ── Info banner (top) ── */}
               {form.environment.toUpperCase() === 'PROD' ? (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-sig-purple/30 bg-sig-purple-dim/30">
+                <div className="flex items-center gap-3 px-4 py-3 rounded border border-sig-purple/30 bg-sig-purple-dim">
                   <AlertTriangle size={16} className="text-sig-purple flex-shrink-0" />
                   <div>
                     <span className="text-sm font-medium text-sig-purple">
@@ -3959,7 +4309,7 @@ export default function DeployPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-wiz-border/40 bg-wiz-surface/40">
+                <div className="flex items-center gap-3 px-4 py-3 rounded border border-wiz-border bg-wiz-raised">
                   <Info size={15} className="text-wiz-gold/70 flex-shrink-0" />
                   <div>
                     <span className="text-sm font-medium text-wiz-cream/90">Ready to deploy</span>
@@ -3968,12 +4318,12 @@ export default function DeployPage() {
                 </div>
               )}
 
-              {/* ── Target Server panel (sig-green) ── */}
-              <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-green/60 border-r-wiz-border-strong overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-green/5 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sig-green flex-shrink-0" />
-                  <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-green flex-1">Target Server</span>
-                  <button type="button" onClick={() => { setStep(1); setTimeout(() => document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-sig-green/30 bg-sig-green-dim/20 text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
+              {/* ── Target Server (panel 1 — green theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-green-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green flex-1">Target Server</h3>
+                  <button type="button" onClick={() => { setStep(1); setTimeout(() => document.getElementById('ssh-target-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-sig-green/30 bg-sig-green-dim text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
                 </div>
                 <div className="px-4 py-2.5 flex flex-col gap-0">
                   <ReviewRow label="Environment" value={form.environment.toUpperCase()} badge />
@@ -3986,7 +4336,7 @@ export default function DeployPage() {
                     <>
                       <div className="border-t border-wiz-border/20 mt-2 pt-2 flex items-center justify-between">
                         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-wiz-muted/40">Certificates</span>
-                        <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('certs-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-sig-green/30 bg-sig-green-dim/20 text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
+                        <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('certs-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-sig-green/30 bg-sig-green-dim text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
                       </div>
                       {form.certUploads
                         .filter(c => c.source.trim() && c.targetPath.trim() && c.file)
@@ -4001,7 +4351,7 @@ export default function DeployPage() {
                     <>
                       <div className="border-t border-wiz-border/20 mt-2 pt-2 flex items-center justify-between">
                         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-wiz-muted/40">Additional Directories</span>
-                        <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('extra-dirs-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-sig-green/30 bg-sig-green-dim/20 text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
+                        <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('extra-dirs-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-sig-green/30 bg-sig-green-dim text-sig-green/70 hover:text-sig-green hover:border-sig-green/50 hover:bg-sig-green-dim/40 transition-all duration-150">Edit</button>
                       </div>
                       {form.extraDirs
                         .filter(d => d.dirName.trim() && d.targetPath.trim() && d.file)
@@ -4013,11 +4363,11 @@ export default function DeployPage() {
                 </div>
               </div>
 
-              {/* ── Application panel (sig-blue) ── */}
-              <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-sig-blue/60 border-r-wiz-border-strong overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-sig-blue/5 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue flex-shrink-0" />
-                  <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-sig-blue flex-1">Application</span>
+              {/* ── Application (panel 2 — blue theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-sig-blue-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-blue flex-1">Application</h3>
                   <button type="button" onClick={() => { setStep(2); setTimeout(() => document.getElementById('app-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-sig-blue/30 bg-sig-blue-dim/20 text-sig-blue/70 hover:text-sig-blue hover:border-sig-blue/50 hover:bg-sig-blue-dim/40 transition-all duration-150">Edit</button>
                 </div>
                 <div className="px-4 py-2.5 flex flex-col gap-0">
@@ -4030,11 +4380,11 @@ export default function DeployPage() {
                 </div>
               </div>
 
-              {/* ── Deployment Options panel (wiz-gold) ── */}
-              <div className="rounded-lg border border-wiz-border-mid border-l-[3px] border-l-wiz-gold/60 border-r-wiz-border-strong overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-wiz-border/40 bg-wiz-gold/5 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold flex-shrink-0" />
-                  <span className="font-mono text-2xs font-semibold uppercase tracking-widest text-wiz-gold flex-1">Deployment Options</span>
+              {/* ── Deployment Options (panel 3 — crimson theme) ── */}
+              <div className="rounded border border-wiz-border border-l-2 border-l-wiz-gold/50 bg-wiz-surface overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-wiz-gold-dim">
+                  <span className="w-1.5 h-1.5 rounded-full bg-wiz-gold/70 flex-shrink-0" />
+                  <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-wiz-gold flex-1">Deployment Options</h3>
                   <button type="button" onClick={() => { setStep(3); setTimeout(() => document.getElementById('backup-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} className="text-[11px] font-semibold px-2.5 py-1 rounded border border-wiz-gold/30 bg-wiz-gold/10 text-wiz-gold/70 hover:text-wiz-gold hover:border-wiz-gold/50 hover:bg-wiz-gold/20 transition-all duration-150">Edit</button>
                 </div>
                 <div className="px-4 py-2.5 flex flex-col gap-0">
@@ -4082,39 +4432,55 @@ export default function DeployPage() {
 
       </div> {/* end wiz-card */}
 
-      {/* ── Navigation buttons ── */}
-      <div className="flex items-center justify-between pb-6">
-        {/* Prev */}
+      {/* ── Navigation buttons ──
+          On Step 4: sticky to viewport bottom so Deploy is always visible.
+          Other steps: regular bottom placement with breathing room. */}
+      <div className={clsx(
+        'flex items-center justify-between mt-8 pb-4',
+        step === 4 && 'sticky bottom-0 z-30 -mx-5 px-5 py-3 bg-wiz-bg/95 border-t border-wiz-border/60 backdrop-blur-sm',
+      )}>
+        {/* Prev — compact secondary */}
         <div>
-          {step > 1 && (
-            <button type="button" onClick={handlePrev} className="btn-secondary gap-2">
-              <ArrowLeft size={13} />
-              Prev
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium text-wiz-cream/80 bg-wiz-surface border border-wiz-border hover:border-wiz-gold/40 hover:text-wiz-cream hover:-translate-x-0.5 transition-all duration-200"
+              style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+            >
+              <ArrowLeft size={12} strokeWidth={2.5} className="text-wiz-gold/70 group-hover:text-wiz-gold group-hover:-translate-x-0.5 transition-all" />
+              <span>Previous</span>
             </button>
-          )}
+          ) : <div />}
         </div>
 
-        {/* Next / Deploy */}
-        <div className="flex flex-col items-end gap-1.5">
+        {/* Next / Deploy — compact primary */}
+        <div>
           {step < 4 ? (
             <button
               type="button"
               onClick={handleNext}
-              disabled={false}
-              className="btn-secondary gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="group inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[12px] font-semibold text-white bg-wiz-gold hover:bg-wiz-gold-light hover:translate-x-0.5 active:scale-95 transition-all duration-200"
+              style={{ boxShadow: '0 3px 10px rgba(139,26,26,0.28), 0 1px 2px rgba(139,26,26,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 16px rgba(139,26,26,0.36), 0 2px 4px rgba(139,26,26,0.22), inset 0 1px 0 rgba(255,255,255,0.18)' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 3px 10px rgba(139,26,26,0.28), 0 1px 2px rgba(139,26,26,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' }}
             >
-              Next
-              <ArrowRight size={13} />
+              <span>Next step</span>
+              <ArrowRight size={12} strokeWidth={2.5} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
           ) : (
             <button
               type="button"
               onClick={() => void handleSubmit()}
               disabled={submitting}
-              className={clsx('btn-primary gap-2', submitting && 'animate-pulse')}
+              className={clsx(
+                'group inline-flex items-center gap-2 px-5 py-2 rounded-md text-[13px] font-bold text-white bg-wiz-gold hover:bg-wiz-gold-light hover:scale-[1.03] active:scale-95 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed',
+                submitting && 'animate-pulse',
+              )}
+              style={{ boxShadow: '0 4px 14px rgba(139,26,26,0.36), 0 2px 4px rgba(139,26,26,0.22), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 3px rgba(255,255,255,0.5)' }}
             >
-              <Wand2 size={14} />
-              {submitting ? 'Deploying…' : 'Deploy →'}
+              <Wand2 size={14} strokeWidth={2.4} className="group-hover:rotate-[-12deg] transition-transform" />
+              <span>{submitting ? 'Deploying…' : 'Deploy'}</span>
             </button>
           )}
         </div>
@@ -4122,9 +4488,16 @@ export default function DeployPage() {
 
       </div> {/* end left column */}
 
-      {/* ── Right column — Mission Control sidebar (xl+ only) ── */}
-      <div className="hidden xl:block">
-        <div className="sticky top-16 pt-1">
+      {/* ── Right column — Mission Control sidebar (xl+ only) ──
+          Sticky offset clears the redesigned step navigation panel above
+          (~180px tall: status pills + progress bar + step circles).
+          self-start prevents flex stretch; max-h + overflow handles
+          short viewports where the panels would otherwise overflow. */}
+      <div className="hidden xl:block self-start sticky" style={{ top: 200 }}>
+        <div
+          className="overflow-y-auto scrollbar-thin pr-1 -mr-1"
+          style={{ maxHeight: 'calc(100vh - 220px)' }}
+        >
           <MissionControl
             step={step}
             form={form}

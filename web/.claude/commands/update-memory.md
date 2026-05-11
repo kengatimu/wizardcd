@@ -35,3 +35,14 @@ Review everything done in this conversation session and update both `web/CLAUDE.
 - Signal colours: sig-blue (SIT), sig-yellow (UAT), sig-purple (PROD), sig-green, sig-red, sig-orange, wiz-gold, wiz-violet
 - `departed` vs `visited` step tracking: errors only show on departed steps
 - Draft banner and Recent Deployments card are mutually exclusive — never show both
+
+### Design discipline (added 2026-05-10 — from sidebar/typography overhaul)
+- **Canonical design reference is `documents/wizardcd-design-system.md`.** Read it before any visual change. Update it whenever a visual token, pattern, or rule changes.
+- **Crimson is reserved.** `wiz-gold` / `wiz-teal` only appear for: (a) brand identity (logo, right-edge sidebar line), (b) focal action (primary buttons, headline sweep), (c) "you are here" (active step pill, active sidebar nav left stripe + icon tint), (d) true alerts (failed bars, *Needs Attention*, *Critical* tier). Never decorative. Never as hover floods, section divider rainbows, or background washes on neutral chrome.
+- **Typography tones are WCAG-AA floored.** `wiz-dim: #808091` is the absolute lightest token. Anything dimmer fails AA on `#F9F8F6`. Don't lower these or add `/40` `/30` opacity strips on top.
+- **Body type is fixed.** `Inter 13.25px / line-height 1.6 / font-feature-settings: 'ss02', 'cv11', 'tnum', 'calt'` — do not regress to the v1 `12.5px / 1.85` spec.
+- **"Filled chip" recipe**: gradient (20% → 6%) + hue-tinted shadow + 1px white inner highlight. Do not paint chips with flat `/8` fills — they disappear on the cream bg.
+- **Position-based panel rotation**: green → blue → crimson → restart green. Purely positional, never semantic.
+- **Empty-state colours**: `total === 0` for any data tile must render in neutral white tints, never a saturated alert tier. Show em-dash placeholder + "no X yet" caption.
+- **Active nav state in sidebar** uses static crimson dot only — never `animate-ping` — pulse on a nav item reads as warning, not "you are here".
+- **Page header rule**: only the headline + crimson rule + animated sweep. No subtitles in the header (the brand tagline lives in the global app header; per-step context lives in the step-nav chip).

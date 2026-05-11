@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>WizardCD — Design Directions v4 (Typography)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?
+  family=Libre+Baskerville:ital,wght@0,400;0,700;1,400
+  &family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400
+  &family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400
+  &family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400
+  &family=Vollkorn:ital,wght@0,400;0,500;0,600;0,700;1,400
+  &family=Bitter:ital,wght@0,400;0,500;0,600;0,700;1,400
+  &family=PT+Serif:ital,wght@0,400;0,700;1,400
+  &family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,400
+  &family=Merriweather:ital,wght@0,400;0,700;1,400
+  &family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400
+  &family=JetBrains+Mono:wght@400;500
+  &display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'Libre Baskerville',serif;
+  background:#ECEAE5;
+  color:#1C1C1C;
+  font-size:14px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Nav ──────────────────────────────────────────── */
+.page-nav{
+  position:sticky;top:0;z-index:200;
+  background:#0D2240;
+  border-bottom:3px solid #8B1A1A;
+  padding:0 40px;
+  display:flex;align-items:center;gap:0;
+  overflow-x:auto;
+}
+.page-nav a{
+  color:rgba(255,255,255,.45);
+  font-size:11px;font-weight:500;
+  font-family:'Libre Baskerville',serif;
+  text-decoration:none;
+  padding:13px 13px;
+  white-space:nowrap;
+  border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;
+}
+.page-nav a:hover{color:rgba(255,255,255,.8);}
+.page-nav a.active{color:#fff;border-bottom-color:#D44040;}
+.page-nav .nav-brand{
+  font-family:'Libre Baskerville',serif;
+  font-size:14px;font-weight:700;
+  color:#fff;letter-spacing:.01em;
+  padding:13px 28px 13px 0;
+  margin-right:20px;
+  border-right:1px solid rgba(255,255,255,.12);
+  flex-shrink:0;
+}
+.page-nav .nav-brand em{color:#D44040;font-style:normal;}
+
+/* ── Intro ────────────────────────────────────────── */
+.intro{max-width:820px;margin:56px auto 48px;padding:0 40px;}
+.intro h1{
+  font-family:'Libre Baskerville',serif;
+  font-size:30px;font-weight:700;
+  color:#111;line-height:1.3;margin-bottom:14px;
+}
+.intro p{font-size:14.5px;line-height:1.8;color:#555;max-width:640px;font-family:'Libre Baskerville',serif;}
+.intro-note{
+  margin-top:20px;padding:14px 18px;
+  background:#fff;
+  border-left:3px solid #0D2240;
+  font-size:13px;color:#333;line-height:1.7;
+  font-family:'Libre Baskerville',serif;
+}
+
+/* ── Direction wrapper ────────────────────────────── */
+.direction{max-width:1060px;margin:0 auto 88px;padding:0 40px;}
+.dir-header{display:flex;align-items:baseline;gap:16px;margin-bottom:6px;}
+.dir-num{
+  font-family:'Libre Baskerville',serif;
+  font-size:11px;font-weight:400;font-style:italic;
+  color:#8B1A1A;
+}
+.dir-name{
+  font-family:'Libre Baskerville',serif;
+  font-size:24px;font-weight:700;color:#0D2240;letter-spacing:-.01em;
+}
+.dir-font-tag{
+  font-size:11px;font-weight:400;
+  color:#888;font-style:italic;
+  font-family:'Libre Baskerville',serif;
+}
+.dir-rule{width:36px;height:2px;background:#8B1A1A;margin:8px 0 12px;}
+.dir-desc{
+  font-size:13.5px;color:#555;line-height:1.8;
+  max-width:680px;margin-bottom:24px;
+  font-family:'Libre Baskerville',serif;
+}
+.divider{height:1px;background:#ccc9c3;margin-bottom:28px;}
+
+/* ── Font specimen ────────────────────────────────── */
+.specimen{
+  background:#fff;
+  border:1px solid #E2DDD6;
+  border-left:3px solid #8B1A1A;
+  border-radius:4px;
+  padding:20px 24px;
+  margin-bottom:24px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+.spec-col{}
+.spec-label{
+  font-size:9px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:#8B1A1A;
+  margin-bottom:10px;
+  font-family:'Libre Baskerville',serif;
+}
+.spec-sample-lg{font-size:22px;font-weight:700;color:#0D2240;line-height:1.2;margin-bottom:6px;}
+.spec-sample-md{font-size:15px;color:#333;line-height:1.5;margin-bottom:4px;}
+.spec-sample-sm{font-size:12px;color:#666;line-height:1.5;}
+.spec-sample-it{font-style:italic;color:#444;}
+.spec-table-row{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 0;
+  border-bottom:1px solid #f0ede8;
+  font-size:12px;
+}
+.spec-table-row:last-child{border-bottom:none;}
+.spec-jid{font-family:'JetBrains Mono',monospace;font-size:10px;color:#888;min-width:80px;}
+.spec-app{font-weight:600;color:#0D2240;flex:1;}
+.spec-env{
+  font-size:9.5px;font-weight:700;
+  padding:2px 6px;border-radius:2px;
+  background:#FDF3F3;color:#8B1A1A;
+}
+.spec-ok{font-size:11px;font-weight:600;color:#166534;}
+
+/* ── App Shell ────────────────────────────────────── */
+.shell{
+  border-radius:10px;overflow:hidden;
+  border:1px solid rgba(0,0,0,.14);
+  box-shadow:0 8px 40px rgba(0,0,0,.13);
+  display:grid;
+  grid-template-columns:210px 1fr;
+  grid-template-rows:auto 1fr;
+  height:530px;
+}
+
+/* Sidebar — locked D1 */
+.sb{
+  grid-row:1/3;
+  background:#0D2240;
+  border-right:1px solid rgba(255,255,255,.07);
+  display:flex;flex-direction:column;
+}
+.sb-logo{
+  padding:20px 18px 16px;
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.sb-logo-rule{width:26px;height:2.5px;background:#D44040;margin-bottom:10px;}
+.sb-logo-main{
+  font-family:'Libre Baskerville',serif;
+  font-size:19px;font-weight:700;
+  color:#fff;line-height:1;
+  letter-spacing:.01em;
+}
+.sb-logo-main em{font-style:normal;color:#D44040;}
+.sb-logo-sub{
+  font-family:'Libre Baskerville',serif;
+  font-size:7px;font-weight:400;
+  letter-spacing:.32em;text-transform:uppercase;
+  color:#D44040;margin-top:6px;
+}
+.sb-logo-parent{
+  font-size:7px;color:rgba(255,255,255,.28);
+  margin-top:8px;letter-spacing:.1em;text-transform:uppercase;
+  font-family:'Libre Baskerville',serif;
+}
+.sb-nav{flex:1;padding:14px 8px;display:flex;flex-direction:column;gap:2px;}
+.sb-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 11px;border-radius:5px;
+  font-family:'Libre Baskerville',serif;
+  font-size:13px;font-weight:400;
+  color:rgba(255,255,255,.55);
+  border-left:3px solid transparent;
+  cursor:default;
+}
+.sb-item svg{width:14px;height:14px;flex-shrink:0;opacity:.5;}
+.sb-item.active{
+  background:rgba(212,68,68,.18);
+  color:#fff;
+  border-left-color:#D44040;
+}
+.sb-item.active svg{opacity:1;}
+.sb-foot{
+  padding:10px 18px 14px;
+  border-top:1px solid rgba(255,255,255,.06);
+  font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;color:rgba(255,255,255,.25);
+}
+
+/* Topbar */
+.topbar{
+  background:#fff;
+  border-bottom:1px solid #EAE6DF;
+  height:50px;
+  display:flex;align-items:center;
+  padding:0 22px;gap:12px;
+}
+.tb-tagline{
+  font-size:10px;font-weight:700;
+  letter-spacing:.22em;text-transform:uppercase;
+  color:#999;flex:1;
+  font-family:'Libre Baskerville',serif;
+}
+.tb-env{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:3px;
+  font-size:11px;font-weight:700;letter-spacing:.06em;
+  background:#FDF3F3;color:#8B1A1A;border:1px solid #E8C0C0;
+  font-family:'Libre Baskerville',serif;
+}
+.tb-dot{width:5px;height:5px;border-radius:50%;background:#8B1A1A;}
+.tb-av{
+  width:28px;height:28px;border-radius:50%;
+  background:#8B1A1A;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;
+  font-family:'Libre Baskerville',serif;
+  margin-left:4px;
+}
+
+/* Content */
+.content{
+  background:#FAFAF8;
+  padding:20px 22px;
+  overflow:hidden;
+}
+.page-title-row{margin-bottom:16px;}
+.page-title{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;font-size:20px;
+  color:#0D2240;letter-spacing:-.01em;line-height:1;
+}
+.page-title-rule{width:32px;height:2px;background:#8B1A1A;margin:8px 0 4px;}
+.page-sub{font-size:12px;color:#666;}
+
+/* Metrics */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.metric{
+  background:#fff;border:1px solid #EAE6DF;
+  border-left:3px solid #8B1A1A;
+  border-radius:3px;padding:12px 14px;
+}
+.m-label{
+  font-size:9px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:#8B1A1A;margin-bottom:7px;
+  font-family:'Libre Baskerville',serif;
+}
+.m-value{
+  font-family:'Libre Baskerville',serif;
+  font-size:24px;font-weight:700;
+  color:#0D2240;line-height:1;letter-spacing:-.02em;
+}
+.m-value.green{color:#166534;}
+.m-sub{font-size:10.5px;color:#666;margin-top:3px;}
+
+/* Table */
+.table-card{background:#fff;border:1px solid #EAE6DF;border-radius:3px;overflow:hidden;}
+.table-head{
+  padding:10px 16px;border-bottom:1px solid #EAE6DF;
+  display:flex;align-items:center;gap:10px;
+  background:#FAFAF8;
+}
+.table-head-label{
+  font-size:9px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:#8B1A1A;flex:1;
+  font-family:'Libre Baskerville',serif;
+}
+table{width:100%;border-collapse:collapse;}
+thead th{
+  padding:8px 14px;text-align:left;
+  font-size:9px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:#888;
+  border-bottom:1px solid #EAE6DF;
+  background:#FAFAF8;
+  font-family:'Libre Baskerville',serif;
+}
+tbody tr{border-bottom:1px solid #EAE6DF;cursor:pointer;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:#F8F6F1;}
+tbody td{padding:9px 14px;font-size:12.5px;color:#333;}
+.job-id{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#999;}
+.status-ok{font-weight:600;color:#166534;}
+.status-run{font-weight:600;color:#8B1A1A;}
+.env-tag{
+  display:inline-block;padding:2px 6px;border-radius:2px;
+  font-size:10px;font-weight:700;letter-spacing:.05em;
+  background:#FDF3F3;color:#8B1A1A;
+  font-family:'Libre Baskerville',serif;
+}
+.deploy-btn{
+  padding:5px 12px;border-radius:3px;
+  background:#8B1A1A;color:#fff;
+  font-size:11.5px;font-weight:600;
+  border:none;cursor:pointer;
+  font-family:'Libre Baskerville',serif;
+  letter-spacing:.02em;
+}
+
+/* ── Font-specific overrides ──────────────────────── */
+/* Applied via .font-X class on the .shell element    */
+
+/* F1 — Lora */
+.font-lora .sb-item,
+.font-lora .m-sub,
+.font-lora tbody td,
+.font-lora .page-sub{ font-family:'Lora',serif; }
+.font-lora .app-name{ font-family:'Lora',serif;font-weight:600; }
+
+/* F2 — Spectral */
+.font-spectral .sb-item,
+.font-spectral .m-sub,
+.font-spectral tbody td,
+.font-spectral .page-sub{ font-family:'Spectral',serif; }
+.font-spectral .app-name{ font-family:'Spectral',serif;font-weight:600; }
+
+/* F3 — IBM Plex Serif */
+.font-ibm-serif .sb-item,
+.font-ibm-serif .m-sub,
+.font-ibm-serif tbody td,
+.font-ibm-serif .page-sub{ font-family:'IBM Plex Serif',serif; }
+.font-ibm-serif .app-name{ font-family:'IBM Plex Serif',serif;font-weight:600; }
+
+/* F4 — Libre Baskerville (headings + body) */
+.font-baskerville .sb-item,
+.font-baskerville .m-sub,
+.font-baskerville tbody td,
+.font-baskerville .page-sub{ font-family:'Libre Baskerville',serif; }
+.font-baskerville .app-name{ font-family:'Libre Baskerville',serif;font-weight:700; }
+
+/* F5 — Vollkorn */
+.font-vollkorn .sb-item,
+.font-vollkorn .m-sub,
+.font-vollkorn tbody td,
+.font-vollkorn .page-sub{ font-family:'Vollkorn',serif; }
+.font-vollkorn .app-name{ font-family:'Vollkorn',serif;font-weight:600; }
+
+/* F6 — Bitter */
+.font-bitter .sb-item,
+.font-bitter .m-sub,
+.font-bitter tbody td,
+.font-bitter .page-sub{ font-family:'Bitter',serif; }
+.font-bitter .app-name{ font-family:'Bitter',serif;font-weight:700; }
+
+/* F7 — PT Serif */
+.font-pt-serif .sb-item,
+.font-pt-serif .m-sub,
+.font-pt-serif tbody td,
+.font-pt-serif .page-sub{ font-family:'PT Serif',serif; }
+.font-pt-serif .app-name{ font-family:'PT Serif',serif;font-weight:700; }
+
+/* F8 — Crimson Pro */
+.font-crimson .sb-item,
+.font-crimson .m-sub,
+.font-crimson tbody td,
+.font-crimson .page-sub{ font-family:'Crimson Pro',serif;font-size:13.5px; }
+.font-crimson .app-name{ font-family:'Crimson Pro',serif;font-weight:600;font-size:14px; }
+
+/* F9 — Merriweather */
+.font-merriweather .sb-item,
+.font-merriweather .m-sub,
+.font-merriweather tbody td,
+.font-merriweather .page-sub{ font-family:'Merriweather',serif;font-size:11.5px;line-height:1.6; }
+.font-merriweather .app-name{ font-family:'Merriweather',serif;font-weight:700;font-size:11.5px; }
+
+/* F10 — Fraunces */
+.font-fraunces .sb-item,
+.font-fraunces .m-sub,
+.font-fraunces tbody td,
+.font-fraunces .page-sub{ font-family:'Fraunces',serif; }
+.font-fraunces .app-name{ font-family:'Fraunces',serif;font-weight:600; }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ─────────────────────────────────────────── -->
+<nav class="page-nav">
+  <span class="nav-brand">Wizard<em>CD</em> · v4</span>
+  <a href="#f1">F1 Lora</a>
+  <a href="#f2">F2 Spectral</a>
+  <a href="#f3">F3 IBM Plex Serif</a>
+  <a href="#f4">F4 Full Baskerville</a>
+  <a href="#f5">F5 Vollkorn</a>
+  <a href="#f6">F6 Bitter</a>
+  <a href="#f7">F7 PT Serif</a>
+  <a href="#f8">F8 Crimson Pro</a>
+  <a href="#f9">F9 Merriweather</a>
+  <a href="#f10">F10 Fraunces</a>
+</nav>
+
+<!-- ── Intro ───────────────────────────────────────── -->
+<div class="intro">
+  <h1>WizardCD — Typography Directions v4</h1>
+  <p>Direction D1 is locked: navy sidebar, crimson accent (now fully visible on dark), Libre Baskerville for headings and page titles. What varies here is the font applied to the <em>content area</em> — table rows, labels, navigation items, supporting text. Ten options, all editorial and established. None of them Inter.</p>
+  <div class="intro-note">
+    <strong>What's being explored:</strong> The font applied to table data (app names, statuses, durations), sidebar nav text, and supporting labels. The "Deployment Activity" heading and metric values stay in Libre Baskerville throughout — you already like those.
+  </div>
+</div>
+
+<!-- ═══ F1 — LORA ═══════════════════════════════════ -->
+<section class="direction" id="f1">
+  <div class="dir-header">
+    <span class="dir-num">Direction 01</span>
+    <h2 class="dir-name">Lora</h2>
+    <span class="dir-font-tag">— warm editorial serif, 2014</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Lora was designed for body text that needs to be read, not scanned. Warm, humanist curves, slight calligraphic influence. "runner-service-ms" in Lora Medium reads like a proper noun in a well-edited document rather than a slug in a config file. This is the closest to Libre Baskerville in character — they work together naturally.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Lora</div>
+      <div class="spec-sample-lg" style="font-family:'Lora',serif;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Lora',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Lora',serif;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Lora',serif;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Lora</div>
+      <div class="spec-table-row" style="font-family:'Lora',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Lora',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">api-gateway</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:600;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Lora',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-lora">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="sb-logo-rule"></div>
+        <div class="sb-logo-main">Wizard<em>CD</em></div>
+        <div class="sb-logo-sub">Deployment</div>
+        <div class="sb-logo-parent">by EBB Systems</div>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar">
+      <span class="tb-tagline">One Config. One Command.</span>
+      <span class="tb-env"><span class="tb-dot"></span>UAT</span>
+      <div class="tb-av">BM</div>
+    </div>
+    <div class="content">
+      <div class="page-title-row">
+        <div class="page-title">Deployment Activity</div>
+        <div class="page-title-rule"></div>
+        <div class="page-sub" style="font-family:'Lora',serif;">48 deployments this month · 96.2% success rate</div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Lora',serif;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Lora',serif;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Lora',serif;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Lora',serif;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Lora',serif;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Lora',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Lora',serif;">api-gateway</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Lora',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Lora',serif;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Lora',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F2 — SPECTRAL ════════════════════════════════ -->
+<section class="direction" id="f2">
+  <div class="dir-header">
+    <span class="dir-num">Direction 02</span>
+    <h2 class="dir-name">Spectral</h2>
+    <span class="dir-font-tag">— refined digital serif, 2017</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Spectral was designed specifically for screen reading — refined, elegant, with an almost Art Deco precision in its thinner weights. At Light or Regular weight it feels like technical documentation from a serious publisher. "eureka-registry-ms" in Spectral reads as a proper noun, not a config slug. This is the most sophisticated and minimal of the serif options.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Spectral</div>
+      <div class="spec-sample-lg" style="font-family:'Spectral',serif;font-weight:600;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Spectral',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Spectral',serif;font-weight:300;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Spectral',serif;font-weight:300;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Spectral</div>
+      <div class="spec-table-row" style="font-family:'Spectral',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Spectral',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:600;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Spectral',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-spectral">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="sb-logo-rule"></div>
+        <div class="sb-logo-main">Wizard<em>CD</em></div>
+        <div class="sb-logo-sub">Deployment</div>
+        <div class="sb-logo-parent">by EBB Systems</div>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar">
+      <span class="tb-tagline">One Config. One Command.</span>
+      <span class="tb-env"><span class="tb-dot"></span>UAT</span>
+      <div class="tb-av">BM</div>
+    </div>
+    <div class="content">
+      <div class="page-title-row">
+        <div class="page-title">Deployment Activity</div>
+        <div class="page-title-rule"></div>
+        <div class="page-sub" style="font-family:'Spectral',serif;font-weight:300;">48 deployments this month · 96.2% success rate</div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Spectral',serif;font-weight:300;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Spectral',serif;font-weight:300;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Spectral',serif;font-weight:300;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Spectral',serif;font-weight:300;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Spectral',serif;font-weight:500;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Spectral',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Spectral',serif;font-weight:500;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Spectral',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Spectral',serif;font-weight:500;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Spectral',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F3 — IBM PLEX SERIF ══════════════════════════ -->
+<section class="direction" id="f3">
+  <div class="dir-header">
+    <span class="dir-num">Direction 03</span>
+    <h2 class="dir-name">IBM Plex Serif</h2>
+    <span class="dir-font-tag">— technical publishing serif, 2017</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">IBM commissioned Plex Serif to pair with their sans-serif in technical documentation. It has a precision and formality that other serifs don't — each letterform is deliberate. In a deployment dashboard it reads as engineering specification rather than editorial copy. "runner-service-ms" in IBM Plex Serif feels like a part number in an IBM manual. Exceptionally readable at small sizes.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — IBM Plex Serif</div>
+      <div class="spec-sample-lg" style="font-family:'IBM Plex Serif',serif;font-weight:600;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'IBM Plex Serif',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'IBM Plex Serif',serif;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'IBM Plex Serif',serif;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in IBM Plex Serif</div>
+      <div class="spec-table-row" style="font-family:'IBM Plex Serif',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'IBM Plex Serif',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:600;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'IBM Plex Serif',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-ibm-serif">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="sb-logo-rule"></div>
+        <div class="sb-logo-main">Wizard<em>CD</em></div>
+        <div class="sb-logo-sub">Deployment</div>
+        <div class="sb-logo-parent">by EBB Systems</div>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar">
+      <span class="tb-tagline">One Config. One Command.</span>
+      <span class="tb-env"><span class="tb-dot"></span>UAT</span>
+      <div class="tb-av">BM</div>
+    </div>
+    <div class="content">
+      <div class="page-title-row">
+        <div class="page-title">Deployment Activity</div>
+        <div class="page-title-rule"></div>
+        <div class="page-sub" style="font-family:'IBM Plex Serif',serif;">48 deployments this month · 96.2% success rate</div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'IBM Plex Serif',serif;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'IBM Plex Serif',serif;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'IBM Plex Serif',serif;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'IBM Plex Serif',serif;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'IBM Plex Serif',serif;font-weight:500;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'IBM Plex Serif',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'IBM Plex Serif',serif;font-weight:500;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'IBM Plex Serif',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'IBM Plex Serif',serif;font-weight:500;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'IBM Plex Serif',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F4 — FULL BASKERVILLE ════════════════════════ -->
+<section class="direction" id="f4">
+  <div class="dir-header">
+    <span class="dir-num">Direction 04</span>
+    <h2 class="dir-name">Full Baskerville</h2>
+    <span class="dir-font-tag">— complete serif consistency throughout</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">What if the font you already love for headings was used everywhere — table rows, nav items, all of it? Libre Baskerville was designed by Pablo Impallari for digital use based on the 18th-century Baskerville typeface. When applied to body text it gives the entire UI a unified editorial weight — like reading a well-made annual report where every element is in the same voice.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Libre Baskerville</div>
+      <div class="spec-sample-lg" style="font-family:'Libre Baskerville',serif;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Libre Baskerville',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Libre Baskerville',serif;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Libre Baskerville',serif;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Libre Baskerville</div>
+      <div class="spec-table-row" style="font-family:'Libre Baskerville',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Libre Baskerville',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:700;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Libre Baskerville',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-baskerville">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="sb-logo-rule"></div>
+        <div class="sb-logo-main">Wizard<em>CD</em></div>
+        <div class="sb-logo-sub">Deployment</div>
+        <div class="sb-logo-parent">by EBB Systems</div>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar">
+      <span class="tb-tagline">One Config. One Command.</span>
+      <span class="tb-env"><span class="tb-dot"></span>UAT</span>
+      <div class="tb-av">BM</div>
+    </div>
+    <div class="content">
+      <div class="page-title-row">
+        <div class="page-title">Deployment Activity</div>
+        <div class="page-title-rule"></div>
+        <div class="page-sub">48 deployments this month · 96.2% success rate</div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F5 — VOLLKORN ════════════════════════════════ -->
+<section class="direction" id="f5">
+  <div class="dir-header">
+    <span class="dir-num">Direction 05</span>
+    <h2 class="dir-name">Vollkorn</h2>
+    <span class="dir-font-tag">— warm oldstyle serif, 2006</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Friedrich Althausen's Vollkorn ("wholegrain" in German) is a warm humanist serif designed for body text that needed personality. Where Spectral is refined and Baskerville is authoritative, Vollkorn is warm and organic. The slightly oldstyle numerals and gentle curves make "1m 24s" read like a measurement rather than a timestamp. This direction feels the most human of the serif options.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Vollkorn</div>
+      <div class="spec-sample-lg" style="font-family:'Vollkorn',serif;font-weight:700;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Vollkorn',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Vollkorn',serif;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Vollkorn',serif;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Vollkorn</div>
+      <div class="spec-table-row" style="font-family:'Vollkorn',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Vollkorn',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:600;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Vollkorn',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-vollkorn">
+    <div class="sb">
+      <div class="sb-logo"><div class="sb-logo-rule"></div><div class="sb-logo-main">Wizard<em>CD</em></div><div class="sb-logo-sub">Deployment</div><div class="sb-logo-parent">by EBB Systems</div></div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar"><span class="tb-tagline">One Config. One Command.</span><span class="tb-env"><span class="tb-dot"></span>UAT</span><div class="tb-av">BM</div></div>
+    <div class="content">
+      <div class="page-title-row"><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub" style="font-family:'Vollkorn',serif;">48 deployments this month · 96.2% success rate</div></div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Vollkorn',serif;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Vollkorn',serif;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Vollkorn',serif;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Vollkorn',serif;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Vollkorn',serif;font-weight:600;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Vollkorn',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Vollkorn',serif;font-weight:600;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Vollkorn',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Vollkorn',serif;font-weight:600;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Vollkorn',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F6 — BITTER ══════════════════════════════════ -->
+<section class="direction" id="f6">
+  <div class="dir-header">
+    <span class="dir-num">Direction 06</span>
+    <h2 class="dir-name">Bitter</h2>
+    <span class="dir-font-tag">— slab serif, strong and unambiguous</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Bitter is a slab serif — heavier, more assertive serifs. Where Spectral whispers authority, Bitter announces it. "runner-service-ms" in Bitter Bold looks like a headline, not an item in a list. This is the choice if you want every app name to feel important. Reuters, Bloomberg Terminal, and Reuters Eikon all use slab serifs for data because they're impossible to misread at a glance. No ambiguity. No squinting.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Bitter</div>
+      <div class="spec-sample-lg" style="font-family:'Bitter',serif;font-weight:700;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Bitter',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Bitter',serif;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Bitter',serif;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Bitter</div>
+      <div class="spec-table-row" style="font-family:'Bitter',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Bitter',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:700;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Bitter',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-bitter">
+    <div class="sb">
+      <div class="sb-logo"><div class="sb-logo-rule"></div><div class="sb-logo-main">Wizard<em>CD</em></div><div class="sb-logo-sub">Deployment</div><div class="sb-logo-parent">by EBB Systems</div></div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar"><span class="tb-tagline">One Config. One Command.</span><span class="tb-env"><span class="tb-dot"></span>UAT</span><div class="tb-av">BM</div></div>
+    <div class="content">
+      <div class="page-title-row"><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub" style="font-family:'Bitter',serif;">48 deployments this month · 96.2% success rate</div></div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Bitter',serif;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Bitter',serif;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Bitter',serif;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Bitter',serif;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Bitter',serif;font-weight:700;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Bitter',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Bitter',serif;font-weight:700;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Bitter',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Bitter',serif;font-weight:700;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Bitter',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F7 — PT SERIF ════════════════════════════════ -->
+<section class="direction" id="f7">
+  <div class="dir-header">
+    <span class="dir-num">Direction 07</span>
+    <h2 class="dir-name">PT Serif</h2>
+    <span class="dir-font-tag">— formal publishing serif, ParaType 2009</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">PT Serif was commissioned by the Russian government for official digital publications — that's the provenance. It has a formality and precision that comes from serving as the official typeface for state documents. In a deployment tool this reads as institutional authority. Nothing casual, nothing decorative. App names look like entries in a government register. Completely distinctive from anything in the startup tool space.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — PT Serif</div>
+      <div class="spec-sample-lg" style="font-family:'PT Serif',serif;font-weight:700;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'PT Serif',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'PT Serif',serif;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'PT Serif',serif;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in PT Serif</div>
+      <div class="spec-table-row" style="font-family:'PT Serif',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'PT Serif',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:700;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'PT Serif',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-pt-serif">
+    <div class="sb">
+      <div class="sb-logo"><div class="sb-logo-rule"></div><div class="sb-logo-main">Wizard<em>CD</em></div><div class="sb-logo-sub">Deployment</div><div class="sb-logo-parent">by EBB Systems</div></div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar"><span class="tb-tagline">One Config. One Command.</span><span class="tb-env"><span class="tb-dot"></span>UAT</span><div class="tb-av">BM</div></div>
+    <div class="content">
+      <div class="page-title-row"><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub" style="font-family:'PT Serif',serif;">48 deployments this month · 96.2% success rate</div></div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'PT Serif',serif;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'PT Serif',serif;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'PT Serif',serif;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'PT Serif',serif;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'PT Serif',serif;font-weight:700;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'PT Serif',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'PT Serif',serif;font-weight:700;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'PT Serif',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'PT Serif',serif;font-weight:700;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'PT Serif',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F8 — CRIMSON PRO ═════════════════════════════ -->
+<section class="direction" id="f8">
+  <div class="dir-header">
+    <span class="dir-num">Direction 08</span>
+    <h2 class="dir-name">Crimson Pro</h2>
+    <span class="dir-font-tag">— book typography, elegant at small sizes</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Crimson Pro is book typography — designed for long-form reading in academic and literary publishing. At 12-13px it's exceptionally readable, with delicate contrast between thick and thin strokes. In a deployment table it gives the content a refined, considered quality — like reading footnotes in a scholarly edition. The name fits perfectly: the crimson accent and Crimson Pro body text share the same color vocabulary.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Crimson Pro</div>
+      <div class="spec-sample-lg" style="font-family:'Crimson Pro',serif;font-size:26px;font-weight:600;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Crimson Pro',serif;font-size:16px;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Crimson Pro',serif;font-size:13px;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Crimson Pro',serif;font-size:13px;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Crimson Pro</div>
+      <div class="spec-table-row" style="font-family:'Crimson Pro',serif;font-size:13.5px;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Crimson Pro',serif;font-size:13.5px;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:12px;font-weight:600;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Crimson Pro',serif;font-size:13.5px;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-crimson">
+    <div class="sb">
+      <div class="sb-logo"><div class="sb-logo-rule"></div><div class="sb-logo-main">Wizard<em>CD</em></div><div class="sb-logo-sub">Deployment</div><div class="sb-logo-parent">by EBB Systems</div></div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar"><span class="tb-tagline">One Config. One Command.</span><span class="tb-env"><span class="tb-dot"></span>UAT</span><div class="tb-av">BM</div></div>
+    <div class="content">
+      <div class="page-title-row"><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub" style="font-family:'Crimson Pro',serif;font-size:13.5px;">48 deployments this month · 96.2% success rate</div></div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Crimson Pro',serif;font-size:13px;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Crimson Pro',serif;font-size:13px;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Crimson Pro',serif;font-size:13px;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Crimson Pro',serif;font-size:13px;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Crimson Pro',serif;font-size:14px;font-weight:600;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Crimson Pro',serif;font-size:13.5px;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Crimson Pro',serif;font-size:14px;font-weight:600;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Crimson Pro',serif;font-size:13.5px;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Crimson Pro',serif;font-size:14px;font-weight:600;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Crimson Pro',serif;font-size:13.5px;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F9 — MERRIWEATHER ════════════════════════════ -->
+<section class="direction" id="f9">
+  <div class="dir-header">
+    <span class="dir-num">Direction 09</span>
+    <h2 class="dir-name">Merriweather</h2>
+    <span class="dir-font-tag">— bold screen serif, heavy authority</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Merriweather was designed for maximum readability on screens at any size. Wide letterforms, low-contrast strokes, generous spacing. In a deployment table it makes every row feel substantial and important. App names in Merriweather don't look like config keys — they look like named entities in a contract. This is the boldest and heaviest of the editorial serifs. The New York Times uses Merriweather for body copy. So does The Guardian.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Merriweather</div>
+      <div class="spec-sample-lg" style="font-family:'Merriweather',serif;font-weight:700;font-size:18px;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Merriweather',serif;font-size:12px;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Merriweather',serif;font-size:11px;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Merriweather',serif;font-size:11px;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Merriweather</div>
+      <div class="spec-table-row" style="font-family:'Merriweather',serif;font-size:11px;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Merriweather',serif;font-size:11px;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:10.5px;font-weight:700;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Merriweather',serif;font-size:11px;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-merriweather">
+    <div class="sb">
+      <div class="sb-logo"><div class="sb-logo-rule"></div><div class="sb-logo-main">Wizard<em>CD</em></div><div class="sb-logo-sub">Deployment</div><div class="sb-logo-parent">by EBB Systems</div></div>
+      <nav class="sb-nav">
+        <div class="sb-item active" style="font-size:11.5px;"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item" style="font-size:11.5px;"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item" style="font-size:11.5px;"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar"><span class="tb-tagline">One Config. One Command.</span><span class="tb-env"><span class="tb-dot"></span>UAT</span><div class="tb-av">BM</div></div>
+    <div class="content">
+      <div class="page-title-row"><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub" style="font-family:'Merriweather',serif;font-size:11px;">48 deployments this month · 96.2% success rate</div></div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Merriweather',serif;font-size:10px;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Merriweather',serif;font-size:10px;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Merriweather',serif;font-size:10px;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Merriweather',serif;font-size:10px;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Merriweather',serif;font-size:11px;font-weight:700;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Merriweather',serif;font-size:11px;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Merriweather',serif;font-size:11px;font-weight:700;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Merriweather',serif;font-size:11px;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Merriweather',serif;font-size:11px;font-weight:700;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Merriweather',serif;font-size:11px;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ F10 — FRAUNCES ═══════════════════════════════ -->
+<section class="direction" id="f10">
+  <div class="dir-header">
+    <span class="dir-num">Direction 10</span>
+    <h2 class="dir-name">Fraunces</h2>
+    <span class="dir-font-tag">— optical size serif, utterly distinctive</span>
+  </div>
+  <div class="dir-rule"></div>
+  <p class="dir-desc">Fraunces is an optical size serif — designed to shift character as it scales, just like traditional metal type. At display sizes the details bloom; at body sizes it settles into dignified readability. The quirky, slightly condensed lowercase letters give it a personality no other font in this list has. "runner-service-ms" in Fraunces looks like the name of a ship, a vessel, something that carries things reliably from one place to another. Which is exactly what it does.</p>
+  <div class="divider"></div>
+
+  <div class="specimen">
+    <div class="spec-col">
+      <div class="spec-label">Font specimen — Fraunces</div>
+      <div class="spec-sample-lg" style="font-family:'Fraunces',serif;font-weight:700;">WizardCD Platform</div>
+      <div class="spec-sample-md" style="font-family:'Fraunces',serif;">runner-service-ms · UAT · Success</div>
+      <div class="spec-sample-sm" style="font-family:'Fraunces',serif;font-weight:300;">Deployment completed in 1 minute 24 seconds</div>
+      <div class="spec-sample-sm spec-sample-it" style="font-family:'Fraunces',serif;font-weight:300;margin-top:4px;">One Config. One Command. Continuous Magic.</div>
+    </div>
+    <div class="spec-col">
+      <div class="spec-label">Table rows in Fraunces</div>
+      <div class="spec-table-row" style="font-family:'Fraunces',serif;">
+        <span class="spec-jid">a3f8…2c1d</span>
+        <span class="spec-app">runner-service-ms</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Fraunces',serif;">
+        <span class="spec-jid">b9d2…7e4a</span>
+        <span class="spec-app">eureka-registry-ms</span>
+        <span class="spec-env">SIT</span>
+        <span style="font-size:11px;font-weight:600;color:#8B1A1A;">Running</span>
+      </div>
+      <div class="spec-table-row" style="font-family:'Fraunces',serif;">
+        <span class="spec-jid">c1e5…9b3f</span>
+        <span class="spec-app">payment-service</span>
+        <span class="spec-env">UAT</span>
+        <span class="spec-ok">Success</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell font-fraunces">
+    <div class="sb">
+      <div class="sb-logo"><div class="sb-logo-rule"></div><div class="sb-logo-main">Wizard<em>CD</em></div><div class="sb-logo-sub">Deployment</div><div class="sb-logo-parent">by EBB Systems</div></div>
+      <nav class="sb-nav">
+        <div class="sb-item active"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2L3 8l4 2 2 4 4-10z"/></svg>New Deploy</div>
+        <div class="sb-item"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Settings</div>
+      </nav>
+      <div class="sb-foot">v1.0.0 · UAT</div>
+    </div>
+    <div class="topbar"><span class="tb-tagline">One Config. One Command.</span><span class="tb-env"><span class="tb-dot"></span>UAT</span><div class="tb-av">BM</div></div>
+    <div class="content">
+      <div class="page-title-row"><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub" style="font-family:'Fraunces',serif;font-weight:300;">48 deployments this month · 96.2% success rate</div></div>
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Total Deploys</div><div class="m-value">48</div><div class="m-sub" style="font-family:'Fraunces',serif;font-weight:300;">this month</div></div>
+        <div class="metric"><div class="m-label">Success Rate</div><div class="m-value green">96.2%</div><div class="m-sub" style="font-family:'Fraunces',serif;font-weight:300;">last 30 days</div></div>
+        <div class="metric"><div class="m-label">Active Jobs</div><div class="m-value">2</div><div class="m-sub" style="font-family:'Fraunces',serif;font-weight:300;">running now</div></div>
+        <div class="metric"><div class="m-label">Environments</div><div class="m-value">3</div><div class="m-sub" style="font-family:'Fraunces',serif;font-weight:300;">SIT · UAT · PROD</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-head"><span class="table-head-label">Recent Deployments</span><button class="deploy-btn">New Deploy</button></div>
+        <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td class="job-id">a3f8b291…</td><td class="app-name" style="font-family:'Fraunces',serif;font-weight:600;">runner-service-ms</td><td><span class="env-tag">UAT</span></td><td class="status-ok" style="font-family:'Fraunces',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">1m 24s</td></tr>
+          <tr><td class="job-id">b9d2c445…</td><td class="app-name" style="font-family:'Fraunces',serif;font-weight:600;">eureka-registry-ms</td><td><span class="env-tag">UAT</span></td><td class="status-run" style="font-family:'Fraunces',serif;">Running</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">0m 43s</td></tr>
+          <tr><td class="job-id">c1e5f832…</td><td class="app-name" style="font-family:'Fraunces',serif;font-weight:600;">payment-service</td><td><span class="env-tag">SIT</span></td><td class="status-ok" style="font-family:'Fraunces',serif;">Success</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;">2m 07s</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ──────────────────────────────────────── -->
+<footer style="background:#0D2240;border-top:3px solid #8B1A1A;padding:28px 40px;margin-top:16px;">
+  <div style="max-width:1060px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-family:'Libre Baskerville',serif;font-size:13px;font-weight:700;color:#fff;">
+      Wizard<span style="color:#D44040;">CD</span>
+      <span style="font-weight:400;color:rgba(255,255,255,.4);margin-left:16px;">Typography Directions v4</span>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,.3);font-family:'Libre Baskerville',serif;font-style:italic;">v1, v2, v3 archived in WizardCd/web/</div>
+  </div>
+</footer>
+
+<script>
+const sections = document.querySelectorAll('.direction');
+const links = document.querySelectorAll('.page-nav a');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      links.forEach(l=>l.classList.remove('active'));
+      const a = document.querySelector(`.page-nav a[href="#${e.target.id}"]`);
+      if(a) a.classList.add('active');
+    }
+  });
+},{threshold:0.2});
+sections.forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

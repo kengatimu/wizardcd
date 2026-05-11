@@ -681,13 +681,45 @@ Lines before first header → `prelude[]`.
 
 ## Styling Conventions (Tailwind + custom tokens)
 
-- Background hierarchy: `wiz-bg` < `wiz-surface` < `wiz-raised` < `wiz-panel`
-- Gold `wiz-gold` — active step, panel headings
-- Panel shell: `rounded-xl border border-wiz-border border-l-2 border-l-<color>/50 bg-wiz-panel overflow-hidden`
-- Panel header: `flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-<color>-dim/30`
-- Panel body: `p-5 flex flex-col gap-5`
-- Tab row: `grid grid-cols-4 gap-2` — 4 tabs: Target Server / Application / Deployment Options / Review & Deploy
-- Colours: `sig-blue`=certs/SSH, `sig-green`=success, `sig-red`=error, `sig-yellow`=incomplete, `sig-purple`=PROD
+> 📖 **Canonical design reference:** `documents/wizardcd-design-system.md`
+> The doc covers tokens, typography, component patterns, colour semantics, motion, and do's/don'ts. **Read it before any visual work.** The brand-guide PDF in `documents/` is a v1 historical reference — the markdown file is the live source of truth.
+
+### Quick reference
+
+- **Background hierarchy:** `wiz-bg` (page) < `wiz-surface` (cards) < `wiz-raised` (hover) < `wiz-panel` (navy sidebar)
+- **Brand crimson** (`wiz-gold` on light bg = `#8B1A1A`, `wiz-teal` on navy = `#D44040`) — strictly reserved for: brand identity, focal action, "you are here", true alerts. **Never decorative.**
+- **Panel shell:** `rounded border border-wiz-border border-l-2 border-l-<color>/50 bg-wiz-surface overflow-hidden`
+- **Panel header:** `flex items-center gap-2.5 px-5 py-3.5 border-b border-wiz-border/60 bg-<color>-dim`
+- **Panel body:** `p-5 flex flex-col gap-5` (or `divide-y divide-wiz-border/30` for stacked rows)
+- **Position-based panel rotation:** green → blue → crimson → restart green (purely positional, not semantic)
+- **Tab row:** `grid grid-cols-4 gap-2` — 4 tabs: Target Server / Application / Deployment Options / Review & Deploy
+
+### Colour semantics (the single most important rule)
+
+| Colour | Role |
+|---|---|
+| `wiz-gold` / `wiz-teal` (crimson) | Brand identity, focal action, "you are here", true alerts |
+| `sig-green` | Success / completion |
+| `sig-blue` | Informational / in-progress / SSH context |
+| `sig-yellow` | Warning / incomplete / running |
+| `sig-red` | Error / failure |
+| `sig-purple` | **PROD environment** |
+
+### Body type
+
+```
+Inter 13.25px / line-height 1.6 / font-feature-settings: 'ss02', 'cv11', 'tnum', 'calt'
++ text-rendering: optimizeLegibility + font-synthesis: none
+```
+
+### Typography tones (light theme — WCAG AA compliant)
+
+| Token | Hex | Use |
+|---|---|---|
+| `wiz-cream` | `#1E1E32` | Primary body (navy-tinted near-black) |
+| `wiz-gray` | `#414155` | Secondary text |
+| `wiz-muted` | `#5A5A6C` | Hints, sublabels |
+| `wiz-dim` | `#808091` | Placeholders (floor — anything dimmer fails AA) |
 
 ---
 
@@ -1128,11 +1160,183 @@ A **read-only contextual sidebar** on the right side of the wizard. Shows:
 
 ---
 
+### Session — Light Theme + Branding Overhaul (2026-03-25 to 2026-04-23)
+
+#### Theming Architecture — CSS Custom Properties (CRITICAL)
+- [x] **Root cause identified**: Tailwind v3.4 hardcodes hex values for opacity variants (`bg-wiz-bg/60` → `#080b1499`). Class-level CSS overrides only catch the base class, not the 60+ opacity variants. Fix: redefine all colours as CSS custom properties so Tailwind generates `rgb(var(--wiz-bg) / 0.6)` — ONE variable override updates ALL variants automatically.
+- [x] `tailwind.config.js` — **Complete rewrite**: all 30+ colours now use `c('--var-name')` helper: `function c(v) { return ({opacityValue}) => opacityValue !== undefined ? \`rgb(var(${v}) / ${opacityValue})\` : \`rgb(var(${v}))\` }`. New tokens: `wiz-teal`, `wiz-teal-light`, `wiz-teal-dim`.
+- [x] `src/styles/globals.css` — **Complete rewrite**: all colours defined as space-separated RGB channels in CSS custom properties. `:root` = dark theme defaults, `.light` = warm light theme overrides. Log viewer dark override removed at user request (uniform light theme).
+- [x] `src/context/ThemeContext.tsx` — migration key system: `wiz-theme-v3-migrated` bumped to force one-time reset to light for existing browsers; old dark preference cleared.
+- [x] `index.html` — default `class="light" data-theme="light"`; flash-prevention inline script defaults to light.
+
+#### Warm Light Theme Values
+- Background: `#F9F8F6` (warm off-white) → `#FFFFFF` (white cards)
+- Text: `#1A1A2E` (near-black) → `#3A3A50` → `#6B6B80` (muted)
+- Gold: `#9A7B1A` (darker for light bg, stays legible)
+- Teal secondary accent: `#1A7A6E` (from "CONTINUOUS MAGIC." in logo)
+- Signal colours fully saturated for white backgrounds (green `#16A34A`, red `#DC2626`, blue `#2563EB`)
+
+#### Sidebar / Header / Logo
+- [x] `Sidebar.tsx` — `wiz-sidebar` class added; theme-aware logo swap: light theme → `wizardCD-logo-light.png`, dark theme → `wizardCD-logo.png`; dark sidebar/header overrides removed (uniform light theme per user instruction)
+- [x] `Header.tsx` — `wiz-header` class added; dark header override removed
+- [x] `public/wizardCD-logo-light.png` — copied from `web/logo/WizardCd_light_theme_logo.png`
+
+#### DEV Environment Added
+- [x] Backend: `SshKeyServiceImpl` updated to include DEV in environments list — auto-generates `wizardcd_dev_ed25519` keypair on runner VM at startup
+- [x] Frontend: DEV environment available in wizard dropdown with `sig-green` colour coding
+- [x] Runner VM: `wizardcd_dev_ed25519` key auto-generated; DEV public key available at `/runner/public-keys`
+
+#### Roadmap + Analysis Documents
+- [x] `documents/wizardcd-platform-roadmap.md` — 4,437 lines, 274 tests across 13 active phases + Phase 14 (future) + Phase 15 (subscriptions). Security woven into every phase + dedicated Phase 11.5. Full phase summary table at end.
+- [x] `documents/wizardcd-platform-analysis.md` — competitive analysis vs Octopus/CodeDeploy/Jenkins/Ansible/Capistrano/ArgoCD/Harness. Feature matrix, positioning matrix, honest strengths/weaknesses, final verdict. WizardCD position: Tier 3 Niche Player → goal = undisputed leader in VM deployment niche.
+
+---
+
+### Session — Deploy Wizard UX Polish & Visual Recalibration (2026-04-24 to 2026-05-10)
+
+A six-step UX polish pass on the New Deploy page, followed by a sidebar visual recalibration and a typography overhaul. Touched `DeployPage.tsx`, `Sidebar.tsx`, `MissionControl.tsx`, `globals.css` — all on the live theme.
+
+#### Step Navigation Redesign — Sticky Card Panel
+- [x] `DeployPage.tsx` — wizard step navigation wrapped in a proper card with `border-l-[3px] border-l-wiz-gold` (crimson left accent), sticky-positioned (`sticky top-0 z-50`) with bg `wiz-surface` and a soft shadow
+- [x] **Status row redesign**: two pills, balanced — left = current step + hint, right = N/4 complete
+  - Left chip switched from `bg-wiz-gold/10` (crimson) → `bg-sig-blue/8` → finally **left-weighted gradient `rgba(37,99,235,0.20 → 0.12 → 0.06)`** with hue-tinted drop shadow + 1px white inner highlight
+  - Right pill colour story: grey (idle, 0/4) → sig-blue (in progress, 1-3/4) → sig-green (complete, 4/4) — partial progress never reads as "done"
+- [x] **Progress bar**: thick gradient (green → amber → crimson) with shimmer animation; floating progress chip hidden at 0% and 100% (collides with status pill at 0%, redundant at 100%)
+- [x] **Step circles + connectors**: per-step status (✓ complete / ⚠ incomplete / ! current / ○ unvisited); connectors fill green when previous step done
+
+#### Step Hint System — Dynamic Contextual Guidance
+- [x] `DeployPage.tsx` — added `subtitle` field to `STEPS` array with one-line plain-English purpose per step:
+  - 01 Target Server → *"Point WizardCD at your server and verify it can reach it over SSH."*
+  - 02 Application → *"Upload your JAR and tell us how the application should run."*
+  - 03 Deployment Options → *"Tune backups, log rotation, JVM flags and any extra files to ship."*
+  - 04 Review & Deploy → *"One last look at every setting before you cast the deployment."*
+- [x] **Two-section chip composition**: label section (`STEP N OF 4` uppercase + pulse dot) + hairline divider + hint section (sentence-case description). Hint span keyed on `step` so React remounts on every transition; existing `animate-fade-in` keyframe runs automatically — chip narrates progress instead of just labelling it.
+- [x] **Completion state**: chip flips to green at `isAllDone`, label becomes "READY", hint becomes "*Every step is complete — one click away from deploying.*"
+
+#### Section Header Hierarchy — Uniform Step 3 Format
+- [x] `DeployPage.tsx` — all inner panels across all 4 steps now use the **Step 3 format**: `border-l-2 border-l-{color}/50` shell + `bg-{color}-dim` header + 6px `bg-{color}/70` dot + uppercase mono `text-{color}` title
+- [x] **Position-based colour rotation** (purely positional, not semantic): green → blue → crimson → restart green
+  - Step 1: SSH Target (green) → Firewall (blue) → SSH Keys (crimson) → Verify Connection (green-restart)
+  - Step 2: Application (green) → Runtime (blue) → Java Installation (crimson)
+  - Step 3: Backup (green) → Log Rotation (blue) → Server Files (crimson) → JVM Configuration (green-restart)
+  - Step 4: Target Server (green) → Application (blue) → Deployment Options (crimson)
+
+#### Test Connection — Promoted to Primary Action
+- [x] `DeployPage.tsx` — Test Connection button repromoted from quiet `bg-sig-blue-dim/60` utility chip to **branded primary action**:
+  - Padding `px-4 py-2 → px-5 py-2.5`, text `text-xs font-semibold → text-sm font-bold`
+  - Default bg: `bg-wiz-gold` (crimson) with white text
+  - Pulsing ring (2.2s) when form is ready but test hasn't run
+  - State-driven solid fills: `ok=sig-green`, `fail=sig-red`, `testing=sig-blue/90`
+  - Multi-layer crimson glow shadow + hover `scale-[1.03]` + active `scale-95`
+- [x] Success message text: `✓ Runner can reach the server successfully — ready to continue.`
+
+#### SSH Endpoint — Compact Field Reflow
+- [x] `DeployPage.tsx` — SSH USER + SSH HOST + SSH PORT collapsed from three full rows into **one composed connection-string row** rendering as `user @ host : port`:
+  - Three inputs visually fused via `border-r-none` / `border-l-none` neighbour sharing
+  - `@` and `:` separator chips between inputs (`bg-wiz-bg/50 text-wiz-muted font-mono`)
+  - Width allocation: user `flex-1 min-w-[80px]`, host `flex-[2] min-w-[140px]`, port fixed `w-[72px]` centred
+  - Focus z-stacking: `relative z-10 focus:z-20` so the focused input's border + ring lift above neighbours instead of being clipped
+  - Each input keeps its own `aria-label` for screen readers; row-level error surfaces `errors.sshUser || errors.sshHost || errors.sshPort`
+- [x] Saved ~96px vertical real estate. SSH Target panel now reads as two crisp decisions: *which environment* + *which target*.
+
+#### Step Nav Chip — Depth Recipe (the canonical "filled chip" pattern)
+- [x] `DeployPage.tsx` — replaced flat `bg-sig-blue/8` (which was effectively invisible) with a **three-layer depth recipe**:
+  1. **Left-weighted gradient** `linear-gradient(90deg, rgba(37,99,235,0.20) 0%, rgba(37,99,235,0.12) 55%, rgba(37,99,235,0.06) 100%)` — saturation flows label → hint, reinforcing reading order
+  2. **Hue-matched shadows** `0 1px 3px rgba(37,99,235,0.14), 0 0 0 1px rgba(37,99,235,0.04)` — anchors chip to surface, lift looks intentional not generic
+  3. **1px white inner highlight** at top `inset 0 1px 0 rgba(255,255,255,0.55)` — flips chip from "flat sticker" to "physical token sitting on the page"
+- [x] Hint text bumped to `text-wiz-cream/95 font-medium` for better presence on the richer wash
+- [x] **This pattern is now reusable** for any "informational chip" needing visible filled presence — captured in `documents/wizardcd-design-system.md` §6.4
+
+#### MissionControl Sidebar — Sticky Position Fix + Empty State Cleanup
+- [x] `MissionControl.tsx` — Deploy Summary uses `SummaryLine` component with status indicator + hint guidance:
+  - Filled values → 12px filled green check on a `bg-sig-green/15` rounded background
+  - Empty values → 10px hollow circle with italic `text-wiz-muted/45` placeholder hint instead of "—"
+- [x] **Sticky position fix**: original `sticky top-16` was being hidden by the redesigned step-nav (z-50, ~180px tall). Fixed via `top: 200` on outer wrapper + `self-start` + `max-h: calc(100vh - 220px)` with overflow.
+- [x] Width fixed at 280px. Deploy Summary uses green theme; Context Block uses blue theme.
+- [x] Progress chip in header showing filled/total ratio with grey/blue/green tier (matches main step nav colour story).
+
+#### Sidebar Visual Recalibration — Crimson Discipline
+- [x] `Sidebar.tsx` — comprehensive crimson audit. ~70% of visible crimson was decorative; the eye couldn't separate "brand red" from "alert red", so the whole sidebar read as "everything is on fire".
+- [x] **Active nav state**: gradient crimson bg + crimson glow + pulsing crimson dot → **white wash bg `white/[0.10]` + neutral border + 3px crimson left stripe + crimson icon tint + small static crimson dot** (4px). Active item earns *one* crimson signature, not five compounding red layers.
+- [x] **Hover state**: crimson radial gradient flood + crimson glow → **neutral box-shadow only**, no crimson fill, no crimson border. Hover feels tactile, not warning.
+- [x] **Active dot**: removed `animate-ping` — pulse on a nav item read as "warning needs attention"; static dot reads as "you are here".
+- [x] **Settings active**: `crimson/0.18 bg + crimson/45 border + solid crimson icon chip` → **white wash bg + neutral border + small `crimson/85` icon chip** (chip stays branded, panel doesn't flood red).
+- [x] **WeeklyActivityChart hover**: crimson radial bg + crimson glow → **white-tint bg + neutral box-shadow** (the bars themselves still carry red for failures — chrome stays calm).
+- [x] **Section labels**: 5-stop crimson rainbow gradient (`crimson/0.32` peaks) → **3-stop pure white gradient** (`0.18 → 0.32 → 0.06`); section dots shrunk from 6px solid `#D44040` to 4px `#D44040/70`. Three section labels stacked were three red rainbows.
+- [x] **Bottom decorative glow**: `radial-gradient(... rgba(212,64,64,0.08) ...)` → soft neutral with crimson hint at 0.025.
+- [x] **Bottom-zone top inset rule**: `inset 0 1px 0 rgba(212,64,64,0.28)` → `inset 0 1px 0 rgba(255,255,255,0.10)` (was a thick crimson rule across the sidebar mid-line).
+- [x] **Right-edge brand line**: `rgba(212,64,64,0.22)` → `0.16` — still reads as brand signature, no longer as alert border.
+
+#### LivePulsePanel — *No Data* Tier + Damped Alerts
+- [x] `Sidebar.tsx` — added `total === 0` neutral tier to `LivePulsePanel`'s health computation. Empty installs no longer fall through to *Critical* with a glaring red 49% panel.
+  - **No Data** tier: `bg-white/[0.05]`, em-dash placeholder, "no deploys yet" caption, no animated ping dot, no progress fill
+- [x] **Damped alert tiers**:
+  - *Critical*: bg `0.22 → 0.12`, border `/55 → /40`, shadow `0.36 → 0.22`
+  - *Degraded*: bg `0.16 → 0.08`, border `/45 → /30`
+  - *Healthy* / *Stable* equivalently softened
+- [x] Real critical states still draw the eye because nothing else competes in the red lane.
+
+#### Typography Overhaul (`globals.css`)
+- [x] **Body type**: `font-size: 12.5px → 13.25px` (+6%), `line-height: 1.85 → 1.6` (confident UI rhythm vs editorial body)
+- [x] **Inter feature settings**: `font-feature-settings: 'ss02', 'cv11', 'tnum', 'calt'`
+  - `ss02` — disambiguates `I / l / 1`
+  - `cv11` — single-storey `g` (cleaner at small sizes)
+  - `tnum` — tabular numerals (digits align in tables/metrics)
+  - `calt` — contextual alternates
+- [x] **Cross-browser rendering hints**: `text-rendering: optimizeLegibility`, `-moz-osx-font-smoothing: grayscale`, `font-synthesis: none` (prevents fake bold/italic muddying strokes)
+- [x] **Typography tones rebalanced** (light theme — every value passes WCAG AA on `#F9F8F6`):
+  - `--wiz-cream`: `#333333` (pure grey) → **`#1E1E32`** (navy-tinted near-black, ~13:1 contrast — feels related to brand wordmark, not anonymous grey)
+  - `--wiz-gray`: `#505050` → **`#414155`** (~9:1)
+  - `--wiz-muted`: `#666666` → **`#5A5A6C`** (~5.8:1 — was reading as invisible grey)
+  - `--wiz-dim`: `#999999` (failed AA at 2.8:1) → **`#808091`** (~4.5:1, passes AA — placeholders now read cleanly)
+- [x] **Dark log scope** (`.log-dark`) typography tones similarly bumped one tier brighter so log readability matches light theme clarity.
+- [x] **Cascading effect**: every `text-wiz-muted/50`, `text-wiz-cream/85`, etc. now resolves through the richer base values — no per-component edits needed.
+
+#### Page Header — Restored to Single Clean Line
+- [x] `DeployPage.tsx` — page header iterations: tried static brand tagline, tried dynamic step hint subtitle, finally **stripped both** at user request. Page header is now just the `New Deployment` headline with crimson rule + animated gradient sweep. The dynamic step hint lives inside the step nav chip; the brand tagline lives in the global app header.
+- [x] **Draft restored banner**: `border-wiz-gold/30 bg-wiz-gold-dim` (warm pink alarm-y feel) → `border-sig-blue/25 border-l-[3px] border-l-sig-blue/60 bg-sig-blue/5` — informational notice with subtle blue accent.
+
+#### Files Changed
+- `web/ui/src/pages/DeployPage.tsx` — wizard structural redesign, step hints, SSH endpoint reflow, chip depth recipe
+- `web/ui/src/components/MissionControl.tsx` — SummaryLine, sticky positioning, progress chip
+- `web/ui/src/layouts/Sidebar.tsx` — crimson recalibration across nav, hover, sections, glow, brand line; *No Data* health tier
+- `web/ui/src/styles/globals.css` — typography overhaul, token rebalance for WCAG AA
+
+#### Verification
+- All edits verified clean via `tsc --noEmit` after each major change
+- Visual verification on `localhost:5173/deploy` across all 4 wizard steps + dashboard + sidebar at multiple data states (empty, mid-progress, complete)
+
+---
+
+### Session — Documentation Sync & Unification (2026-05-10)
+
+#### Phase 1 — Design system doc created
+- [x] `documents/wizardcd-design-system.md` — **NEW canonical design system reference** (v2.0). Single source of truth for tokens, typography, component patterns, colour semantics, motion, and do's/don'ts. Supersedes the v1 brand-guide PDF. Read before any visual work.
+- [x] `CLAUDE.md` — Styling Conventions section refreshed with current tokens, type, and colour semantics; pointer to design-system.md added at top.
+- [x] `CLAUDE.md` — comprehensive session entry above (Deploy Wizard UX Polish & Visual Recalibration) capturing every change.
+
+#### Phase 2 — Unification (single source of truth)
+- [x] **Deleted `web/design/WizardCD_Design_System.md`** (1987-line older spec) — merged its unique content into `documents/wizardcd-design-system.md` and removed to eliminate dual sources of truth.
+- [x] `documents/wizardcd-design-system.md` bumped to **v2.2** — added:
+  - **§1.2 Logo** expanded with file table, PNG regen command, anatomy, inline-flex rule-width technique, complete CSS (light + dark variants), size scale (cover/heading/mid/back/sidebar/header/nav/badge), SVG embed-ready versions (light + dark), and 12 "what never to do" rules
+  - **§8.1 Spacing Scale** (4px base unit table: xs/sm/md/lg/xl/2xl/3xl/4xl) + **§8.2 Layout Measurements** (sidebar width, topbar, border-radius, paddings, MissionControl sidebar specs)
+  - **§10 Print & Document CSS** (`@page` rules, A4 dimensions, print typography — note: print body stays at 12.5px/1.85; only UI bumped to 13.25px/1.6)
+  - **§11 Dark Surface Rules** (font smoothing on navy, `#8B1A1A → #D44040` substitution table, "the crimson contrast trap" explanation, token mapping for dark surfaces)
+- [x] **Appendix B — Version Log** updated with v1 → v2 → v2.1 → v2.2 progression and explicit list of superseded sources (old design.md deleted; brand-guide PDFs retained as historical v1 artefacts only).
+- [x] `web/design/` directory still contains its physical assets (`concepts/`, `letterhead/`, `logo/`, `profile/`) — only the obsolete markdown was deleted; logo HTML/PNG files are preserved and referenced from the new doc.
+
+#### Net effect
+- Single source of truth: **`documents/wizardcd-design-system.md`** is now the only canonical design system reference.
+- Any future visual change → update code → update this doc → bump version → `/update-memory`.
+
+---
+
 ## Pending / Known Issues
 
-- **Runner log formatting**: Runner backend logs have triple timestamps/levels. Could be simplified to match UI log format. Discussed but not yet implemented.
-- **Per-file upload progress in RedeployModal JSX**: state/handler logic done, JSX not wired
-- **Rollback confirmation popup**: showing backup info BEFORE clicking rollback — discussed, not implemented
+- **Runner log formatting**: Runner backend logs have triple timestamps/levels. Could be simplified to match UI log format. Discussed but not yet implemented. Low priority.
+- **Per-file upload progress in RedeployModal JSX**: state/handler logic done, JSX not wired. Low priority.
+- **Rollback confirmation popup**: showing backup info BEFORE clicking rollback — discussed, not implemented. Low priority.
+- **ThemePreview page**: `src/pages/ThemePreview.tsx` + route `/theme-preview` in `App.tsx` — temporary preview page, should be deleted once theme confirmed working.
 
 ---
 
@@ -1158,10 +1362,11 @@ Full detailed plan: `documents/wizardcd-platform-roadmap.md`
 | **14** | Multi-Runner Scaling *(future — as user adoption grows)* | Distributed runner instances, pg_advisory_lock, shared storage (EFS), heartbeat/drain, admin UI | 8–10 days |
 | **15** | Subscriptions & Billing | Subscription tiers, feature gating, Stripe billing, revenue/cost dashboard, limit enforcement | 4–5 days |
 
-**Total: ~97–123 days, 274 UI acceptance tests across 13 phases**
+**Total: ~97–123 days, 274 UI acceptance tests across 13 active phases (Phase 14 future, Phase 15 last)**
 
 **Next up: Phase 4 — Database Foundation**
+> Pre-conditions: Light theme confirmed working ✅ | AWS instances running (runner 54.144.235.55:8081, client 34.201.190.116) ✅ | runner-service-ms active on profile "sit" ✅
 
 ---
 
-*Last updated: 2026-03-24 — run `/update-memory` after each session*
+*Last updated: 2026-05-10 — run `/update-memory` after each session. Visual changes must also be reflected in `documents/wizardcd-design-system.md`.*

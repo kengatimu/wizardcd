@@ -111,7 +111,7 @@ export default function RedeployModal({ jobId, appName, environment, onClose }: 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-wiz-surface border border-wiz-border rounded-2xl shadow-panel max-w-lg w-full animate-fade-in">
+      <div className="bg-wiz-surface border border-wiz-border rounded shadow-panel max-w-lg w-full animate-fade-in">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-wiz-border/60">
@@ -151,8 +151,8 @@ export default function RedeployModal({ jobId, appName, environment, onClose }: 
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleJarDrop}
               onClick={() => fileRef.current?.click()}
-              className="flex flex-col items-center gap-2 py-8 rounded-xl border-2 border-dashed border-wiz-border-mid
-                         hover:border-wiz-gold/40 hover:bg-wiz-gold/5 transition-all duration-150 cursor-pointer"
+              className="flex flex-col items-center gap-2 py-8 rounded border-2 border-dashed border-wiz-border-mid
+                         hover:border-wiz-gold/40 hover:bg-wiz-gold-dim transition-all duration-150 cursor-pointer"
             >
               <Upload size={24} className="text-wiz-muted" />
               <span className="text-xs text-wiz-muted">Drop JAR here or click to browse</span>
@@ -168,7 +168,7 @@ export default function RedeployModal({ jobId, appName, environment, onClose }: 
               />
             </div>
           ) : (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sig-green-dim/30 border border-sig-green/20">
+            <div className="flex items-center gap-3 px-4 py-3 rounded bg-sig-green-dim border border-sig-green/20">
               <CheckCircle2 size={16} className="text-sig-green flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-wiz-cream truncate">{jarFile.name}</p>
@@ -217,13 +217,13 @@ export default function RedeployModal({ jobId, appName, environment, onClose }: 
                 <button
                   type="button"
                   onClick={() => libRef.current?.click()}
-                  className="w-full text-left px-4 py-3 rounded-lg border border-dashed border-sig-yellow/30
-                             hover:border-sig-yellow/50 hover:bg-sig-yellow/5 transition-all duration-150 text-xs text-wiz-muted"
+                  className="w-full text-left px-4 py-3 rounded border border-dashed border-sig-yellow/30
+                             hover:border-sig-yellow/50 hover:bg-sig-yellow-dim transition-all duration-150 text-xs text-wiz-muted"
                 >
                   Upload lib ZIP containing dependency JARs
                 </button>
               ) : (
-                <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-sig-green-dim/30 border border-sig-green/20">
+                <div className="flex items-center gap-3 px-4 py-2.5 rounded bg-sig-green-dim border border-sig-green/20">
                   <CheckCircle2 size={14} className="text-sig-green flex-shrink-0" />
                   <span className="text-xs text-wiz-cream truncate flex-1">{libFile.name}</span>
                   <button

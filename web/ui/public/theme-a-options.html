@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WizardCD — Option A Sub-Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: #080808; font-family: 'Space Grotesk', sans-serif; }
+
+/* ── Page chrome ── */
+.page-hd {
+  text-align: center; padding: 52px 24px 16px;
+  color: #888; font-family: 'Space Grotesk', sans-serif;
+}
+.page-hd h1 { font-size: 30px; font-weight: 700; color: #fff; letter-spacing: -.5px; margin-bottom: 6px; }
+.page-hd p  { font-size: 14px; color: #555; }
+
+/* sticky nav */
+.sticky-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,8,8,.92); backdrop-filter: blur(12px);
+  border-bottom: 1px solid #1a1a1a;
+  display: flex; justify-content: center; gap: 6px;
+  padding: 12px 24px;
+}
+.nav-pill {
+  padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid #2a2a2a; color: #666;
+  text-decoration: none; transition: all .15s;
+}
+.nav-pill:hover { color: #fff; border-color: #444; }
+
+/* section wrapper */
+.section { max-width: 1300px; margin: 0 auto; padding: 48px 24px 0; }
+.section-hd {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 20px; padding-bottom: 16px;
+  border-bottom: 1px solid #1a1a1a;
+}
+.section-hd h2 { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -.3px; }
+.section-hd .tag {
+  font-size: 11px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; padding: 3px 10px;
+  border-radius: 4px; border: 1px solid;
+}
+.section-hd .desc { font-size: 13px; color: #555; margin-left: auto; }
+
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; border-radius: 14px; overflow: hidden; margin-bottom: 80px; }
+.mode-bar { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 10px 18px; }
+
+/* ─────────────────────────────────────────────────
+   SHARED SHELL STRUCTURE (all sub-options reuse)
+   ───────────────────────────────────────────────── */
+.shell { display: flex; height: 500px; font-size: 15px; }
+.sidebar { width: 210px; flex-shrink: 0; padding: 18px 0; display: flex; flex-direction: column; }
+.logo-area { padding: 0 18px 18px; margin-bottom: 10px; }
+.logo-name { font-size: 17px; font-weight: 700; letter-spacing: -.4px; }
+.logo-tag  { font-size: 10px; margin-top: 3px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.nav-lnk { padding: 9px 18px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.main { flex: 1; padding: 26px; overflow-y: auto; }
+.pg-title { font-size: 23px; font-weight: 700; letter-spacing: -.4px; margin-bottom: 4px; }
+.pg-sub   { font-size: 13px; margin-bottom: 24px; }
+.metrics  { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 18px; }
+.m-card   { border-radius: 9px; padding: 14px 16px; }
+.m-num    { font-size: 28px; font-weight: 700; line-height: 1; }
+.m-lbl    { font-size: 11px; margin-top: 4px; font-weight: 500; }
+.panel    { border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+.panel-hd { padding: 13px 18px; display: flex; align-items: center; gap: 9px; }
+.panel-dot{ width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.panel-title { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.panel-bd { padding: 18px; }
+.f-lbl    { font-size: 12px; font-weight: 600; margin-bottom: 6px; letter-spacing: .02em; }
+.f-inp    { font-family: 'Space Grotesk', sans-serif; font-size: 14px; width: 100%; padding: 9px 12px; border-radius: 6px; outline: none; margin-bottom: 12px; }
+.f-hint   { font-size: 11px; margin-top: -8px; margin-bottom: 12px; }
+.row-btns { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.badge    { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; border: 1px solid; }
+.deploy-btn { margin-left: auto; padding: 9px 22px; border: none; border-radius: 7px; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: -.1px; }
+.tbl-head { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; padding: 8px 0; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.tbl-row  { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; padding: 9px 0; font-size: 13px; align-items: center; border-top: 1px solid; }
+.app-link { font-weight: 500; }
+
+/* ─────────────────────────
+   A1 — RICH GOLD  (original)
+   ───────────────────────── */
+.a1d { background:#111; color:#ECECEC; }
+.a1d .sidebar { background:#0A0A0A; border-right:1px solid #1E1E1E; }
+.a1d .logo-area { border-bottom:1px solid #1A1A1A; }
+.a1d .logo-name { color:#E8B84B; }
+.a1d .logo-tag  { color:#4A3F20; }
+.a1d .nav-lnk   { color:#555; }
+.a1d .nav-lnk.on{ color:#ECECEC; background:#1A1A1A; border-left:2px solid #E8B84B; font-weight:600; }
+.a1d .main      { background:#111; }
+.a1d .pg-title  { color:#ECECEC; }
+.a1d .pg-sub    { color:#555; }
+.a1d .m-card    { background:#1C1C1C; border:1px solid #262626; }
+.a1d .m-num     { color:#ECECEC; }
+.a1d .m-lbl     { color:#555; }
+.a1d .panel     { background:#1C1C1C; border:1px solid #262626; }
+.a1d .panel-hd  { background:#161616; border-bottom:1px solid #222; }
+.a1d .panel-dot { background:#E8B84B; }
+.a1d .panel-title{ color:#666; }
+.a1d .panel-bd  {}
+.a1d .f-lbl     { color:#777; }
+.a1d .f-inp     { background:#111; border:1px solid #252525; color:#CCC; }
+.a1d .f-hint    { color:#444; }
+.a1d .badge-env { background:#1A2030; color:#7EB3F5; border-color:#243050; }
+.a1d .badge-ok  { background:#0E1F12; color:#5ECE8A; border-color:#1A3A22; }
+.a1d .deploy-btn{ background:#E8B84B; color:#0A0A0A; }
+.a1d .tbl-head  { color:#3A3A3A; border-color:#1C1C1C; }
+.a1d .tbl-row   { border-color:#1A1A1A; color:#ADADAD; }
+.a1d .app-link  { color:#E8B84B; }
+
+.a1l { background:#F4F4F4; color:#111; }
+.a1l .sidebar { background:#FAFAFA; border-right:1px solid #E8E8E8; }
+.a1l .logo-area { border-bottom:1px solid #EFEFEF; }
+.a1l .logo-name { color:#B8860B; }
+.a1l .logo-tag  { color:#C8A84B; }
+.a1l .nav-lnk   { color:#AAA; }
+.a1l .nav-lnk.on{ color:#111; background:#F0F0F0; border-left:2px solid #C9941A; font-weight:600; }
+.a1l .main      { background:#F4F4F4; }
+.a1l .pg-title  { color:#111; }
+.a1l .pg-sub    { color:#999; }
+.a1l .m-card    { background:#FFF; border:1px solid #E8E8E8; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.a1l .m-num     { color:#111; }
+.a1l .m-lbl     { color:#AAA; }
+.a1l .panel     { background:#FFF; border:1px solid #E8E8E8; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+.a1l .panel-hd  { background:#FAFAFA; border-bottom:1px solid #F0F0F0; }
+.a1l .panel-dot { background:#C9941A; }
+.a1l .panel-title{ color:#BBB; }
+.a1l .f-lbl     { color:#999; }
+.a1l .f-inp     { background:#FAFAFA; border:1px solid #DEDEDE; color:#333; }
+.a1l .f-hint    { color:#CCC; }
+.a1l .badge-env { background:#EFF6FF; color:#2563EB; border-color:#BFDBFE; }
+.a1l .badge-ok  { background:#F0FDF4; color:#16A34A; border-color:#BBF7D0; }
+.a1l .deploy-btn{ background:#C9941A; color:#FFF; }
+.a1l .tbl-head  { color:#CCC; border-color:#F0F0F0; }
+.a1l .tbl-row   { border-color:#F0F0F0; color:#666; }
+.a1l .app-link  { color:#B8860B; }
+
+/* ─────────────────────────
+   A2 — COPPER / BRONZE
+   ───────────────────────── */
+.a2d { background:#0F0E0D; color:#EDE8E3; }
+.a2d .sidebar { background:#0A0908; border-right:1px solid #1E1B18; }
+.a2d .logo-area { border-bottom:1px solid #1A1714; }
+.a2d .logo-name { color:#CD8A4A; }
+.a2d .logo-tag  { color:#4A3820; }
+.a2d .nav-lnk   { color:#554A40; }
+.a2d .nav-lnk.on{ color:#EDE8E3; background:#1A1714; border-left:2px solid #CD8A4A; font-weight:600; }
+.a2d .main      { background:#0F0E0D; }
+.a2d .pg-title  { color:#EDE8E3; }
+.a2d .pg-sub    { color:#554A40; }
+.a2d .m-card    { background:#1A1714; border:1px solid #252018; }
+.a2d .m-num     { color:#EDE8E3; }
+.a2d .m-lbl     { color:#554A40; }
+.a2d .panel     { background:#1A1714; border:1px solid #252018; }
+.a2d .panel-hd  { background:#141210; border-bottom:1px solid #201C18; }
+.a2d .panel-dot { background:#CD8A4A; }
+.a2d .panel-title{ color:#664F38; }
+.a2d .f-lbl     { color:#776050; }
+.a2d .f-inp     { background:#0F0E0D; border:1px solid #231F1B; color:#C8B8A8; }
+.a2d .f-hint    { color:#443830; }
+.a2d .badge-env { background:#1A1C2A; color:#8BAAD0; border-color:#2A3048; }
+.a2d .badge-ok  { background:#0E1A10; color:#68C880; border-color:#1A3020; }
+.a2d .deploy-btn{ background:#CD8A4A; color:#0A0908; }
+.a2d .tbl-head  { color:#3A3028; border-color:#1A1714; }
+.a2d .tbl-row   { border-color:#181512; color:#9A8878; }
+.a2d .app-link  { color:#CD8A4A; }
+
+.a2l { background:#FAF7F4; color:#1A120A; }
+.a2l .sidebar { background:#FFF; border-right:1px solid #EDE0D0; }
+.a2l .logo-area { border-bottom:1px solid #F0E8DC; }
+.a2l .logo-name { color:#A0622A; }
+.a2l .logo-tag  { color:#C89060; }
+.a2l .nav-lnk   { color:#B8A898; }
+.a2l .nav-lnk.on{ color:#1A120A; background:#F5EFE8; border-left:2px solid #A0622A; font-weight:600; }
+.a2l .main      { background:#FAF7F4; }
+.a2l .pg-title  { color:#1A120A; }
+.a2l .pg-sub    { color:#A89888; }
+.a2l .m-card    { background:#FFF; border:1px solid #EDE0D0; box-shadow:0 1px 3px rgba(30,18,8,.06); }
+.a2l .m-num     { color:#1A120A; }
+.a2l .m-lbl     { color:#A89888; }
+.a2l .panel     { background:#FFF; border:1px solid #EDE0D0; box-shadow:0 1px 3px rgba(30,18,8,.05); }
+.a2l .panel-hd  { background:#FBF8F4; border-bottom:1px solid #EDE8E0; }
+.a2l .panel-dot { background:#A0622A; }
+.a2l .panel-title{ color:#C8A880; }
+.a2l .f-lbl     { color:#A89888; }
+.a2l .f-inp     { background:#FBF8F4; border:1px solid #DDD0C0; color:#3A2818; }
+.a2l .f-hint    { color:#D0C0A8; }
+.a2l .badge-env { background:#EFF6FF; color:#2563EB; border-color:#BFDBFE; }
+.a2l .badge-ok  { background:#F0FDF4; color:#16A34A; border-color:#BBF7D0; }
+.a2l .deploy-btn{ background:#A0622A; color:#FFF; }
+.a2l .tbl-head  { color:#C8B8A0; border-color:#EDE0D0; }
+.a2l .tbl-row   { border-color:#EDE0D0; color:#7A6858; }
+.a2l .app-link  { color:#A0622A; }
+
+/* ─────────────────────────
+   A3 — ELECTRIC TEAL
+   ───────────────────────── */
+.a3d { background:#0D1112; color:#E8F0F0; }
+.a3d .sidebar { background:#080E0F; border-right:1px solid #152022; }
+.a3d .logo-area { border-bottom:1px solid #101A1C; }
+.a3d .logo-name { color:#14B8A6; }
+.a3d .logo-tag  { color:#1A3C40; }
+.a3d .nav-lnk   { color:#2A5055; }
+.a3d .nav-lnk.on{ color:#E8F0F0; background:#101A1C; border-left:2px solid #14B8A6; font-weight:600; }
+.a3d .main      { background:#0D1112; }
+.a3d .pg-title  { color:#E8F0F0; }
+.a3d .pg-sub    { color:#2A5055; }
+.a3d .m-card    { background:#101A1C; border:1px solid #182628; }
+.a3d .m-num     { color:#E8F0F0; }
+.a3d .m-lbl     { color:#2A5055; }
+.a3d .panel     { background:#101A1C; border:1px solid #182628; }
+.a3d .panel-hd  { background:#0D1516; border-bottom:1px solid #162022; }
+.a3d .panel-dot { background:#14B8A6; }
+.a3d .panel-title{ color:#2A5A60; }
+.a3d .f-lbl     { color:#3A6870; }
+.a3d .f-inp     { background:#0D1112; border:1px solid #182628; color:#A8C8C8; }
+.a3d .f-hint    { color:#1E3C40; }
+.a3d .badge-env { background:#0E2028; color:#60B0D8; border-color:#1A3848; }
+.a3d .badge-ok  { background:#0A1C14; color:#5EC888; border-color:#143825; }
+.a3d .deploy-btn{ background:#14B8A6; color:#040E10; }
+.a3d .tbl-head  { color:#1E3C40; border-color:#101A1C; }
+.a3d .tbl-row   { border-color:#0F1A1C; color:#5A8888; }
+.a3d .app-link  { color:#14B8A6; }
+
+.a3l { background:#F2F8F8; color:#0A1E20; }
+.a3l .sidebar { background:#FFF; border-right:1px solid #C8E0E0; }
+.a3l .logo-area { border-bottom:1px solid #E0EEEE; }
+.a3l .logo-name { color:#0D9488; }
+.a3l .logo-tag  { color:#5AADAA; }
+.a3l .nav-lnk   { color:#8ABDBC; }
+.a3l .nav-lnk.on{ color:#0A1E20; background:#EAF5F5; border-left:2px solid #0D9488; font-weight:600; }
+.a3l .main      { background:#F2F8F8; }
+.a3l .pg-title  { color:#0A1E20; }
+.a3l .pg-sub    { color:#6AADAA; }
+.a3l .m-card    { background:#FFF; border:1px solid #C8E0E0; box-shadow:0 1px 3px rgba(10,30,32,.06); }
+.a3l .m-num     { color:#0A1E20; }
+.a3l .m-lbl     { color:#8ABDBC; }
+.a3l .panel     { background:#FFF; border:1px solid #C8E0E0; box-shadow:0 1px 3px rgba(10,30,32,.05); }
+.a3l .panel-hd  { background:#F5FBFB; border-bottom:1px solid #D8EDED; }
+.a3l .panel-dot { background:#0D9488; }
+.a3l .panel-title{ color:#8ABDBC; }
+.a3l .f-lbl     { color:#6AADAA; }
+.a3l .f-inp     { background:#F5FBFB; border:1.5px solid #C0DADA; color:#0A1E20; }
+.a3l .f-hint    { color:#A8CDCD; }
+.a3l .badge-env { background:#ECFDF5; color:#0D7A6E; border-color:#A7F3D0; }
+.a3l .badge-ok  { background:#F0FDF4; color:#15803D; border-color:#BBF7D0; }
+.a3l .deploy-btn{ background:#0D9488; color:#FFF; }
+.a3l .tbl-head  { color:#A8CDCD; border-color:#E0EEEE; }
+.a3l .tbl-row   { border-color:#E0EEEE; color:#5A8888; }
+.a3l .app-link  { color:#0D9488; }
+
+/* ─────────────────────────
+   A4 — VIOLET / INDIGO
+   ───────────────────────── */
+.a4d { background:#0E0D14; color:#EAE8F5; }
+.a4d .sidebar { background:#09080F; border-right:1px solid #18162A; }
+.a4d .logo-area { border-bottom:1px solid #141220; }
+.a4d .logo-name { color:#8B5CF6; }
+.a4d .logo-tag  { color:#2E2550; }
+.a4d .nav-lnk   { color:#3A3360; }
+.a4d .nav-lnk.on{ color:#EAE8F5; background:#141220; border-left:2px solid #8B5CF6; font-weight:600; }
+.a4d .main      { background:#0E0D14; }
+.a4d .pg-title  { color:#EAE8F5; }
+.a4d .pg-sub    { color:#3A3360; }
+.a4d .m-card    { background:#141220; border:1px solid #1E1C30; }
+.a4d .m-num     { color:#EAE8F5; }
+.a4d .m-lbl     { color:#3A3360; }
+.a4d .panel     { background:#141220; border:1px solid #1E1C30; }
+.a4d .panel-hd  { background:#100F1A; border-bottom:1px solid #1C1A28; }
+.a4d .panel-dot { background:#8B5CF6; }
+.a4d .panel-title{ color:#4A4078; }
+.a4d .f-lbl     { color:#5A5080; }
+.a4d .f-inp     { background:#0E0D14; border:1px solid #1E1C2E; color:#A8A0D0; }
+.a4d .f-hint    { color:#2E2850; }
+.a4d .badge-env { background:#1A1830; color:#8090E0; border-color:#2A2850; }
+.a4d .badge-ok  { background:#0E1818; color:#60C890; border-color:#183028; }
+.a4d .deploy-btn{ background:#8B5CF6; color:#FFF; }
+.a4d .tbl-head  { color:#2E2850; border-color:#141220; }
+.a4d .tbl-row   { border-color:#121020; color:#6A6090; }
+.a4d .app-link  { color:#8B5CF6; }
+
+.a4l { background:#F5F4FA; color:#0E0C20; }
+.a4l .sidebar { background:#FFF; border-right:1px solid #DDD8F0; }
+.a4l .logo-area { border-bottom:1px solid #EEEAF8; }
+.a4l .logo-name { color:#6D28D9; }
+.a4l .logo-tag  { color:#A890D8; }
+.a4l .nav-lnk   { color:#B0A8D0; }
+.a4l .nav-lnk.on{ color:#0E0C20; background:#F0EEF8; border-left:2px solid #7C3AED; font-weight:600; }
+.a4l .main      { background:#F5F4FA; }
+.a4l .pg-title  { color:#0E0C20; }
+.a4l .pg-sub    { color:#9890C0; }
+.a4l .m-card    { background:#FFF; border:1px solid #DDD8F0; box-shadow:0 1px 3px rgba(14,12,32,.06); }
+.a4l .m-num     { color:#0E0C20; }
+.a4l .m-lbl     { color:#A8A0C8; }
+.a4l .panel     { background:#FFF; border:1px solid #DDD8F0; box-shadow:0 1px 3px rgba(14,12,32,.05); }
+.a4l .panel-hd  { background:#FAF8FF; border-bottom:1px solid #EAE8F5; }
+.a4l .panel-dot { background:#7C3AED; }
+.a4l .panel-title{ color:#A8A0C8; }
+.a4l .f-lbl     { color:#9890C0; }
+.a4l .f-inp     { background:#FAF8FF; border:1.5px solid #D0CCEC; color:#1E1840; }
+.a4l .f-hint    { color:#C0BBDC; }
+.a4l .badge-env { background:#EEF2FF; color:#4338CA; border-color:#C7D2FE; }
+.a4l .badge-ok  { background:#F0FDF4; color:#15803D; border-color:#BBF7D0; }
+.a4l .deploy-btn{ background:#7C3AED; color:#FFF; }
+.a4l .tbl-head  { color:#C0B8E0; border-color:#EAE8F5; }
+.a4l .tbl-row   { border-color:#EAE8F5; color:#7868A0; }
+.a4l .app-link  { color:#6D28D9; }
+
+/* ─────────────────────────
+   A5 — PURE MONOCHROME
+   White accents on dark, near-black on light
+   ───────────────────────── */
+.a5d { background:#111; color:#E8E8E8; }
+.a5d .sidebar { background:#0A0A0A; border-right:1px solid #1C1C1C; }
+.a5d .logo-area { border-bottom:1px solid #181818; }
+.a5d .logo-name { color:#FFFFFF; letter-spacing:-.5px; }
+.a5d .logo-tag  { color:#333; }
+.a5d .nav-lnk   { color:#444; }
+.a5d .nav-lnk.on{ color:#E8E8E8; background:#1A1A1A; border-left:2px solid #FFFFFF; font-weight:600; }
+.a5d .main      { background:#111; }
+.a5d .pg-title  { color:#FFFFFF; }
+.a5d .pg-sub    { color:#444; }
+.a5d .m-card    { background:#1A1A1A; border:1px solid #242424; }
+.a5d .m-num     { color:#FFF; }
+.a5d .m-lbl     { color:#555; }
+.a5d .panel     { background:#1A1A1A; border:1px solid #242424; }
+.a5d .panel-hd  { background:#141414; border-bottom:1px solid #202020; }
+.a5d .panel-dot { background:#FFF; }
+.a5d .panel-title{ color:#444; }
+.a5d .f-lbl     { color:#666; }
+.a5d .f-inp     { background:#111; border:1px solid #222; color:#BBB; }
+.a5d .f-hint    { color:#333; }
+.a5d .badge-env { background:#1C1C1C; color:#888; border-color:#2C2C2C; }
+.a5d .badge-ok  { background:#1C1C1C; color:#FFF; border-color:#2C2C2C; }
+.a5d .deploy-btn{ background:#FFF; color:#111; }
+.a5d .tbl-head  { color:#333; border-color:#1A1A1A; }
+.a5d .tbl-row   { border-color:#181818; color:#888; }
+.a5d .app-link  { color:#FFF; }
+
+.a5l { background:#FAFAFA; color:#111; }
+.a5l .sidebar { background:#FFF; border-right:1.5px solid #E8E8E8; }
+.a5l .logo-area { border-bottom:1px solid #EFEFEF; }
+.a5l .logo-name { color:#111; letter-spacing:-.5px; }
+.a5l .logo-tag  { color:#BBB; }
+.a5l .nav-lnk   { color:#BBB; }
+.a5l .nav-lnk.on{ color:#111; background:#F5F5F5; border-left:2px solid #111; font-weight:600; }
+.a5l .main      { background:#FAFAFA; }
+.a5l .pg-title  { color:#111; }
+.a5l .pg-sub    { color:#AAA; }
+.a5l .m-card    { background:#FFF; border:1.5px solid #E8E8E8; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.a5l .m-num     { color:#111; }
+.a5l .m-lbl     { color:#AAA; }
+.a5l .panel     { background:#FFF; border:1.5px solid #E8E8E8; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+.a5l .panel-hd  { background:#FAFAFA; border-bottom:1px solid #F0F0F0; }
+.a5l .panel-dot { background:#111; }
+.a5l .panel-title{ color:#BBB; }
+.a5l .f-lbl     { color:#AAA; }
+.a5l .f-inp     { background:#FAFAFA; border:1.5px solid #E0E0E0; color:#333; }
+.a5l .f-hint    { color:#CCC; }
+.a5l .badge-env { background:#F5F5F5; color:#555; border-color:#E0E0E0; }
+.a5l .badge-ok  { background:#111; color:#FFF; border-color:#111; }
+.a5l .deploy-btn{ background:#111; color:#FFF; }
+.a5l .tbl-head  { color:#CCC; border-color:#F0F0F0; }
+.a5l .tbl-row   { border-color:#F0F0F0; color:#888; }
+.a5l .app-link  { color:#111; }
+
+/* icons */
+svg { display:inline-block; vertical-align:middle; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<div class="page-hd">
+  <h1>WizardCD — Option A Sub-Options</h1>
+  <p>All use Space Grotesk font + true charcoal backgrounds. Only accent colour changes.</p>
+  <p style="margin-top:6px;font-size:12px;color:#444">localhost:5173/theme-a-options.html</p>
+</div>
+
+<!-- sticky nav -->
+<nav class="sticky-nav">
+  <a class="nav-pill" href="#a1" style="border-color:#E8B84B44;color:#E8B84B">A1 — Rich Gold</a>
+  <a class="nav-pill" href="#a2" style="border-color:#CD8A4A44;color:#CD8A4A">A2 — Copper</a>
+  <a class="nav-pill" href="#a3" style="border-color:#14B8A644;color:#14B8A6">A3 — Teal</a>
+  <a class="nav-pill" href="#a4" style="border-color:#8B5CF644;color:#8B5CF6">A4 — Violet</a>
+  <a class="nav-pill" href="#a5" style="border-color:#888;color:#CCC">A5 — Monochrome</a>
+</nav>
+
+<!-- helper macro: same content block used in all options -->
+<!-- A1 -->
+<div id="a1" class="section">
+  <div class="section-hd">
+    <h2>A1 — Rich Gold</h2>
+    <span class="tag" style="color:#E8B84B;border-color:#E8B84B55;background:#E8B84B10">Original · Richer #E8B84B</span>
+    <span class="desc">Familiar but elevated. Gold is warmer and more visible than the current pale #C9A84C.</span>
+  </div>
+  <div class="pair">
+    <div>
+      <div class="mode-bar a1d">● Dark</div>
+      <div class="a1d"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#5ECE8A">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#F87171">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns">
+                <span class="badge badge-env">SIT</span>
+                <span class="badge badge-ok">● Connected</span>
+                <button class="deploy-btn">Deploy →</button>
+              </div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <div class="mode-bar a1l" style="color:#111">● Light</div>
+      <div class="a1l"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#16A34A">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#DC2626">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns">
+                <span class="badge badge-env">SIT</span>
+                <span class="badge badge-ok">● Connected</span>
+                <button class="deploy-btn">Deploy →</button>
+              </div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- A2 -->
+<div id="a2" class="section">
+  <div class="section-hd">
+    <h2>A2 — Copper / Bronze</h2>
+    <span class="tag" style="color:#CD8A4A;border-color:#CD8A4A55;background:#CD8A4A10">#CD8A4A · Warm metallic</span>
+    <span class="desc">Rare, warm, unmistakably different. No other dev tool uses copper. Feels premium and handcrafted.</span>
+  </div>
+  <div class="pair">
+    <div>
+      <div class="mode-bar a2d">● Dark</div>
+      <div class="a2d"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#68C880">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#F87171">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <div class="mode-bar a2l" style="color:#1A120A">● Light</div>
+      <div class="a2l"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#16A34A">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#DC2626">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- A3 -->
+<div id="a3" class="section">
+  <div class="section-hd">
+    <h2>A3 — Electric Teal</h2>
+    <span class="tag" style="color:#14B8A6;border-color:#14B8A655;background:#14B8A610">#14B8A6 · From logo tagline</span>
+    <span class="desc">The "CONTINUOUS MAGIC." teal from your logo becomes the primary accent. Cohesive brand story.</span>
+  </div>
+  <div class="pair">
+    <div>
+      <div class="mode-bar a3d">● Dark</div>
+      <div class="a3d"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#5EC888">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#F87171">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <div class="mode-bar a3l" style="color:#0A1E20">● Light</div>
+      <div class="a3l"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#0D7A5E">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#DC2626">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- A4 -->
+<div id="a4" class="section">
+  <div class="section-hd">
+    <h2>A4 — Violet / Indigo</h2>
+    <span class="tag" style="color:#8B5CF6;border-color:#8B5CF655;background:#8B5CF610">#8B5CF6 · Premium feel</span>
+    <span class="desc">Distinctive, premium, and zero overlap with existing deployment tools. Nobody in this space uses violet.</span>
+  </div>
+  <div class="pair">
+    <div>
+      <div class="mode-bar a4d">● Dark</div>
+      <div class="a4d"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#60C890">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#F87171">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <div class="mode-bar a4l" style="color:#0E0C20">● Light</div>
+      <div class="a4l"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#059669">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#DC2626">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- A5 -->
+<div id="a5" class="section">
+  <div class="section-hd">
+    <h2>A5 — Pure Monochrome</h2>
+    <span class="tag" style="color:#DDD;border-color:#55555599;background:#22222255">No colour · White/Black only</span>
+    <span class="desc">Radical simplicity. Zero colour accent — the content IS the design. Every other tool has colour. This one doesn't.</span>
+  </div>
+  <div class="pair" style="margin-bottom:120px">
+    <div>
+      <div class="mode-bar a5d">● Dark</div>
+      <div class="a5d"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#FFF">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#888">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <div class="mode-bar a5l" style="color:#111">● Light</div>
+      <div class="a5l"><div class="shell">
+        <div class="sidebar">
+          <div class="logo-area"><div class="logo-name">wizardCD</div><div class="logo-tag">One Config. One Command.</div></div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Dashboard</div>
+          <div class="nav-lnk on"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> New Deploy</div>
+          <div class="nav-lnk"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg> Settings</div>
+        </div>
+        <div class="main">
+          <div class="pg-title">New Deployment</div><div class="pg-sub">One Config. One Command. Continuous Magic.</div>
+          <div class="metrics">
+            <div class="m-card"><div class="m-num">70</div><div class="m-lbl">Total jobs</div></div>
+            <div class="m-card"><div class="m-num" style="color:#111">34</div><div class="m-lbl">Successful</div></div>
+            <div class="m-card"><div class="m-num" style="color:#999">27</div><div class="m-lbl">Failed</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-hd"><div class="panel-dot"></div><div class="panel-title">SSH Target Configuration</div></div>
+            <div class="panel-bd">
+              <div class="f-lbl">SSH Host</div>
+              <input class="f-inp" value="34.201.190.116" readonly />
+              <div class="f-hint">Public IP or hostname of the target server</div>
+              <div class="row-btns"><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Connected</span><button class="deploy-btn">Deploy →</button></div>
+            </div>
+          </div>
+          <div class="tbl-head"><span>Application</span><span>Env</span><span>Status</span><span>Duration</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Success</span><span>49s</span></div>
+          <div class="tbl-row"><span class="app-link">eureka-registry-ms</span><span class="badge badge-env">SIT</span><span class="badge badge-ok">● Success</span><span>50s</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>WizardCD — Logo Light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:#ECEAE5;
+  display:flex;flex-direction:column;
+  align-items:center;
+  padding:56px 40px 80px;
+  gap:36px;
+  font-family:'Inter',sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Hero card ── */
+.hero{
+  background:#FAFAF8;
+  border:1px solid #EAE6DF;
+  border-radius:10px;
+  padding:48px 64px;
+  width:680px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 24px rgba(0,0,0,.08);
+}
+.logo-inner{
+  display:inline-flex;
+  flex-direction:column;
+}
+.wordmark{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;font-size:64px;
+  letter-spacing:.01em;line-height:1;
+  color:#0D2240;white-space:nowrap;
+}
+.wordmark em{color:#8B1A1A;font-style:normal;}
+.rule{
+  margin-top:9px;height:1px;
+  background:#8B1A1A;width:100%;
+}
+
+/* ── Section label ── */
+.sec-label{
+  align-self:flex-start;width:680px;
+  font-size:10px;font-weight:700;letter-spacing:.24em;
+  text-transform:uppercase;color:#999;
+  margin-bottom:-20px;
+}
+
+/* ── Card ── */
+.card{
+  background:#fff;border:1px solid #EAE6DF;border-radius:10px;
+  padding:28px 40px;width:680px;
+  box-shadow:0 4px 20px rgba(0,0,0,.06);
+}
+.card-title{
+  font-size:10px;font-weight:700;letter-spacing:.22em;
+  text-transform:uppercase;color:#aaa;margin-bottom:24px;
+}
+
+/* ── Size rows ── */
+.size-row{
+  display:flex;align-items:center;gap:0;
+  padding:14px 0;border-bottom:1px solid #F0EDE8;
+}
+.size-row:last-child{border-bottom:none;}
+.size-lbl{
+  font-size:10px;color:#aaa;font-weight:500;
+  width:120px;flex-shrink:0;font-family:'Inter',sans-serif;
+}
+.logo-stack{display:inline-flex;flex-direction:column;}
+.wm{
+  font-family:'Libre Baskerville',serif;
+  font-weight:700;letter-spacing:.01em;color:#0D2240;
+  white-space:nowrap;line-height:1;
+}
+.wm em{color:#8B1A1A;font-style:normal;}
+.rl{height:1px;background:#8B1A1A;margin-top:4px;width:100%;}
+
+/* ── Usage note ── */
+.note{
+  width:680px;
+  background:#fff;border:1px solid #EAE6DF;
+  border-left:3px solid #0D2240;
+  border-radius:6px;padding:16px 22px;
+  font-size:12.5px;line-height:1.85;color:#555;
+  font-family:'Inter',sans-serif;
+}
+.note strong{color:#0D2240;font-weight:600;}
+code{
+  font-family:'Courier New',monospace;font-size:11px;
+  background:#F8F6F1;padding:1px 5px;border-radius:3px;
+}
+</style>
+</head>
+<body>
+
+<div class="sec-label">Light Variant — on white / cream</div>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="logo-inner">
+    <div class="wordmark">Wizard<em>CD</em></div>
+    <div class="rule"></div>
+  </div>
+</div>
+
+<!-- Size reference -->
+<div class="card">
+  <div class="card-title">Size Reference</div>
+
+  <div class="size-row">
+    <div class="size-lbl">Cover · 64px</div>
+    <div class="logo-stack">
+      <div class="wm" style="font-size:64px;">Wizard<em>CD</em></div>
+      <div class="rl" style="margin-top:9px;"></div>
+    </div>
+  </div>
+
+  <div class="size-row">
+    <div class="size-lbl">Heading · 36px</div>
+    <div class="logo-stack">
+      <div class="wm" style="font-size:36px;">Wizard<em>CD</em></div>
+      <div class="rl" style="margin-top:6px;"></div>
+    </div>
+  </div>
+
+  <div class="size-row">
+    <div class="size-lbl">Sidebar · 20px</div>
+    <div class="logo-stack">
+      <div class="wm" style="font-size:20px;">Wizard<em>CD</em></div>
+      <div class="rl" style="margin-top:4px;"></div>
+    </div>
+  </div>
+
+  <div class="size-row">
+    <div class="size-lbl">Nav bar · 14px</div>
+    <div class="logo-stack">
+      <div class="wm" style="font-size:14px;">Wizard<em>CD</em></div>
+      <div class="rl" style="margin-top:3px;"></div>
+    </div>
+  </div>
+
+  <div class="size-row">
+    <div class="size-lbl">Badge · 11px</div>
+    <div class="logo-stack">
+      <div class="wm" style="font-size:11px;color:#333;">WizardCD</div>
+      <div style="font-size:10px;color:#bbb;margin-top:4px;font-family:'Inter',sans-serif;">← plain text, no colour split below 12px</div>
+    </div>
+  </div>
+</div>
+
+<!-- Usage note -->
+<div class="note">
+  <strong>Light variant — usage</strong><br/>
+  Use on <code>#FFFFFF</code>, <code>#FAFAF8</code> (warm white), or <code>#F8F6F1</code> (cream) backgrounds only.<br/>
+  Wordmark: "Wizard" in navy <code>#0D2240</code> · "CD" in crimson <code>#8B1A1A</code>.<br/>
+  Rule: <code>height: 1px</code> · crimson <code>#8B1A1A</code> · full width of wordmark (use <code>display: inline-flex; flex-direction: column</code> on wrapper).<br/>
+  Letter-spacing: <code>.01em</code> · never use negative tracking on the wordmark.<br/>
+  Omit rule below 12px wordmark size.
+</div>
+
+</body>
+</html>

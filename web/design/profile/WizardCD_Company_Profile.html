@@ -1,0 +1,1814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WizardCD — Company Profile 2026</title>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:          #0D2240;
+      --crimson:       #8B1A1A;
+      --crimson-dark:  #D44040;
+      --warm-white:    #FAFAF8;
+      --white:         #FFFFFF;
+      --stone:         #EAE6DF;
+      --muted:         #666666;
+      --text:          #333333;
+      --sit:           #2563EB;
+      --uat:           #D97706;
+      --prod:          #7C3AED;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      font-size: 12.5px;
+      color: var(--text);
+      line-height: 1.85;
+      background: #D0CDCA;
+    }
+
+    /* ============================================================
+       PAGE SHELL
+    ============================================================ */
+    .page {
+      width: 794px;
+      height: 1122px;
+      margin: 0 auto 32px;
+      background: var(--warm-white);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ============================================================
+       PRINT CSS
+    ============================================================ */
+    @media print {
+      @page { size: A4 portrait; margin: 0; }
+      body   { background: none; }
+      .page  {
+        margin: 0;
+        width: 794px;
+        height: 1122px;
+        page-break-after: always;
+        overflow: hidden;
+      }
+      .page:last-child { page-break-after: avoid; }
+    }
+
+    /* ============================================================
+       TYPOGRAPHY
+    ============================================================ */
+    .font-bask      { font-family: 'Libre Baskerville', serif; }
+    .font-inter     { font-family: 'Inter', sans-serif; }
+    .font-mono      { font-family: 'JetBrains Mono', monospace; }
+
+    h1, h2, h3 {
+      font-family: 'Libre Baskerville', serif;
+      font-weight: 700;
+      color: var(--navy);
+      line-height: 1.25;
+    }
+
+    /* ============================================================
+       SHARED COMPONENTS
+    ============================================================ */
+
+    /* Page header (pages 2–6) */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 36px 14px;
+      border-bottom: 1.5px solid var(--stone);
+      background: var(--white);
+    }
+    .page-header .logo-mark {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      display: inline-flex;
+      flex-direction: column;
+    }
+    .page-header .logo-mark .cd { color: var(--crimson); }
+    .page-header .logo-mark .wz { color: var(--navy); }
+    .page-header .logo-rule {
+      height: 1px;
+      background: var(--crimson);
+      width: 100%;
+      margin-top: 3px;
+    }
+    .page-header .header-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* Page footer (pages 2–6) */
+    .page-footer {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 36px;
+      background: var(--navy);
+    }
+    .page-footer .footer-left {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+    }
+    .page-footer .footer-right {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.55);
+    }
+    .page-footer .footer-right span {
+      color: var(--crimson-dark);
+    }
+
+    /* Page body content area */
+    .page-body {
+      padding: 32px 36px 50px;
+      height: calc(1122px - 57px - 38px); /* total - header - footer */
+      overflow: hidden;
+    }
+
+    /* Section title */
+    .section-title {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 6px;
+    }
+    .page-title-rule {
+      width: 32px;
+      height: 2px;
+      background: var(--crimson);
+      margin-bottom: 22px;
+    }
+
+    /* Card with crimson left border */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--stone);
+      border-left: 3px solid var(--crimson);
+      border-radius: 4px;
+      padding: 14px 16px;
+    }
+    .card-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+    .card-body {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.75;
+    }
+
+    /* Label pill */
+    .label-pill {
+      display: inline-block;
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+
+    /* Quote block */
+    .quote-block {
+      border-left: 3px solid var(--crimson);
+      padding: 12px 18px;
+      background: var(--white);
+      margin: 20px 0;
+    }
+    .quote-block p {
+      font-family: 'Libre Baskerville', serif;
+      font-style: italic;
+      font-size: 13px;
+      color: var(--navy);
+      line-height: 1.7;
+    }
+
+    /* Crimson section label (uppercase caps above headings) */
+    .section-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--crimson);
+      margin-bottom: 4px;
+    }
+
+    /* Two-col layout helper */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* ============================================================
+       PAGE 1 — COVER
+    ============================================================ */
+    .page-cover {
+      background: var(--navy);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .cover-top-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 5px;
+      background: var(--crimson-dark);
+    }
+
+    .cover-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-top: -60px;
+    }
+
+    .cover-wordmark {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 72px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      line-height: 1;
+      display: inline-flex;
+      flex-direction: column;
+      margin-bottom: 16px;
+    }
+    .cover-wordmark .wz { color: #FFFFFF; }
+    .cover-wordmark .cd { color: var(--crimson-dark); }
+    .cover-wm-rule {
+      height: 1px;
+      background: var(--crimson-dark);
+      width: 100%;
+      margin-top: 9px;
+    }
+
+    .cover-subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--crimson-dark);
+      margin-bottom: 18px;
+    }
+
+    .cover-tagline {
+      font-family: 'Libre Baskerville', serif;
+      font-style: italic;
+      font-size: 17px;
+      color: rgba(255,255,255,0.72);
+      letter-spacing: 0.01em;
+      margin-bottom: 36px;
+    }
+
+    .cover-divider {
+      width: 48px;
+      height: 1px;
+      background: rgba(212,64,64,0.55);
+      margin: 0 auto 36px;
+    }
+
+    .cover-platform-badge {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .cover-badge-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .cover-badge-num {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1;
+    }
+    .cover-badge-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+    }
+    .cover-badge-sep {
+      width: 1px;
+      height: 36px;
+      background: rgba(255,255,255,0.15);
+    }
+
+    .cover-bottom-strip {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+    }
+    .cover-bottom-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 36px;
+      background: rgba(255,255,255,0.04);
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .cover-bottom-info .company {
+      font-family: 'Inter', sans-serif;
+      font-size: 10.5px;
+      font-weight: 400;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.06em;
+    }
+    .cover-bottom-info .version {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(212,64,64,0.75);
+    }
+    .cover-crimson-bar {
+      height: 4px;
+      background: var(--crimson-dark);
+    }
+
+    /* ============================================================
+       PAGE 2 — WHAT IS WIZARDCD
+    ============================================================ */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .feature-cell {
+      background: var(--white);
+      border: 1px solid var(--stone);
+      border-top: 2px solid var(--navy);
+      border-radius: 3px;
+      padding: 12px 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .feature-cell .fc-icon {
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+    .feature-cell .fc-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--navy);
+      line-height: 1.35;
+    }
+    .feature-cell .fc-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .intro-para {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.9;
+      margin-bottom: 16px;
+    }
+
+    .key-points {
+      list-style: none;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 20px;
+    }
+    .key-points li {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.65;
+      padding-left: 14px;
+      position: relative;
+    }
+    .key-points li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 9px;
+      width: 5px;
+      height: 5px;
+      background: var(--crimson);
+      border-radius: 50%;
+    }
+
+    /* ============================================================
+       PAGE 3 — HOW IT WORKS
+    ============================================================ */
+    .steps-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      margin: 18px 0 22px;
+      position: relative;
+    }
+    .steps-flow::before {
+      content: '';
+      position: absolute;
+      top: 26px;
+      left: calc(25% / 2 + 16px);
+      right: calc(25% / 2 + 16px);
+      height: 1px;
+      background: linear-gradient(to right, var(--crimson), var(--navy));
+      z-index: 0;
+    }
+    .step-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 0 10px;
+      position: relative;
+      z-index: 1;
+    }
+    .step-num {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: #FFFFFF;
+      font-family: 'Libre Baskerville', serif;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 2;
+      border: 2px solid var(--crimson);
+    }
+    .step-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+    .step-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .arch-diagram {
+      background: var(--navy);
+      border-radius: 6px;
+      padding: 20px 24px;
+      margin: 16px 0;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 0;
+    }
+    .arch-node {
+      text-align: center;
+      padding: 0 6px;
+    }
+    .arch-node .an-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 4px;
+    }
+    .arch-node .an-name {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1.3;
+    }
+    .arch-node .an-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 2px;
+    }
+    .arch-arrow {
+      font-size: 14px;
+      color: var(--crimson-dark);
+      text-align: center;
+      padding: 0 4px;
+    }
+
+    .lifecycle-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 16px 0 6px;
+      flex-wrap: nowrap;
+    }
+    .lc-state {
+      background: var(--white);
+      border: 1px solid var(--stone);
+      border-radius: 3px;
+      padding: 5px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--navy);
+      white-space: nowrap;
+    }
+    .lc-state.terminal-ok  { border-color: #16A34A; color: #16A34A; }
+    .lc-state.terminal-err { border-color: #DC2626; color: #DC2626; }
+    .lc-state.terminal-abrt { border-color: var(--uat); color: var(--uat); }
+    .lc-arrow {
+      padding: 0 5px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    /* ============================================================
+       PAGE 4 — CORE FEATURES
+    ============================================================ */
+    .feature-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .feat-card {
+      background: var(--white);
+      border: 1px solid var(--stone);
+      border-left: 3px solid var(--crimson);
+      border-radius: 4px;
+      padding: 16px 18px;
+    }
+    .feat-card-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--crimson);
+      letter-spacing: 0.1em;
+      margin-bottom: 5px;
+    }
+    .feat-card-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 6px;
+    }
+    .feat-card-body {
+      font-family: 'Inter', sans-serif;
+      font-size: 11.5px;
+      color: var(--text);
+      line-height: 1.75;
+    }
+    .feat-card-tags {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .feat-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      color: var(--navy);
+      background: var(--warm-white);
+      border: 1px solid var(--stone);
+      padding: 1px 7px;
+      border-radius: 2px;
+    }
+
+    /* ============================================================
+       PAGE 5 — ARCHITECTURE & TECHNOLOGY
+    ============================================================ */
+    .tech-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px;
+      font-size: 12px;
+    }
+    .tech-table thead tr {
+      background: var(--navy);
+    }
+    .tech-table thead th {
+      padding: 9px 14px;
+      text-align: left;
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.7);
+    }
+    .tech-table tbody tr {
+      border-bottom: 1px solid var(--stone);
+    }
+    .tech-table tbody tr:nth-child(even) {
+      background: var(--white);
+    }
+    .tech-table tbody td {
+      padding: 8px 14px;
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+    }
+    .tech-table tbody td.layer {
+      font-weight: 600;
+      color: var(--navy);
+      font-size: 11.5px;
+    }
+    .tech-table tbody td.tech {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--crimson);
+    }
+
+    .sys-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin: 14px 0;
+    }
+    .sys-layer {
+      display: flex;
+      align-items: stretch;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--stone);
+    }
+    .sys-layer-label {
+      width: 110px;
+      flex-shrink: 0;
+      background: var(--navy);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+    }
+    .sys-layer-label span {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.65);
+      writing-mode: horizontal-tb;
+    }
+    .sys-layer-content {
+      flex: 1;
+      background: var(--white);
+      padding: 10px 16px;
+    }
+    .sys-layer-content .sl-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 2px;
+    }
+    .sys-layer-content .sl-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .sys-layer-connector {
+      text-align: center;
+      padding: 3px 0;
+      font-size: 11px;
+      color: var(--crimson);
+      letter-spacing: 0.05em;
+    }
+
+    .security-box {
+      background: rgba(13,34,64,0.04);
+      border: 1px solid var(--navy);
+      border-left: 3px solid var(--navy);
+      border-radius: 4px;
+      padding: 14px 18px;
+      margin-top: 16px;
+    }
+    .security-box-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 8px;
+    }
+    .security-items {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px 20px;
+      list-style: none;
+    }
+    .security-items li {
+      font-family: 'Inter', sans-serif;
+      font-size: 11.5px;
+      color: var(--text);
+      padding-left: 14px;
+      position: relative;
+      line-height: 1.6;
+    }
+    .security-items li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 6px;
+      height: 1.5px;
+      background: var(--crimson);
+    }
+
+    /* ============================================================
+       PAGE 6 — DEPLOYMENT ENVIRONMENTS
+    ============================================================ */
+    .env-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin: 18px 0 22px;
+    }
+    .env-card {
+      border: 1px solid var(--stone);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .env-card-header {
+      padding: 14px 16px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .env-card-header .env-name {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+    .env-card-header .env-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.75);
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 2px 7px;
+      border-radius: 2px;
+    }
+    .env-card-body {
+      padding: 14px 16px;
+      background: var(--white);
+    }
+    .env-card-body .env-use {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 6px;
+    }
+    .env-card-body .env-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.65;
+      margin-bottom: 10px;
+    }
+    .env-card-body .env-key-note {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: var(--crimson);
+      background: var(--warm-white);
+      border: 1px solid var(--stone);
+      padding: 4px 8px;
+      border-radius: 2px;
+    }
+
+    .env-card-sit    .env-card-header { background: var(--sit); }
+    .env-card-uat    .env-card-header { background: var(--uat); }
+    .env-card-prod   .env-card-header { background: var(--prod); }
+    .env-card-sit  { border-top: 3px solid var(--sit); }
+    .env-card-uat  { border-top: 3px solid var(--uat); }
+    .env-card-prod { border-top: 3px solid var(--prod); }
+
+    .promotion-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      background: var(--navy);
+      border-radius: 6px;
+      padding: 18px 24px;
+      margin-top: 8px;
+    }
+    .promo-env {
+      text-align: center;
+      padding: 0 14px;
+    }
+    .promo-env .pe-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 4px;
+    }
+    .promo-env .pe-name {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .promo-env.dev .pe-name   { color: rgba(255,255,255,0.6); }
+    .promo-env.sit .pe-name   { color: #60A5FA; }
+    .promo-env.uat .pe-name   { color: #FCD34D; }
+    .promo-env.prod .pe-name  { color: #A78BFA; }
+    .promo-arrow {
+      font-size: 16px;
+      color: var(--crimson-dark);
+      padding: 0 4px;
+      margin-top: 12px;
+    }
+    .promo-sep {
+      width: 1px;
+      height: 38px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .env-detail-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .env-detail-card {
+      background: var(--white);
+      border: 1px solid var(--stone);
+      border-left: 3px solid var(--crimson);
+      border-radius: 4px;
+      padding: 12px 14px;
+    }
+    .env-detail-card .edc-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 4px;
+    }
+    .env-detail-card .edc-body {
+      font-size: 11.5px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ============================================================
+       PAGE 7 — BACK COVER
+    ============================================================ */
+    .page-back-cover {
+      background: var(--navy);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .back-cover-top-bar {
+      height: 5px;
+      background: var(--crimson-dark);
+      flex-shrink: 0;
+    }
+
+    .back-cover-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 60px;
+      text-align: center;
+      position: relative;
+    }
+
+    .back-cover-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--crimson-dark);
+      margin-bottom: 14px;
+    }
+
+    .back-cover-heading {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 36px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 10px;
+    }
+
+    .back-cover-sub {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 40px;
+      line-height: 1.7;
+    }
+
+    .gs-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 44px;
+    }
+    .gs-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      text-align: left;
+    }
+    .gs-step:last-child { border-bottom: none; }
+    .gs-step-num {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1.5px solid var(--crimson-dark);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Libre Baskerville', serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--crimson-dark);
+    }
+    .gs-step-content {}
+    .gs-step-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 2px;
+    }
+    .gs-step-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.65;
+    }
+
+    .back-contact {
+      margin-bottom: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .back-contact a, .back-contact span {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      text-decoration: none;
+    }
+    .back-contact a:hover { color: rgba(255,255,255,0.8); }
+
+    .back-cover-wordmark {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      display: inline-flex;
+      flex-direction: column;
+      margin-bottom: 6px;
+    }
+    .back-cover-wordmark .wz { color: rgba(255,255,255,0.9); }
+    .back-cover-wordmark .cd { color: var(--crimson-dark); }
+    .back-wm-rule {
+      height: 1px;
+      background: var(--crimson-dark);
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .back-company-line {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+    }
+
+    .back-cover-bottom {
+      padding: 16px 36px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .back-cover-bottom .bcb-left {
+      font-family: 'Inter', sans-serif;
+      font-size: 9.5px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.28);
+    }
+    .back-cover-bottom .bcb-right {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: rgba(212,64,64,0.6);
+    }
+
+    .back-cover-crimson-bar {
+      height: 4px;
+      background: var(--crimson-dark);
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       UTILITY
+    ============================================================ */
+    .mb-0  { margin-bottom: 0; }
+    .mb-6  { margin-bottom: 6px; }
+    .mb-10 { margin-bottom: 10px; }
+    .mb-14 { margin-bottom: 14px; }
+    .mb-18 { margin-bottom: 18px; }
+    .mb-20 { margin-bottom: 20px; }
+    .mt-10 { margin-top: 10px; }
+    .mt-14 { margin-top: 14px; }
+    .mt-18 { margin-top: 18px; }
+    .text-navy   { color: var(--navy); }
+    .text-muted  { color: var(--muted); }
+    .text-crimson { color: var(--crimson); }
+    .bold { font-weight: 700; }
+    .small { font-size: 11px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 1 — COVER
+════════════════════════════════════════════════════════ -->
+<div class="page page-1 page-cover">
+  <div class="cover-top-bar"></div>
+
+  <div class="cover-inner">
+    <div class="cover-subtitle">Deployment Platform</div>
+    <div class="cover-wordmark">
+      <span class="wz">Wizard</span><span class="cd">CD</span>
+      <div class="cover-wm-rule"></div>
+    </div>
+    <div class="cover-tagline">One Config. One Command. Continuous Magic.</div>
+    <div class="cover-divider"></div>
+
+    <div class="cover-platform-badge">
+      <div class="cover-badge-item">
+        <div class="cover-badge-num">4</div>
+        <div class="cover-badge-label">Environments</div>
+      </div>
+      <div class="cover-badge-sep"></div>
+      <div class="cover-badge-item">
+        <div class="cover-badge-num">7</div>
+        <div class="cover-badge-label">Job States</div>
+      </div>
+      <div class="cover-badge-sep"></div>
+      <div class="cover-badge-item">
+        <div class="cover-badge-num">100%</div>
+        <div class="cover-badge-label">Self-Hosted</div>
+      </div>
+      <div class="cover-badge-sep"></div>
+      <div class="cover-badge-item">
+        <div class="cover-badge-num">0</div>
+        <div class="cover-badge-label">Docker Deps</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-bottom-strip">
+    <div class="cover-bottom-info">
+      <span class="company">Engineered by Bytes Ltd &nbsp;·&nbsp; Nairobi, Kenya</span>
+      <span class="version">v1.0 · 2026</span>
+    </div>
+    <div class="cover-crimson-bar"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 2 — WHAT IS WIZARDCD
+════════════════════════════════════════════════════════ -->
+<div class="page page-2">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="logo-mark"><span class="wz">Wizard</span><span class="cd">CD</span><div class="logo-rule"></div></div>
+    <div class="header-tag">Company Profile &nbsp;·&nbsp; 2026</div>
+  </div>
+
+  <!-- Body -->
+  <div class="page-body">
+    <div class="section-label">Platform Overview</div>
+    <h2 class="section-title">What is WizardCD?</h2>
+    <div class="page-title-rule"></div>
+
+    <p class="intro-para">
+      WizardCD is a <strong>self-hosted Java application deployment framework</strong> built for
+      engineering teams who need production-grade deployments without the overhead of containerisation
+      platforms, managed CI/CD pipelines, or cloud-native complexity. It runs on your own infrastructure,
+      connects directly to your VMs over SSH, and manages the full deployment lifecycle from JAR upload
+      through to process stabilisation — with real-time visibility at every step.
+    </p>
+
+    <div class="quote-block">
+      <p>"WizardCD is not a SaaS. It is installed on your own infrastructure — your network, your keys, your control."</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-cell">
+        <div class="fc-title">Self-Hosted</div>
+        <div class="fc-desc">Runs on your own runner VM. No external SaaS dependencies. No data leaves your network.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">SSH-Based Deployments</div>
+        <div class="fc-desc">Connects to target VMs over ED25519 SSH. No agents required on the target.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">No Docker or Kubernetes</div>
+        <div class="fc-desc">Deploys directly to the host OS. Works on any Linux VM — bare metal, EC2, or on-premise.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">Multi-Environment</div>
+        <div class="fc-desc">SIT, UAT, and PROD environments with isolated SSH keys and independent configurations.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">Tanuki Process Manager</div>
+        <div class="fc-desc">Manages application lifecycle via Java Service Wrapper — reliable start, stop, and restart.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">Real-Time Job Tracking</div>
+        <div class="fc-desc">Live log streaming, deployment phase indicators, and abort control during any job.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">Backup Before Deploy</div>
+        <div class="fc-desc">Captures a versioned backup of the running application before every deployment.</div>
+      </div>
+      <div class="feature-cell">
+        <div class="fc-title">One-Click Rollback</div>
+        <div class="fc-desc">Restore the previous release from backup with a single action in the dashboard.</div>
+      </div>
+    </div>
+
+    <div class="section-label mt-14">Key Capabilities at a Glance</div>
+    <ul class="key-points mt-10">
+      <li>4-step guided deployment wizard — no manual scripting required</li>
+      <li>Automatic JVM and Tanuki wrapper configuration generation</li>
+      <li>Fat JAR and thin JAR support with automatic detection</li>
+      <li>Per-environment SSH key auto-generation and management</li>
+      <li>Configurable deployment stability window (5–120 seconds)</li>
+      <li>Structured deployment log viewer with phase navigation</li>
+      <li>Re-deploy flow — reuse stored config, supply new JAR only</li>
+      <li>Pre-flight connectivity and permission checks before deploy</li>
+    </ul>
+  </div>
+
+  <!-- Footer -->
+  <div class="page-footer">
+    <div class="footer-left">WizardCD — Deployment Platform</div>
+    <div class="footer-right">Page <span>02</span></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 3 — HOW IT WORKS
+════════════════════════════════════════════════════════ -->
+<div class="page page-3">
+  <div class="page-header">
+    <div class="logo-mark"><span class="wz">Wizard</span><span class="cd">CD</span><div class="logo-rule"></div></div>
+    <div class="header-tag">Company Profile &nbsp;·&nbsp; 2026</div>
+  </div>
+
+  <div class="page-body">
+    <div class="section-label">Deployment Flow</div>
+    <h2 class="section-title">How It Works</h2>
+    <div class="page-title-rule"></div>
+
+    <!-- 4-step flow -->
+    <div class="steps-flow">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-label">Configure</div>
+        <div class="step-desc">Fill the deploy wizard: select environment, SSH target, application JAR, JVM settings, and backup policy.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-label">Connect</div>
+        <div class="step-desc">WizardCD tests SSH connectivity from the runner VM to the target. Pre-flight checks validate permissions and disk space.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-label">Deploy</div>
+        <div class="step-desc">Upload your JAR. WizardCD packages artifacts, transfers them via SCP, and executes the deployment remotely.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">4</div>
+        <div class="step-label">Monitor</div>
+        <div class="step-desc">Watch live logs streamed by phase. Abort any running job. View structured deployment status in real time.</div>
+      </div>
+    </div>
+
+    <!-- Architecture diagram -->
+    <div class="section-label mb-10">System Architecture</div>
+    <div class="arch-diagram">
+      <div class="arch-node">
+        <div class="an-label">Layer 1</div>
+        <div class="an-name">Developer Browser</div>
+        <div class="an-sub">React 19 · :5173</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="an-label">Layer 2</div>
+        <div class="an-name">Runner Service</div>
+        <div class="an-sub">Spring Boot · :8081</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="an-label">Layer 3</div>
+        <div class="an-name">Deploy Scripts</div>
+        <div class="an-sub">Bash · SSH/SCP</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="an-label">Layer 4</div>
+        <div class="an-name">Target VM</div>
+        <div class="an-sub">Linux · Java 25</div>
+      </div>
+    </div>
+
+    <!-- Lifecycle states -->
+    <div class="section-label mt-18 mb-10">Job Lifecycle — State Machine</div>
+
+    <div class="lifecycle-row">
+      <div class="lc-state">CREATED</div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-state">VALIDATING</div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-state">PREPARING_WORKSPACE</div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-state">RUNNING</div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-state terminal-ok">SUCCESS</div>
+    </div>
+    <div class="lifecycle-row" style="margin-top:6px; padding-left: 430px;">
+      <div class="lc-arrow">↘</div>
+      <div class="lc-state terminal-err">FAILED</div>
+      <div style="width:16px;"></div>
+      <div class="lc-state terminal-abrt">ABORT_REQUESTED</div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-state terminal-abrt">ABORTED</div>
+    </div>
+
+    <!-- Phase descriptions -->
+    <div class="section-label mt-18 mb-10">Deployment Phases</div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Phase 1 — Runner Service (Java)</div>
+        <div class="card-body">
+          Validates the deployment request, prepares the job workspace, extracts uploaded artifacts,
+          generates the deployment YAML, resolves the SSH private key, and launches the deployment script.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Phase 2 — Deploy Script (Bash)</div>
+        <div class="card-body">
+          Parses YAML with yq, stages all artifacts, generates the Tanuki wrapper configuration,
+          packages a tarball, transfers it via SCP, then streams application-deployment.sh to the target via SSH.
+        </div>
+      </div>
+    </div>
+    <div class="card mt-10">
+      <div class="card-title">Phase 3 — Remote Deployment (Target VM)</div>
+      <div class="card-body">
+        Stops the running application, creates a versioned backup, extracts and deploys the new artifacts,
+        starts the process via Tanuki wrapper, and monitors stabilisation over a configurable window (5–120 seconds).
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-left">WizardCD — Deployment Platform</div>
+    <div class="footer-right">Page <span>03</span></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 4 — CORE FEATURES
+════════════════════════════════════════════════════════ -->
+<div class="page page-4">
+  <div class="page-header">
+    <div class="logo-mark"><span class="wz">Wizard</span><span class="cd">CD</span><div class="logo-rule"></div></div>
+    <div class="header-tag">Company Profile &nbsp;·&nbsp; 2026</div>
+  </div>
+
+  <div class="page-body">
+    <div class="section-label">Feature Set</div>
+    <h2 class="section-title">Core Capabilities</h2>
+    <div class="page-title-rule"></div>
+
+    <div class="feature-cards">
+
+      <div class="feat-card">
+        <div class="feat-card-num">01 / WIZARD</div>
+        <div class="feat-card-title">Deploy Wizard</div>
+        <div class="feat-card-body">
+          A guided 4-step deployment form walks engineers through every configuration decision —
+          from SSH target and Java binary selection to JVM tuning and backup policy. Auto-detects
+          JAR type, reads manifest metadata, and validates connectivity before any deployment runs.
+        </div>
+        <div class="feat-card-tags">
+          <span class="feat-tag">4-step wizard</span>
+          <span class="feat-tag">JAR auto-detection</span>
+          <span class="feat-tag">manifest parsing</span>
+          <span class="feat-tag">pre-flight validation</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-card-num">02 / MONITORING</div>
+        <div class="feat-card-title">Real-Time Job Tracking</div>
+        <div class="feat-card-body">
+          Every deployment is a live job with streaming log output, structured phase indicators,
+          and full state history. Engineers can drill into any deployment phase, focus on a single
+          step's log output, or switch to raw view — all while the job is still running.
+        </div>
+        <div class="feat-card-tags">
+          <span class="feat-tag">live log streaming</span>
+          <span class="feat-tag">phase navigation</span>
+          <span class="feat-tag">abort control</span>
+          <span class="feat-tag">state history</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-card-num">03 / RESILIENCE</div>
+        <div class="feat-card-title">Backup &amp; Rollback</div>
+        <div class="feat-card-body">
+          Before every deployment, WizardCD captures a versioned backup of the running application
+          (binaries, config, libraries). If a deployment fails or introduces a regression, a single
+          rollback action restores the previous release — no manual file management required.
+        </div>
+        <div class="feat-card-tags">
+          <span class="feat-tag">pre-deploy backup</span>
+          <span class="feat-tag">configurable retention</span>
+          <span class="feat-tag">one-click rollback</span>
+          <span class="feat-tag">backup preflight</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-card-num">04 / SECURITY</div>
+        <div class="feat-card-title">SSH Key Management</div>
+        <div class="feat-card-body">
+          WizardCD auto-generates a unique ED25519 SSH keypair for each environment (DEV, SIT, UAT, PROD)
+          on first use. Private keys are stored server-side and never exposed to the client. Engineers
+          copy only the public key to their target VMs — reducing credential surface to a minimum.
+        </div>
+        <div class="feat-card-tags">
+          <span class="feat-tag">ED25519 keys</span>
+          <span class="feat-tag">per-environment isolation</span>
+          <span class="feat-tag">auto-generated</span>
+          <span class="feat-tag">server-side private key</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-card-num">05 / ENVIRONMENTS</div>
+        <div class="feat-card-title">Multi-Environment Support</div>
+        <div class="feat-card-body">
+          DEV, SIT, UAT, and PROD environments are first-class citizens. Each environment has its own
+          SSH key, independent configuration, and separate job history. Colour-coded throughout the UI
+          — impossible to confuse a PROD deployment with a SIT test.
+        </div>
+        <div class="feat-card-tags">
+          <span class="feat-tag">DEV / SIT / UAT / PROD</span>
+          <span class="feat-tag">isolated configurations</span>
+          <span class="feat-tag">colour-coded UI</span>
+          <span class="feat-tag">independent job history</span>
+        </div>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-card-num">06 / JVM</div>
+        <div class="feat-card-title">JVM Configuration</div>
+        <div class="feat-card-body">
+          A dedicated JVM configuration panel lets engineers select a garbage collector (G1GC, ZGC,
+          Shenandoah, or ParallelGC), set heap bounds, enable container-aware resource detection, and
+          choose a workload profile. All flags are generated automatically with version-aware validation.
+        </div>
+        <div class="feat-card-tags">
+          <span class="feat-tag">GC selector</span>
+          <span class="feat-tag">heap configuration</span>
+          <span class="feat-tag">container-aware</span>
+          <span class="feat-tag">workload profiles</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Additional capability strip -->
+    <div class="section-label mt-18">Additional Capabilities</div>
+    <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:10px; margin-top:10px;">
+      <div style="background:var(--white); border:1px solid var(--stone); border-radius:4px; padding:10px 12px;">
+        <div style="font-family:Inter,sans-serif; font-size:10.5px; font-weight:700; color:var(--navy); margin-bottom:3px;">Re-Deploy Flow</div>
+        <div style="font-size:11px; color:var(--muted); line-height:1.6;">Reuse the stored configuration from any successful deployment. Supply only the new JAR — all settings are preserved automatically.</div>
+      </div>
+      <div style="background:var(--white); border:1px solid var(--stone); border-radius:4px; padding:10px 12px;">
+        <div style="font-family:Inter,sans-serif; font-size:10.5px; font-weight:700; color:var(--navy); margin-bottom:3px;">Certificate &amp; File Deployment</div>
+        <div style="font-size:11px; color:var(--muted); line-height:1.6;">Upload TLS certificates and additional configuration directories alongside each deployment. Deployed to configurable target paths.</div>
+      </div>
+      <div style="background:var(--white); border:1px solid var(--stone); border-radius:4px; padding:10px 12px;">
+        <div style="font-family:Inter,sans-serif; font-size:10.5px; font-weight:700; color:var(--navy); margin-bottom:3px;">Notification System</div>
+        <div style="font-size:11px; color:var(--muted); line-height:1.6;">In-app notifications alert engineers when any deployment, re-deploy, or rollback completes — with direct navigation to the job detail.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-left">WizardCD — Deployment Platform</div>
+    <div class="footer-right">Page <span>04</span></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 5 — ARCHITECTURE & TECHNOLOGY
+════════════════════════════════════════════════════════ -->
+<div class="page page-5">
+  <div class="page-header">
+    <div class="logo-mark"><span class="wz">Wizard</span><span class="cd">CD</span><div class="logo-rule"></div></div>
+    <div class="header-tag">Company Profile &nbsp;·&nbsp; 2026</div>
+  </div>
+
+  <div class="page-body">
+    <div class="section-label">Technical Foundation</div>
+    <h2 class="section-title">Architecture &amp; Technology</h2>
+    <div class="page-title-rule"></div>
+
+    <!-- Tech stack table -->
+    <div class="section-label mb-6">Technology Stack</div>
+    <table class="tech-table">
+      <thead>
+        <tr>
+          <th style="width:22%">Layer</th>
+          <th style="width:34%">Technology</th>
+          <th>Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="layer">User Interface</td>
+          <td class="tech">React 19 + TypeScript + Vite</td>
+          <td>Deployment wizard, dashboard, job detail, log viewer</td>
+        </tr>
+        <tr>
+          <td class="layer">Styling</td>
+          <td class="tech">Tailwind CSS</td>
+          <td>Dark-themed, token-based design system</td>
+        </tr>
+        <tr>
+          <td class="layer">Backend Service</td>
+          <td class="tech">Spring Boot 3.x / Java 21</td>
+          <td>Job management, SSH key service, REST API (:8081)</td>
+        </tr>
+        <tr>
+          <td class="layer">Deployment Scripts</td>
+          <td class="tech">Bash + yq v4.44.3</td>
+          <td>Artifact staging, tarball transfer, remote execution</td>
+        </tr>
+        <tr>
+          <td class="layer">Process Manager</td>
+          <td class="tech">Java Service Wrapper (Tanuki)</td>
+          <td>Application lifecycle on target VM — start, stop, restart</td>
+        </tr>
+        <tr>
+          <td class="layer">SSH Transport</td>
+          <td class="tech">ED25519 · OpenSSH</td>
+          <td>Runner → target VM connection, per-environment key isolation</td>
+        </tr>
+        <tr>
+          <td class="layer">Target Runtime</td>
+          <td class="tech">Temurin 25 JDK · Linux</td>
+          <td>Executes deployed Java applications on the client VM</td>
+        </tr>
+        <tr>
+          <td class="layer">Infrastructure</td>
+          <td class="tech">AWS EC2 (Elastic IPs)</td>
+          <td>Runner VM + client VM with stable IP addressing</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- System layers -->
+    <div class="section-label mb-10">System Layers</div>
+    <div class="sys-layers">
+      <div class="sys-layer">
+        <div class="sys-layer-label"><span>UI</span></div>
+        <div class="sys-layer-content">
+          <div class="sl-title">Developer Browser &nbsp;<span style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:400; color:var(--muted);">React 19 · localhost:5173 → 54.144.235.55:8081</span></div>
+          <div class="sl-desc">Wizard form, dashboard, job detail, log viewer, settings. Communicates with the runner service over HTTP REST.</div>
+        </div>
+      </div>
+      <div class="sys-layer-connector">↓ &nbsp; HTTP / REST (multipart file upload)</div>
+      <div class="sys-layer">
+        <div class="sys-layer-label"><span>Runner</span></div>
+        <div class="sys-layer-content">
+          <div class="sl-title">Runner Service &nbsp;<span style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:400; color:var(--muted);">Spring Boot · EC2 54.144.235.55:8081</span></div>
+          <div class="sl-desc">Job orchestration, workspace management, YAML generation, SSH key management, deploy.sh execution, log streaming.</div>
+        </div>
+      </div>
+      <div class="sys-layer-connector">↓ &nbsp; SCP + SSH (ED25519 per-environment key)</div>
+      <div class="sys-layer">
+        <div class="sys-layer-label"><span>Target</span></div>
+        <div class="sys-layer-content">
+          <div class="sl-title">Client VM &nbsp;<span style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:400; color:var(--muted);">Linux EC2 · 34.201.190.116 · deploy user</span></div>
+          <div class="sl-desc">Receives artifact tarball, runs application-deployment.sh, manages Tanuki wrapper lifecycle, maintains backup releases.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security callout -->
+    <div class="security-box">
+      <div class="security-box-title">Security Controls</div>
+      <ul class="security-items">
+        <li>Per-environment ED25519 SSH key isolation</li>
+        <li>Server-side private key resolution — never client-supplied</li>
+        <li>ZIP-slip protection on all uploaded artifact extraction</li>
+        <li>Path traversal guard on all job workspace operations</li>
+        <li>Single-thread deployment executor — one job at a time</li>
+        <li>Capacity guard — rejects new jobs when limit is reached</li>
+        <li>StrictHostKeyChecking on all runner → target SSH commands</li>
+        <li>Job ID sanitisation — rejects any ID containing <span style="font-family:'JetBrains Mono',monospace">..</span>, <span style="font-family:'JetBrains Mono',monospace">/</span>, <span style="font-family:'JetBrains Mono',monospace">\</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-left">WizardCD — Deployment Platform</div>
+    <div class="footer-right">Page <span>05</span></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 6 — DEPLOYMENT ENVIRONMENTS
+════════════════════════════════════════════════════════ -->
+<div class="page page-6">
+  <div class="page-header">
+    <div class="logo-mark"><span class="wz">Wizard</span><span class="cd">CD</span><div class="logo-rule"></div></div>
+    <div class="header-tag">Company Profile &nbsp;·&nbsp; 2026</div>
+  </div>
+
+  <div class="page-body">
+    <div class="section-label">Environment Management</div>
+    <h2 class="section-title">Deployment Environments</h2>
+    <div class="page-title-rule"></div>
+
+    <p class="small text-muted mb-14">
+      WizardCD treats each deployment environment as an isolated, first-class entity with its own
+      SSH key pair, configuration, and job history. Colour-coded throughout the UI to prevent accidental
+      cross-environment deployments.
+    </p>
+
+    <!-- Environment cards -->
+    <div class="env-cards">
+      <div class="env-card env-card-sit">
+        <div class="env-card-header">
+          <div class="env-name">SIT</div>
+          <div class="env-pill">System Integration</div>
+        </div>
+        <div class="env-card-body">
+          <div class="env-use">System Integration Testing</div>
+          <div class="env-desc">
+            Used by development teams to validate that services integrate correctly before moving
+            to acceptance testing. Typically mirrors production infrastructure at a smaller scale.
+          </div>
+          <div class="env-key-note">wizardcd_sit_ed25519</div>
+        </div>
+      </div>
+
+      <div class="env-card env-card-uat">
+        <div class="env-card-header">
+          <div class="env-name">UAT</div>
+          <div class="env-pill">User Acceptance</div>
+        </div>
+        <div class="env-card-body">
+          <div class="env-use">User Acceptance Testing</div>
+          <div class="env-desc">
+            Business stakeholders and QA teams validate application behaviour against defined
+            acceptance criteria. UAT deployments are treated with near-production rigour.
+          </div>
+          <div class="env-key-note">wizardcd_uat_ed25519</div>
+        </div>
+      </div>
+
+      <div class="env-card env-card-prod">
+        <div class="env-card-header">
+          <div class="env-name">PROD</div>
+          <div class="env-pill">Production</div>
+        </div>
+        <div class="env-card-body">
+          <div class="env-use">Live Production Environment</div>
+          <div class="env-desc">
+            Serves real end-users. PROD deployments trigger an additional confirmation banner in the
+            UI, separate backup policy, and full audit trail in the job history.
+          </div>
+          <div class="env-key-note">wizardcd_prod_ed25519</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Promotion flow -->
+    <div class="section-label mb-10">Environment Promotion Flow</div>
+    <div class="promotion-flow">
+      <div class="promo-env dev">
+        <div class="pe-label">Local</div>
+        <div class="pe-name">DEV</div>
+      </div>
+      <div class="promo-arrow">→</div>
+      <div class="promo-sep"></div>
+      <div class="promo-arrow" style="color:rgba(255,255,255,0.15)"> </div>
+      <div class="promo-env sit">
+        <div class="pe-label">Integration</div>
+        <div class="pe-name">SIT</div>
+      </div>
+      <div class="promo-arrow">→</div>
+      <div class="promo-sep"></div>
+      <div class="promo-arrow" style="color:rgba(255,255,255,0.15)"> </div>
+      <div class="promo-env uat">
+        <div class="pe-label">Acceptance</div>
+        <div class="pe-name">UAT</div>
+      </div>
+      <div class="promo-arrow">→</div>
+      <div class="promo-sep"></div>
+      <div class="promo-arrow" style="color:rgba(255,255,255,0.15)"> </div>
+      <div class="promo-env prod">
+        <div class="pe-label">Live</div>
+        <div class="pe-name">PROD</div>
+      </div>
+    </div>
+
+    <!-- Detail cards -->
+    <div class="env-detail-row">
+      <div class="env-detail-card">
+        <div class="edc-title">Key Isolation Principle</div>
+        <div class="edc-body">
+          Each environment has its own ED25519 SSH keypair, auto-generated by the runner service on
+          first access. The private key is stored exclusively on the runner VM and is never transmitted
+          to the client browser. Engineers add only the public key to each target VM's
+          <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px">authorized_keys</span>.
+        </div>
+      </div>
+      <div class="env-detail-card">
+        <div class="edc-title">Configuration Independence</div>
+        <div class="edc-body">
+          SIT, UAT, and PROD configurations are entirely independent. A deployment to SIT does not
+          share SSH credentials, target hosts, or deployment paths with UAT or PROD. Each environment
+          maintains its own job history, backup set, and deployment log archive.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-left">WizardCD — Deployment Platform</div>
+    <div class="footer-right">Page <span>06</span></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE 7 — BACK COVER / GET STARTED
+════════════════════════════════════════════════════════ -->
+<div class="page page-7 page-back-cover">
+  <div class="back-cover-top-bar"></div>
+
+  <div class="back-cover-body">
+
+    <div class="back-cover-tag">Get Started</div>
+    <h2 class="back-cover-heading">Deploy Your First Application</h2>
+    <p class="back-cover-sub">
+      WizardCD is ready to run on a single Linux VM.<br>
+      No cloud accounts, no container registries, no pipelines to configure.
+    </p>
+
+    <div class="gs-steps">
+      <div class="gs-step">
+        <div class="gs-step-num">1</div>
+        <div class="gs-step-content">
+          <div class="gs-step-title">Install the Runner Service</div>
+          <div class="gs-step-desc">
+            Deploy <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:rgba(255,255,255,0.55)">runner-service-ms.jar</span> to a Linux VM.
+            Configure it as a systemd service. The runner generates its own SSH keys on first start
+            and exposes the REST API on port 8081.
+          </div>
+        </div>
+      </div>
+
+      <div class="gs-step">
+        <div class="gs-step-num">2</div>
+        <div class="gs-step-content">
+          <div class="gs-step-title">Configure SSH Access</div>
+          <div class="gs-step-desc">
+            Open the WizardCD UI and navigate to the Keys panel. Copy the generated public key for
+            your target environment and add it to the <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:rgba(255,255,255,0.55)">~/.ssh/authorized_keys</span>
+            file on each target VM. Run the connection test to verify.
+          </div>
+        </div>
+      </div>
+
+      <div class="gs-step">
+        <div class="gs-step-num">3</div>
+        <div class="gs-step-content">
+          <div class="gs-step-title">Deploy Your First Application</div>
+          <div class="gs-step-desc">
+            Click <em style="color:rgba(255,255,255,0.6)">New Deploy</em> in the sidebar. Complete the
+            4-step wizard — select your environment, upload your JAR, configure the JVM, and review.
+            Hit Deploy and watch the live log stream. Your application is running.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="back-contact">
+      <span>Questions? Reach us at:</span>
+      <a href="mailto:info@engineeredbybytes.com">info@engineeredbybytes.com</a>
+      <a href="https://www.engineeredbybytes.com">www.engineeredbybytes.com</a>
+    </div>
+
+    <div class="back-cover-wordmark">
+      <span class="wz">Wizard</span><span class="cd">CD</span>
+      <div class="back-wm-rule"></div>
+    </div>
+    <div class="back-company-line">Engineered by Bytes Ltd &nbsp;·&nbsp; Nairobi, Kenya</div>
+
+  </div>
+
+  <div class="back-cover-bottom">
+    <div class="bcb-left">One Config. One Command. Continuous Magic.</div>
+    <div class="bcb-right">v1.0 · 2026</div>
+  </div>
+
+  <div class="back-cover-crimson-bar"></div>
+</div>
+
+</body>
+</html>

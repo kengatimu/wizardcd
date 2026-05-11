@@ -134,19 +134,41 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-// ── Summary line — fixed width, values abbreviated with tooltip ───────
+// ── Summary line — checklist row with status indicator + guidance ──
+// Filled state: small green circle with checkmark + bright value
+// Empty state:  hollow circle + italic guidance hint (no scary "—")
 
-function SummaryLine({ label, value, title, mono, badge }: {
+function SummaryLine({ label, value, title, mono, badge, hint }: {
   label: string
   value: string | null | undefined
   title?: string            // full value for hover tooltip (falls back to value)
   mono?: boolean
   badge?: { text: string; className: string }
+  hint?: string             // guidance text shown when empty (e.g. "upload .jar")
 }) {
   const filled = !!value && value.trim() !== ''
   return (
-    <div className="flex items-center gap-2.5 py-[4px]">
-      <span className="text-[10px] uppercase tracking-wider text-wiz-muted/50 w-[46px] flex-shrink-0">{label}</span>
+    <div className="flex items-center gap-2 py-[4px]">
+      {/* Status indicator — green check chip when filled, hollow circle when pending */}
+      <span
+        className={clsx(
+          'flex-shrink-0 flex items-center justify-center transition-all duration-200',
+          filled
+            ? 'w-3 h-3 rounded-full bg-sig-green/15'
+            : 'w-2.5 h-2.5 rounded-full border border-wiz-border-mid/70',
+        )}
+        aria-hidden
+      >
+        {filled && <Check size={8} strokeWidth={3.5} className="text-sig-green" />}
+      </span>
+
+      <span className={clsx(
+        'text-[10px] uppercase tracking-wider w-[60px] flex-shrink-0 transition-colors',
+        filled ? 'text-wiz-muted/70' : 'text-wiz-muted/40',
+      )}>
+        {label}
+      </span>
+
       <div className="flex-1 min-w-0">
         {badge ? (
           <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded border', badge.className)}>
@@ -154,13 +176,15 @@ function SummaryLine({ label, value, title, mono, badge }: {
           </span>
         ) : filled ? (
           <span
-            className={clsx('text-[11px] text-wiz-cream/75 block whitespace-nowrap', mono && 'font-mono')}
+            className={clsx('text-[11px] text-wiz-cream/85 block whitespace-nowrap', mono && 'font-mono')}
             title={title || value!}
           >
             {value}
           </span>
         ) : (
-          <span className="text-[11px] text-wiz-muted/25">—</span>
+          <span className="text-[10px] italic text-wiz-muted/45">
+            {hint || 'pending'}
+          </span>
         )}
       </div>
     </div>
@@ -207,9 +231,14 @@ function ConnectionVisual({ form, testConnState }: Pick<MissionControlProps, 'fo
 function JarAnalysis({ form, autoFilledFields }: Pick<MissionControlProps, 'form' | 'autoFilledFields'>) {
   if (!form.jarArtifact) {
     return (
-      <div className="flex items-center gap-2 py-3 text-2xs text-wiz-muted/40">
-        <Package size={11} />
-        <span>Upload a JAR to see analysis</span>
+      <div className="flex flex-col items-center gap-1.5 py-4 text-center">
+        <span className="relative flex w-7 h-7 items-center justify-center rounded-full bg-sig-blue/10 border border-sig-blue/20">
+          <span className="absolute inset-0 rounded-full bg-sig-blue/20 animate-ping opacity-30" style={{ animationDuration: '2.6s' }} />
+          <Package size={13} className="relative text-sig-blue/70" strokeWidth={2.2} />
+        </span>
+        <span className="text-[10px] text-wiz-muted/70 font-medium leading-tight max-w-[180px]">
+          Upload a JAR to see auto-detected app details
+        </span>
       </div>
     )
   }
@@ -239,9 +268,14 @@ function JarAnalysis({ form, autoFilledFields }: Pick<MissionControlProps, 'form
 function JvmPreview({ jvmConfigEnabled, jvmFlags, gcType, containerAware }: Pick<MissionControlProps, 'jvmConfigEnabled' | 'jvmFlags' | 'gcType' | 'containerAware'>) {
   if (!jvmConfigEnabled) {
     return (
-      <div className="flex items-center gap-2 py-3 text-2xs text-wiz-muted/40">
-        <Cpu size={11} />
-        <span>JVM uses ergonomic defaults</span>
+      <div className="flex flex-col items-center gap-1.5 py-4 text-center">
+        <span className="relative flex w-7 h-7 items-center justify-center rounded-full bg-sig-blue/10 border border-sig-blue/20">
+          <span className="absolute inset-0 rounded-full bg-sig-blue/20 animate-ping opacity-30" style={{ animationDuration: '2.6s' }} />
+          <Cpu size={13} className="relative text-sig-blue/70" strokeWidth={2.2} />
+        </span>
+        <span className="text-[10px] text-wiz-muted/70 font-medium leading-tight max-w-[180px]">
+          Using ergonomic JVM defaults — flags appear here once you customise
+        </span>
       </div>
     )
   }
@@ -587,47 +621,83 @@ export default function MissionControl(props: MissionControlProps) {
     : <ShieldCheck size={10} className="text-wiz-muted/40" />
 
   return (
-    <div className="flex flex-col gap-3 w-fit flex-shrink-0" style={{ minWidth: SIDEBAR_MIN_W, maxWidth: SIDEBAR_MAX_W }}>
+    <div className="flex flex-col gap-3 flex-shrink-0" style={{ width: 280 }}>
 
       {/* ── Deploy Summary — Steps 1–3 only ── */}
-      {step < 4 && (
-        <div className={clsx(
-          'rounded-lg border border-wiz-border/50 border-l-2 bg-wiz-surface/80 overflow-hidden',
-          borderAccent,
-        )}>
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-wiz-border/25 bg-wiz-raised/15">
-            <FileText size={10} className="text-wiz-gold/50" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-wiz-muted/50">Deploy Summary</span>
+      {step < 4 && (() => {
+        // Compute checklist progress for the header chip
+        const lines: boolean[] = [
+          true,                         // Env always present
+          !!targetStr,                  // Target — SSH host filled
+          !!installFull,                // Install — base path + app name
+          !!javaStr,                    // Java — distribution picked
+        ]
+        if (form.jarArtifact) {
+          lines.push(!!jarStr, !!portStr, !!mainShort)
+        }
+        if (jvmStr) lines.push(true)    // JVM advanced — only counted when configured
+        // Defaults always count as filled (Backup/Stability/Logs)
+        lines.push(true, true, true)
+
+        const filledCount = lines.filter(Boolean).length
+        const totalCount  = lines.length
+        const allFilled   = filledCount === totalCount
+
+        // Header chip colour: grey idle → blue partial → green complete
+        const chipClass = allFilled
+          ? 'bg-sig-green-dim text-sig-green border-sig-green/30'
+          : filledCount > Math.floor(totalCount / 2)
+          ? 'bg-sig-blue-dim text-sig-blue border-sig-blue/25'
+          : 'bg-wiz-bg/60 text-wiz-muted border-wiz-border/60'
+
+        return (
+        <div className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
+          {/* Header — green theme matching wizard panel 1 + live progress chip */}
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-wiz-border/60 bg-sig-green-dim">
+            <span className="w-1.5 h-1.5 rounded-full bg-sig-green/70 flex-shrink-0" />
+            <span className="font-mono font-semibold text-[10px] uppercase tracking-widest text-sig-green flex-1">
+              Deploy Summary
+            </span>
+            <span
+              className={clsx(
+                'inline-flex items-center gap-1 px-1.5 py-[1px] rounded-sm text-[9px] font-mono font-bold tabular-nums border transition-colors duration-300',
+                chipClass,
+              )}
+              title={`${filledCount} of ${totalCount} fields complete`}
+            >
+              {allFilled && <Check size={8} strokeWidth={3.5} />}
+              {filledCount}/{totalCount}
+            </span>
           </div>
 
           <div className="px-3 py-1.5 divide-y divide-wiz-border/10">
-            {/* Target */}
+            {/* Target — guidance hints lead the user step by step */}
             <div className="pb-1.5">
               <SummaryLine
                 label="Env"
                 value={form.environment}
                 badge={envColors ? { text: form.environment, className: envColors.badge } : undefined}
               />
-              <SummaryLine label="Target" value={targetStr} mono />
-              <SummaryLine label="Install" value={installShort} title={installFull ?? undefined} mono />
-              <SummaryLine label="Java" value={javaStr} title={form.javaCommand || undefined} />
+              <SummaryLine label="Target"  value={targetStr}    hint="enter SSH user + host" mono />
+              <SummaryLine label="Install" value={installShort} hint="set deploy path"        title={installFull ?? undefined} mono />
+              <SummaryLine label="Java"    value={javaStr}      hint="pick or detect Java"   title={form.javaCommand || undefined} />
             </div>
 
             {/* App — only after JAR uploaded */}
             {form.jarArtifact && (
               <div className="py-1.5">
-                <SummaryLine label="App" value={jarStr} title={form.jarName || form.jarArtifact?.name || undefined} />
-                <SummaryLine label="Port" value={portStr} mono />
-                <SummaryLine label="Main" value={mainShort} title={form.mainClass || undefined} />
+                <SummaryLine label="App"  value={jarStr}   hint="upload .jar"  title={form.jarName || form.jarArtifact?.name || undefined} />
+                <SummaryLine label="Port" value={portStr}  hint="set HTTP port" mono />
+                <SummaryLine label="Main" value={mainShort} hint="auto-detected" title={form.mainClass || undefined} />
               </div>
             )}
 
             {/* Config — always visible */}
             <div className="pt-1.5">
               {jvmStr && <SummaryLine label="JVM" value={jvmStr} />}
-              <SummaryLine label="Backup" value={backupStr} />
+              <SummaryLine label="Backup"    value={backupStr}                />
               <SummaryLine label="Stability" value={`${form.stabilityWindow}s`} />
-              <SummaryLine label="Logs" value={logStr} />
+              <SummaryLine label="Logs"      value={logStr}                   />
               {/* Certs — individual rows with target path */}
               {activeCerts.map((c, i) => (
                 <SummaryLine
@@ -651,18 +721,23 @@ export default function MissionControl(props: MissionControlProps) {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
-      {/* ── Context Block ── */}
-      <div className={clsx(
-        'rounded-lg border border-wiz-border/50 border-l-2 bg-wiz-surface/80 overflow-hidden',
-        borderAccent,
-      )}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-wiz-border/25 bg-wiz-raised/15">
-          {contextIcon}
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-wiz-muted/50">{contextTitle}</span>
+      {/* ── Context Block (panel 2 — blue theme matching wizard rotation) ── */}
+      <div className="rounded border border-wiz-border border-l-2 border-l-sig-blue/50 bg-wiz-surface overflow-hidden">
+        {/* Header — same density as Deploy Summary above for visual rhythm */}
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-wiz-border/60 bg-sig-blue-dim">
+          <span className="w-1.5 h-1.5 rounded-full bg-sig-blue/70 flex-shrink-0" />
+          <span className="font-mono font-semibold text-[10px] uppercase tracking-widest text-sig-blue flex-1">
+            {contextTitle}
+          </span>
+          {/* Tiny step indicator chip — subtle "live, tied to current step" cue */}
+          <span className="text-[8.5px] font-mono font-bold tabular-nums text-sig-blue/60 px-1.5 py-[1px] rounded-sm bg-sig-blue/10 border border-sig-blue/20">
+            {step.toString().padStart(2, '0')}
+          </span>
         </div>
-        <div className="px-3 py-1">
+        <div className="px-3 py-2 animate-fade-in" key={step}>
           {step === 1 && <ConnectionVisual form={form} testConnState={testConnState} />}
           {step === 2 && <JarAnalysis form={form} autoFilledFields={autoFilledFields} />}
           {step === 3 && <JvmPreview jvmConfigEnabled={jvmConfigEnabled} jvmFlags={jvmFlags} gcType={gcType} containerAware={containerAware} />}

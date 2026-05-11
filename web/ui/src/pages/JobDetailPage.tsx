@@ -5,7 +5,7 @@ import {
   Server, Hash, Globe,
   CheckCircle2, XCircle, Loader2, AlertCircle, ShieldAlert,
   Layers, Calendar, Upload, Package, Send, Play, FlagTriangleRight,
-  ChevronDown, Activity, MousePointer2, Clock, ExternalLink, Trash2,
+  ChevronDown, Activity, MousePointer2, Clock, Trash2,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -28,10 +28,10 @@ import {
 // ── Environment config ─────────────────────────────────────────────
 
 const ENV_CFG: Record<string, { badge: string; border: string; header: string; dim: string }> = {
-  DEV:  { badge: 'bg-sig-green/20  text-sig-green',  border: 'border-l-sig-green',   header: 'bg-sig-green/5',   dim: 'border-l-sig-green/20'   },
-  SIT:  { badge: 'bg-sig-blue/20   text-sig-blue',   border: 'border-l-sig-blue',    header: 'bg-sig-blue/5',    dim: 'border-l-sig-blue/20'    },
-  UAT:  { badge: 'bg-sig-yellow/20 text-sig-yellow', border: 'border-l-sig-yellow',  header: 'bg-sig-yellow/5',  dim: 'border-l-sig-yellow/20'  },
-  PROD: { badge: 'bg-sig-purple/20 text-sig-purple', border: 'border-l-sig-purple',  header: 'bg-sig-purple/5',  dim: 'border-l-sig-purple/20'  },
+  DEV:  { badge: 'bg-sig-green/20  text-sig-green',  border: 'border-l-sig-green',   header: 'bg-sig-green-dim',   dim: 'border-l-sig-green/20'   },
+  SIT:  { badge: 'bg-sig-blue/20   text-sig-blue',   border: 'border-l-sig-blue',    header: 'bg-sig-blue-dim',    dim: 'border-l-sig-blue/20'    },
+  UAT:  { badge: 'bg-sig-yellow/20 text-sig-yellow', border: 'border-l-sig-yellow',  header: 'bg-sig-yellow-dim',  dim: 'border-l-sig-yellow/20'  },
+  PROD: { badge: 'bg-sig-purple/20 text-sig-purple', border: 'border-l-sig-purple',  header: 'bg-sig-purple-dim',  dim: 'border-l-sig-purple/20'  },
 }
 const FALLBACK_CFG = { badge: 'bg-wiz-border/20 text-wiz-muted', border: 'border-l-wiz-gold', header: 'bg-wiz-surface/20', dim: 'border-l-wiz-border/20' }
 function envCfg(env?: string | null) { return (env && ENV_CFG[env]) ? ENV_CFG[env] : FALLBACK_CFG }
@@ -106,7 +106,7 @@ interface AbortModalProps { jobId: string; onConfirm: () => void; onCancel: () =
 function AbortModal({ jobId, onConfirm, onCancel, loading }: AbortModalProps) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-wiz-surface border border-wiz-border rounded-2xl shadow-panel p-6 max-w-md w-full animate-fade-in">
+      <div className="bg-wiz-surface border border-wiz-border rounded shadow-panel p-6 max-w-md w-full animate-fade-in">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-sig-red-dim flex items-center justify-center">
             <AlertTriangle size={18} className="text-sig-red" />
@@ -117,7 +117,7 @@ function AbortModal({ jobId, onConfirm, onCancel, loading }: AbortModalProps) {
           </div>
         </div>
         <p className="text-sm text-wiz-gray mb-2">Are you sure you want to abort job:</p>
-        <p className="font-mono text-xs text-wiz-gold bg-wiz-bg border border-wiz-border rounded-md px-3 py-2 mb-5">{jobId}</p>
+        <p className="font-mono text-xs text-wiz-gold bg-wiz-bg border border-wiz-border rounded px-3 py-2 mb-5">{jobId}</p>
         <div className="flex gap-3 justify-end">
           <button type="button" onClick={onCancel} disabled={loading} className="btn-secondary">Cancel</button>
           <button type="button" onClick={onConfirm} disabled={loading}
@@ -160,12 +160,13 @@ function phaseIcon(s: PhaseStatus, size = 13) {
   return                      <AlertCircle   size={size} className="text-wiz-dim/30 flex-shrink-0" />
 }
 
-function phaseChip(s: PhaseStatus) {
+function phaseChip(s: PhaseStatus, skipped = false) {
   if (s === 'success') return <span className="text-2xs font-mono text-sig-green">Done</span>
   if (s === 'aborted') return <span className="text-2xs font-mono text-wiz-muted">Aborted</span>
   if (s === 'warn')    return <span className="text-2xs font-mono text-sig-yellow">Warning</span>
   if (s === 'error')   return <span className="text-2xs font-mono text-sig-red">Failed</span>
   if (s === 'running') return <span className="text-2xs font-mono text-sig-yellow animate-pulse">Running</span>
+  if (skipped)         return <span className="text-2xs font-mono text-wiz-dim/50 italic">Skipped</span>
   return                      <span className="text-2xs font-mono text-wiz-dim/40">—</span>
 }
 
@@ -181,9 +182,10 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
   const find   = (kw: string) => sections.find(s => s.title.toLowerCase().includes(kw.toLowerCase()))
   const lastTl = sections[sections.length - 1]?.title?.toLowerCase() ?? ''
 
-  const isSuccess = lifecycleState === 'SUCCESS'
-  const isFailed  = lifecycleState === 'FAILED'
-  const isAborted = lifecycleState === 'ABORTED'
+  const isSuccess  = lifecycleState === 'SUCCESS'
+  const isFailed   = lifecycleState === 'FAILED'
+  const isAborted  = lifecycleState === 'ABORTED'
+  const isTerminal = isSuccess || isFailed || isAborted
   const inWorkspace = ['PREPARING_WORKSPACE','RUNNING','SUCCESS','FAILED','ABORTED'].includes(lifecycleState)
   const inRunning   = ['RUNNING','SUCCESS','FAILED','ABORTED'].includes(lifecycleState)
 
@@ -326,6 +328,9 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
           return null
         })()
 
+        // A pending phase in a terminal job = "Skipped" — never ran due to earlier failure
+        const isSkipped = p.status === 'pending' && isTerminal
+
         const rowContent = (
           <>
             {phaseIcon(p.status)}
@@ -337,11 +342,12 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
                 p.status === 'aborted' ? 'text-wiz-muted font-mono'  :
                 p.status === 'running' ? 'text-sig-yellow font-mono' :
                 p.status === 'success' ? 'text-wiz-gray'             :
+                isSkipped              ? 'text-wiz-dim/40'           :
                                          'text-wiz-dim/50',
               )}>
                 {p.label}
               </span>
-              {hasLogs && (
+              {hasLogs && !isSkipped && (
                 <span className={clsx(
                   'ml-2 text-2xs font-mono',
                   isSelected ? 'text-wiz-gold' : 'text-wiz-dim/40 group-hover:text-wiz-dim',
@@ -351,7 +357,7 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
               )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {durMs !== null && durMs >= 0 && (
+              {durMs !== null && durMs >= 0 && !isSkipped && (
                 <span className={clsx(
                   'text-2xs font-mono',
                   isLive && linked.some(s => s === sections[sections.length - 1])
@@ -360,7 +366,7 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
                   {formatSectionDuration(durMs)}
                 </span>
               )}
-              {phaseChip(p.status)}
+              {phaseChip(p.status, isSkipped)}
             </div>
           </>
         )
@@ -373,13 +379,20 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
               onClick={() => onSelectPhase(isSelected ? -1 : i)}
               className={clsx(
                 'group w-full flex items-center gap-3 px-4 py-2.5 text-left border-l-2 transition-colors duration-100',
-                isSelected
+                isSkipped && 'opacity-50 cursor-default',
+                !isSkipped && isSelected
                   ? 'bg-wiz-gold/10 border-l-wiz-gold'
+                  : p.status === 'success'
+                  ? 'bg-sig-green/[0.04] hover:bg-sig-green/[0.08] border-l-sig-green/30'
                   : p.status === 'error'
-                  ? 'hover:bg-sig-red/5 border-l-transparent'
-                  : 'hover:bg-wiz-surface/30 border-l-transparent',
-                p.status === 'running' && !isSelected && 'bg-sig-yellow/5',
+                  ? 'hover:bg-sig-red/[0.05] border-l-sig-red/50'
+                  : p.status === 'warn'
+                  ? 'bg-sig-yellow/[0.04] hover:bg-sig-yellow/[0.07] border-l-sig-yellow/30'
+                  : p.status === 'running'
+                  ? 'bg-sig-yellow/[0.05] hover:bg-sig-yellow/[0.09] border-l-sig-yellow/40'
+                  : 'border-l-transparent',
               )}
+              disabled={isSkipped}
             >
               {rowContent}
             </button>
@@ -390,9 +403,14 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
           <div
             key={p.label}
             className={clsx(
-              'flex items-center gap-3 px-4 py-2.5 border-l-2 border-l-transparent',
-              p.status === 'error'   && 'bg-sig-red/5',
-              p.status === 'running' && 'bg-sig-yellow/5',
+              'flex items-center gap-3 px-4 py-2.5 border-l-2',
+              isSkipped              && 'opacity-50 border-l-transparent',
+              !isSkipped && p.status === 'success' && 'bg-sig-green/[0.04] border-l-sig-green/30',
+              !isSkipped && p.status === 'error'   && 'border-l-sig-red/50',
+              !isSkipped && p.status === 'warn'    && 'bg-sig-yellow/[0.04] border-l-sig-yellow/30',
+              !isSkipped && p.status === 'running' && 'bg-sig-yellow/[0.05] border-l-sig-yellow/40',
+              !isSkipped && p.status === 'pending' && 'border-l-transparent',
+              p.status === 'aborted'               && 'border-l-transparent',
             )}
           >
             {rowContent}
@@ -610,18 +628,43 @@ export default function JobDetailPage() {
     return { env: status.environment ?? 'the selected', host: status.application ?? '' }
   })()
 
-  // Status banner config
+  // ── Status banner config ────────────────────────────────────────
   const statusLabel =
-    status.jobStatus === 'SUCCESS' ? 'Deployment Successful' :
-    status.jobStatus === 'FAILED'  ? 'Deployment Failed' :
-    status.jobStatus === 'ABORTED' ? 'Deployment Aborted' :
-    isLive ? 'Deploying…' : 'Deployment Pending'
+    status.jobStatus === 'SUCCESS'         ? 'Deployment Successful'  :
+    status.jobStatus === 'FAILED'          ? 'Deployment Failed'      :
+    status.jobStatus === 'ABORTED'         ? 'Deployment Aborted'     :
+    status.jobStatus === 'ABORT_REQUESTED' ? 'Abort Requested…'       :
+    isLive                                 ? 'Deploying…'             : 'Deployment Pending'
 
-  const statusColor =
-    status.jobStatus === 'SUCCESS' ? 'sig-green' :
-    status.jobStatus === 'FAILED'  ? 'sig-red' :
-    status.jobStatus === 'ABORTED' ? 'sig-yellow' :
-    isLive ? 'sig-yellow' : 'wiz-muted'
+  const bannerBg =
+    status.jobStatus === 'SUCCESS'         ? 'border-sig-green    bg-sig-green-dim'   :
+    status.jobStatus === 'FAILED'          ? 'border-sig-red      bg-sig-red-dim'     :
+    status.jobStatus === 'ABORTED'         ? 'border-sig-yellow/60 bg-sig-yellow-dim' :
+    status.jobStatus === 'ABORT_REQUESTED' ? 'border-sig-yellow/40 bg-sig-yellow/5'   :
+    isLive                                 ? 'border-sig-yellow/40 bg-sig-yellow/5'   :
+                                             'border-wiz-border   bg-wiz-surface'
+
+  const bannerIconBg =
+    status.jobStatus === 'SUCCESS' ? 'bg-sig-green/15'  :
+    status.jobStatus === 'FAILED'  ? 'bg-sig-red/15'    :
+    status.jobStatus === 'ABORTED' ? 'bg-sig-yellow/15' :
+    isLive || status.jobStatus === 'ABORT_REQUESTED' ? 'bg-sig-yellow/15' :
+                                     'bg-wiz-raised'
+
+  const bannerTextClass =
+    status.jobStatus === 'SUCCESS' ? 'text-sig-green text-lg'    :
+    status.jobStatus === 'FAILED'  ? 'text-sig-red   text-lg'    :
+    status.jobStatus === 'ABORTED' ? 'text-sig-yellow text-base' :
+    isLive || status.jobStatus === 'ABORT_REQUESTED' ? 'text-sig-yellow text-base' :
+                                     'text-wiz-cream  text-base'
+
+  const bannerIconEl =
+    status.jobStatus === 'SUCCESS'         ? <CheckCircle2 size={26} className="text-sig-green" />          :
+    status.jobStatus === 'FAILED'          ? <XCircle      size={26} className="text-sig-red" />            :
+    status.jobStatus === 'ABORTED'         ? <StopCircle   size={26} className="text-sig-yellow" />         :
+    status.jobStatus === 'ABORT_REQUESTED' ? <StopCircle   size={26} className="text-sig-yellow animate-pulse" /> :
+    isLive                                 ? <Loader2      size={26} className="text-sig-yellow animate-spin" />  :
+                                             <AlertCircle  size={26} className="text-wiz-muted" />
 
   return (
     <>
@@ -710,7 +753,7 @@ export default function JobDetailPage() {
                       setRollbackPreflightLoading(false)
                     }
                   }}
-                  className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md
+                  className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded
                              transition-all duration-150 border border-sig-yellow/25 bg-sig-yellow/10 text-sig-yellow
                              hover:bg-sig-yellow/15 hover:border-sig-yellow/40"
                 >
@@ -727,9 +770,9 @@ export default function JobDetailPage() {
                 setRefreshing(false)
                 toast.success('Refreshed')
               }}
-              className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-md
-                         transition-all duration-150 border border-wiz-cream/25 bg-wiz-cream/10 text-wiz-cream
-                         hover:bg-wiz-cream/15 hover:border-wiz-cream/40"
+              className="inline-flex items-center justify-center gap-2 font-semibold text-sm px-5 py-2.5 rounded
+                         transition-all duration-150 border border-wiz-border text-wiz-muted
+                         hover:bg-wiz-raised hover:text-wiz-cream hover:border-wiz-border-mid"
             >
               <RefreshCw size={12} className={clsx(refreshing && 'animate-spin')} /> Refresh
             </button>
@@ -741,35 +784,52 @@ export default function JobDetailPage() {
           </div>
         </div>
 
-        {/* ── Unified Status Banner ── */}
-        <div className={clsx(
-          'flex items-center gap-4 px-5 py-3.5 rounded-xl border bg-wiz-surface',
-          `border-${statusColor}/20`,
-          isLive && 'animate-pulse-green border-sig-green/20',
-        )}>
-          <StatusBadge status={status.jobStatus} pulse size="md" />
-          <div className="flex-1">
-            <p className={clsx('text-sm font-semibold', `text-${statusColor}`)}>{statusLabel}</p>
+        {/* ── Unified Status Banner — bold ── */}
+        <div className={clsx('flex items-center gap-5 px-6 py-4 rounded border-2', bannerBg)}>
+          {/* Large status icon */}
+          <div className={clsx(
+            'flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center',
+            bannerIconBg,
+          )}>
+            {bannerIconEl}
+          </div>
+
+          {/* Status text + timestamp */}
+          <div className="flex-1 min-w-0">
+            <p className={clsx('font-bold tracking-tight leading-tight', bannerTextClass)}>
+              {statusLabel}
+            </p>
             {status.createdAt && (
-              <p className="text-xs text-wiz-muted mt-0.5">
-                {new Date(status.createdAt).toLocaleString(undefined, {
+              <p className="text-xs text-wiz-muted mt-1 flex items-center gap-2 flex-wrap">
+                <span>{new Date(status.createdAt).toLocaleString(undefined, {
                   month: 'short', day: 'numeric',
                   hour: '2-digit', minute: '2-digit', second: '2-digit',
-                })}
-                {duration && <span className="text-wiz-dim"> · {duration}</span>}
+                })}</span>
+                {duration && (
+                  <>
+                    <span className="text-wiz-border-mid">·</span>
+                    <span className="flex items-center gap-1">
+                      <Clock size={11} />
+                      {duration}
+                    </span>
+                  </>
+                )}
+                {appName && activeEnv && (
+                  <>
+                    <span className="text-wiz-border-mid">·</span>
+                    <EnvBadge env={activeEnv} />
+                  </>
+                )}
               </p>
             )}
           </div>
+
+          {/* App name display */}
           {appName && (
-            <Link
-              to={`/apps/${encodeURIComponent(appName)}`}
-              className="flex items-center gap-1.5 text-xs text-wiz-muted hover:text-wiz-gold transition-colors"
-              title="View all deployments for this application"
-            >
+            <span className="flex-shrink-0 flex items-center gap-1.5 text-xs text-wiz-muted">
               <Layers size={12} />
               <span className="font-mono">{appName}</span>
-              <ExternalLink size={10} />
-            </Link>
+            </span>
           )}
         </div>
 
@@ -780,7 +840,7 @@ export default function JobDetailPage() {
           <div className="col-span-1 flex flex-col gap-3">
 
             {/* Deployment Phases — primary content */}
-            <div className="rounded-xl border border-wiz-border overflow-hidden border-l-2 border-l-sig-green/50">
+            <div className="rounded border border-wiz-border overflow-hidden border-l-2 border-l-sig-green/50">
               <button
                 type="button"
                 onClick={() => {/* always open */}}
@@ -800,13 +860,13 @@ export default function JobDetailPage() {
             </div>
 
             {/* Job Metadata — hidden while live, auto-expanded on completion */}
-            {!isLive && <div className="rounded-xl border border-wiz-border overflow-hidden border-l-2 border-l-wiz-gold/50">
+            {!isLive && <div className="rounded border border-wiz-border overflow-hidden border-l-2 border-l-wiz-gold/50">
               <button
                 type="button"
                 onClick={() => setMetaOpen(!metaOpen)}
                 className={clsx(
                   'w-full flex items-center gap-2.5 px-4 py-2.5 text-left border-b border-wiz-border/60 transition-colors',
-                  metaOpen ? 'bg-wiz-gold/8' : 'bg-wiz-panel/60',
+                  metaOpen ? 'bg-wiz-gold/8 border-b border-wiz-border/60' : 'bg-wiz-bg',
                 )}
               >
                 <Server size={12} className="text-wiz-muted" />
@@ -843,16 +903,10 @@ export default function JobDetailPage() {
 
             {/* Environment Status — hidden while job is live to avoid false alarm from historical failures */}
             {appName && !isLive && (
-              <div className="rounded-xl border border-wiz-border overflow-hidden border-l-2 border-l-wiz-gold/30">
-                <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-wiz-border/60 bg-wiz-panel/60">
+              <div className="rounded border border-wiz-border overflow-hidden border-l-2 border-l-wiz-gold/30">
+                <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-wiz-border/60 bg-wiz-bg">
                   <Globe size={12} className="text-wiz-muted" />
                   <span className="section-label flex-1">ENVIRONMENT STATUS</span>
-                  <Link
-                    to={`/apps/${encodeURIComponent(appName)}`}
-                    className="text-2xs text-wiz-muted hover:text-wiz-gold transition-colors font-mono"
-                  >
-                    View all
-                  </Link>
                 </div>
                 <div className="divide-y divide-wiz-border/30">
                   {ALL_ENVS.map(env => {
@@ -926,24 +980,26 @@ export default function JobDetailPage() {
               )}
             </div>
             {phaseContextNote && (
-              <div className="flex items-start gap-2.5 mb-2 px-3 py-2.5 rounded-lg bg-sig-green/8 border border-sig-green/20 text-xs text-sig-green">
+              <div className="flex items-start gap-2.5 mb-2 px-3 py-2.5 rounded bg-sig-green-dim border border-sig-green/20 text-xs text-sig-green">
                 <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
                 <span>{phaseContextNote}</span>
               </div>
             )}
             {sshAuthFailure && (
-              <div className="flex items-start gap-2.5 mb-2 px-3 py-2.5 rounded-lg bg-sig-red/8 border border-sig-red/25 text-xs text-sig-red">
-                <ShieldAlert size={13} className="flex-shrink-0 mt-0.5 shrink-0" />
+              <div className="flex items-start gap-2.5 mb-2 px-4 py-3 rounded text-xs
+                              bg-wiz-surface border border-wiz-border/60
+                              border-l-[3px] border-l-sig-red">
+                <ShieldAlert size={13} className="flex-shrink-0 mt-0.5 shrink-0 text-sig-red" />
                 <div className="flex flex-col gap-1">
-                  <span className="font-semibold">SSH Authentication Failed — Public Key Not Authorised</span>
+                  <span className="font-semibold text-sig-red">SSH Authentication Failed — Public Key Not Authorised</span>
                   <span className="text-wiz-muted">
-                    The runner's <span className="font-mono text-sig-red/80">{sshAuthFailure.env} ED25519 public key</span> is not in the target server's{' '}
-                    <span className="font-mono text-sig-red/80">~/.ssh/authorized_keys</span>. To fix:
+                    The runner's <span className="font-mono text-wiz-cream">{sshAuthFailure.env} ED25519 public key</span> is not in the target server's{' '}
+                    <span className="font-mono text-wiz-cream">~/.ssh/authorized_keys</span>. To fix:
                   </span>
                   <ol className="list-decimal list-inside space-y-0.5 text-wiz-muted mt-0.5">
-                    <li>Go to <strong className="text-wiz-cream">New Deploy → Step 1 (Target Server)</strong></li>
+                    <li>Go to <strong className="text-wiz-cream">New Deploy, Step 1 (Target Server)</strong></li>
                     <li>Copy the <strong className="text-wiz-cream">{sshAuthFailure.env} public key</strong> from the SSH Keys panel</li>
-                    <li>Append it to <span className="font-mono">~/.ssh/authorized_keys</span> on your target server</li>
+                    <li>Append it to <span className="font-mono text-wiz-cream">~/.ssh/authorized_keys</span> on your target server</li>
                     <li>Run <strong className="text-wiz-cream">Test Connection</strong> to confirm access, then retry</li>
                   </ol>
                 </div>

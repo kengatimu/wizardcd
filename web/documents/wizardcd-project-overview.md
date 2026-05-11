@@ -1,6 +1,11 @@
 # WizardCD — Project Overview & Architecture
 
-> **Version:** 1.0 &nbsp;|&nbsp; **Updated:** 2026-03-11
+> **Version:** 1.1 &nbsp;|&nbsp; **Updated:** 2026-05-10
+
+> 📖 **Companion documents:**
+> - **`wizardcd-design-system.md`** — live design system (tokens, typography, components, colour semantics) — read before any visual work
+> - **`wizardcd-platform-roadmap.md`** — multi-phase platform roadmap (Phases 4–15)
+> - **`wizardcd-platform-analysis.md`** — competitive positioning analysis
 
 ---
 

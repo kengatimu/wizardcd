@@ -1,0 +1,50 @@
+# =============================================================================
+# DEV profile — local MacBook development
+# =============================================================================
+# Mirrors the WizardCD UI's DEV environment. Used ONLY for running the
+# runner service natively on macOS (the AWS runner VM continues to use the
+# uat / sit profiles baked into the same JAR).
+#
+# Launch:
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+#   java -jar target/runner-service-ms-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev
+#
+# Paths use ${user.dir} which resolves to the directory you launch from.
+# Launch from runner-service-ms/ so paths resolve correctly relative to web/.
+#   ${user.dir}/../runner           → web/runner/
+#   ${user.dir}/../workspace/jobs   → web/workspace/jobs/
+#   ${user.dir}/../logs             → web/logs/
+#
+# Companion guide: documents/local-deployment/deploying-runner-service-ms-local.sh
+# =============================================================================
+
+logging:
+  file:
+    path: ${user.dir}/../logs
+  level:
+    ROOT: INFO
+    com.ebb.wizardcd.runner: DEBUG     # more verbose on dev for active development
+
+server:
+  port: 8081
+  address: 127.0.0.1                   # bind loopback only — no LAN exposure on dev
+
+runner:
+  scriptsDir: ${user.dir}/../runner
+  workspaceRoot: ${user.dir}/../workspace/jobs
+  executionTimeoutMinutes: 30
+  maxConcurrentJobs: 1
+  public-ip: 127.0.0.1                 # override — skip checkip.amazonaws.com on dev
+                                       # UI's Firewall panel will display 127.0.0.1
+
+wizardcd:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+
+#actuator configs
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'

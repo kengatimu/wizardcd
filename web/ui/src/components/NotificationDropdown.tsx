@@ -126,11 +126,11 @@ export default function NotificationDropdown({
     <div
       ref={ref}
       className="absolute top-full right-0 mt-2 w-[380px] max-h-[480px] flex flex-col
-                 rounded-xl border border-wiz-border bg-wiz-panel shadow-2xl z-50
+                 rounded border border-wiz-border bg-wiz-surface shadow-panel z-50
                  animate-fade-in overflow-hidden"
     >
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-wiz-border/50 bg-wiz-surface/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-wiz-border bg-wiz-bg">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-wiz-cream">Notifications</span>
           {unreadCount > 0 && (
@@ -195,12 +195,12 @@ export default function NotificationDropdown({
                   'w-full flex items-start gap-3 px-4 py-3 text-left transition-colors',
                   'border-b border-wiz-border/20 last:border-b-0',
                   'hover:bg-wiz-raised/60',
-                  !notif.read && 'bg-wiz-surface/40',
+                  !notif.read && 'bg-wiz-bg',
                 )}
               >
                 {/* Status icon */}
                 <div className={clsx(
-                  'flex-shrink-0 mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center',
+                  'flex-shrink-0 mt-0.5 w-7 h-7 rounded flex items-center justify-center',
                   style.bg,
                 )}>
                   <Icon size={14} className={style.color} />

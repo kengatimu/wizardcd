@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>WizardCD Redesign — 10 Concept Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<style>
+/* ── Reset & Base ────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #F2F0EB;
+  color: #1C1C1C;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Sticky Nav ──────────────────────────────────── */
+.page-nav {
+  position: sticky; top: 0; z-index: 200;
+  background: #0D2240;
+  border-bottom: 3px solid #8B1A1A;
+  padding: 0 32px;
+  display: flex; align-items: center; gap: 0;
+  overflow-x: auto;
+}
+.page-nav .brand {
+  font-family: 'Libre Baskerville', serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  letter-spacing: 0.02em;
+  margin-right: 28px;
+  padding: 14px 0;
+  flex-shrink: 0;
+}
+.page-nav .brand span { color: #8B1A1A; }
+.page-nav a {
+  display: block;
+  padding: 14px 14px;
+  color: rgba(255,255,255,.5);
+  text-decoration: none;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+}
+.page-nav a:hover { color: #fff; }
+.page-nav a.active { color: #fff; border-bottom-color: #8B1A1A; }
+
+/* ── Section wrapper ────────────────────────────── */
+.concept {
+  padding: 64px 40px 80px;
+  border-bottom: 1px solid #D6D0C8;
+}
+.concept-intro {
+  max-width: 900px;
+  margin: 0 auto 40px;
+}
+.concept-num {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #8B1A1A;
+  margin-bottom: 8px;
+}
+.concept-title {
+  font-family: 'Libre Baskerville', serif;
+  font-weight: 700;
+  font-size: 26px;
+  color: #0D2240;
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+.concept-rule {
+  width: 40px; height: 2.5px;
+  background: #8B1A1A;
+  margin: 10px 0 14px;
+}
+.concept-desc {
+  font-size: 14px;
+  color: #444;
+  line-height: 1.75;
+  max-width: 580px;
+}
+.concept-desc strong { color: #0D2240; }
+
+/* ── Palette row ────────────────────────────────── */
+.palette-row {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 16px; margin-bottom: 32px;
+}
+.swatch {
+  width: 32px; height: 32px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,.1);
+  flex-shrink: 0;
+}
+.swatch-label {
+  font-size: 10px;
+  color: #666;
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+.swatch-group { text-align: center; }
+
+/* ── Logo row ───────────────────────────────────── */
+.logo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-width: 900px;
+  margin: 0 auto 28px;
+}
+.logo-card {
+  border-radius: 8px;
+  padding: 36px 40px;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.logo-card-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #999;
+  margin-bottom: 20px;
+}
+
+/* ── Logo lockup components ─────────────────────── */
+.logo-rule {
+  height: 2.5px;
+  background: #8B1A1A;
+  margin-bottom: 12px;
+}
+.logo-main {
+  font-family: 'Libre Baskerville', serif;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.logo-sub {
+  font-family: 'Libre Baskerville', serif;
+  font-weight: 400;
+  font-size: 8.5px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  margin-top: 7px;
+}
+.logo-parent {
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: 10px;
+  opacity: 0.45;
+}
+
+/* ── App Shell ──────────────────────────────────── */
+.app-shell {
+  max-width: 900px;
+  margin: 0 auto;
+  height: 580px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  border: 1px solid rgba(0,0,0,.12);
+  box-shadow: 0 8px 40px rgba(0,0,0,.18);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Sidebar */
+.sb {
+  width: 210px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sb-bg);
+  border-right: 1px solid var(--sb-border);
+}
+.sb-logo {
+  padding: 22px 20px 18px;
+  border-bottom: 1px solid var(--sb-border);
+}
+.sb-logo .logo-rule { background: #8B1A1A; width: 28px; margin-bottom: 10px; }
+.sb-logo .logo-main { font-size: 19px; color: var(--sb-logo-main); }
+.sb-logo .logo-sub { font-size: 7px; color: var(--sb-logo-sub); margin-top: 6px; }
+.sb-logo .logo-parent {
+  font-size: 7px; margin-top: 8px;
+  color: var(--sb-muted);
+  opacity: 1;
+  letter-spacing: 0.1em;
+}
+.sb-nav { flex: 1; padding: 16px 10px; display: flex; flex-direction: column; gap: 3px; }
+.sb-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sb-text);
+  cursor: pointer;
+  transition: background .12s;
+  border-left: 3px solid transparent;
+}
+.sb-item:hover { background: var(--sb-hover); }
+.sb-item.active {
+  background: var(--sb-active-bg);
+  color: var(--sb-active-text);
+  border-left-color: #8B1A1A;
+}
+.sb-item .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .4;
+  flex-shrink: 0;
+}
+.sb-item.active .dot { opacity: 1; }
+.sb-bottom {
+  padding: 12px 10px 16px;
+  border-top: 1px solid var(--sb-border);
+}
+.sb-bottom .sb-item { font-size: 13px; }
+.sb-version {
+  padding: 10px 12px 0;
+  font-size: 10px;
+  color: var(--sb-muted);
+  line-height: 1.6;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--page-bg);
+  overflow: hidden;
+}
+.topbar {
+  height: 52px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 24px; gap: 14px;
+}
+.tagline {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex: 1;
+}
+.env-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 12px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+.env-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.content { flex: 1; overflow: auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+
+/* Page title */
+.page-title {
+  font-family: 'Libre Baskerville', serif;
+  font-weight: 700;
+  font-size: 20px;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.page-title-rule {
+  width: 32px; height: 2px;
+  background: #8B1A1A;
+  margin: 8px 0 4px;
+}
+.page-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Metrics */
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid #8B1A1A;
+  padding: 14px 16px;
+  border-radius: 3px;
+}
+.metric-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8B1A1A;
+  margin-bottom: 8px;
+}
+.metric-value {
+  font-family: 'Libre Baskerville', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.metric-value.green { color: #166534; }
+.metric-value.red   { color: #991B1B; }
+
+/* Table */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  flex: 1;
+}
+.table-head {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--page-bg);
+}
+.table-head-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8B1A1A;
+  flex: 1;
+}
+.table-search {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  width: 160px;
+}
+.deploy-btn {
+  padding: 6px 14px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--accent-btn-text);
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  padding: 8px 14px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--page-bg);
+}
+tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--hover); }
+tbody td { padding: 10px 14px; font-size: 12.5px; color: var(--text-2); }
+.job-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.app-name { color: var(--text); font-weight: 600; }
+.status-ok  { color: #166534; font-weight: 600; font-size: 12px; }
+.status-run { color: var(--accent); font-weight: 600; font-size: 12px; }
+.status-err { color: #991B1B; font-weight: 600; font-size: 12px; }
+.env-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+
+/* ════════════════════════════════════════════════
+   10 THEME DIRECTIONS
+   ════════════════════════════════════════════════ */
+
+/* D1 — The Flagship (Navy + Crimson, full EBB) */
+.d1 {
+  --sb-bg:          #0D2240;
+  --sb-border:      rgba(255,255,255,.08);
+  --sb-text:        rgba(255,255,255,.65);
+  --sb-muted:       rgba(255,255,255,.28);
+  --sb-hover:       rgba(255,255,255,.06);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #D44040;
+  --sb-active-bg:   rgba(212,68,68,.22);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #FAFAF8;
+  --surface:        #FFFFFF;
+  --border:         #EAE6DF;
+  --hover:          #F8F6F1;
+  --text:           #0D2240;
+  --text-2:         #333333;
+  --muted:          #666666;
+  --accent:         #8B1A1A;
+  --accent-dim:     #FDF3F3;
+  --accent-border:  #E8C0C0;
+  --accent-btn-text:#FFFFFF;
+}
+
+/* D1 dark-sidebar crimson overrides — #8B1A1A is invisible on #0D2240 (1.6:1);
+   use #D44040 which reads as vivid crimson on dark navy */
+.d1 .sb-logo .logo-rule   { background: #D44040; }
+.d1 .sb-item.active       { border-left-color: #D44040; }
+
+/* D2 — The Editorial (White sidebar, navy+crimson) */
+.d2 {
+  --sb-bg:          #FFFFFF;
+  --sb-border:      #EAE6DF;
+  --sb-text:        #333333;
+  --sb-muted:       #999999;
+  --sb-hover:       #F8F6F1;
+  --sb-logo-main:   #0D2240;
+  --sb-logo-sub:    #8B1A1A;
+  --sb-active-bg:   #FDF3F3;
+  --sb-active-text: #8B1A1A;
+  --page-bg:        #F8F6F1;
+  --surface:        #FFFFFF;
+  --border:         #EAE6DF;
+  --hover:          #F8F6F1;
+  --text:           #0D2240;
+  --text-2:         #333333;
+  --muted:          #666666;
+  --accent:         #8B1A1A;
+  --accent-dim:     #FDF3F3;
+  --accent-border:  #E8C0C0;
+  --accent-btn-text:#FFFFFF;
+}
+
+/* D3 — The Ledger (Cream sidebar, warm and bookish) */
+.d3 {
+  --sb-bg:          #F8F6F1;
+  --sb-border:      #DDD8CF;
+  --sb-text:        #444444;
+  --sb-muted:       #999999;
+  --sb-hover:       #EFECe5;
+  --sb-logo-main:   #0D2240;
+  --sb-logo-sub:    #8B1A1A;
+  --sb-active-bg:   #0D2240;
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #FFFFFF;
+  --surface:        #FFFFFF;
+  --border:         #EAE6DF;
+  --hover:          #F8F6F1;
+  --text:           #0D2240;
+  --text-2:         #333333;
+  --muted:          #666666;
+  --accent:         #8B1A1A;
+  --accent-dim:     #FDF3F3;
+  --accent-border:  #E8C0C0;
+  --accent-btn-text:#FFFFFF;
+}
+
+/* D4 — Midnight Navy (full dark) */
+.d4 {
+  --sb-bg:          #091829;
+  --sb-border:      rgba(255,255,255,.07);
+  --sb-text:        rgba(255,255,255,.60);
+  --sb-muted:       rgba(255,255,255,.22);
+  --sb-hover:       rgba(255,255,255,.05);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #8B1A1A;
+  --sb-active-bg:   rgba(139,26,26,.25);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #0D2240;
+  --surface:        #112035;
+  --border:         rgba(255,255,255,.09);
+  --hover:          rgba(255,255,255,.04);
+  --text:           #FFFFFF;
+  --text-2:         rgba(255,255,255,.75);
+  --muted:          rgba(255,255,255,.38);
+  --accent:         #C0524A;
+  --accent-dim:     rgba(192,82,74,.15);
+  --accent-border:  rgba(192,82,74,.3);
+  --accent-btn-text:#FFFFFF;
+}
+.d4 .metric-value.green { color: #4ADE80; }
+.d4 .metric-value.red   { color: #F87171; }
+.d4 .status-ok  { color: #4ADE80; }
+.d4 .status-err { color: #F87171; }
+
+/* D5 — The Ink (Black + Crimson, no navy) */
+.d5 {
+  --sb-bg:          #111111;
+  --sb-border:      rgba(255,255,255,.08);
+  --sb-text:        rgba(255,255,255,.60);
+  --sb-muted:       rgba(255,255,255,.22);
+  --sb-hover:       rgba(255,255,255,.05);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #8B1A1A;
+  --sb-active-bg:   rgba(139,26,26,.22);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #FAFAFA;
+  --surface:        #FFFFFF;
+  --border:         #E8E8E8;
+  --hover:          #F5F5F5;
+  --text:           #111111;
+  --text-2:         #333333;
+  --muted:          #777777;
+  --accent:         #8B1A1A;
+  --accent-dim:     #FDF3F3;
+  --accent-border:  #E8C0C0;
+  --accent-btn-text:#FFFFFF;
+}
+
+/* D6 — Navy Command (navy sidebar + cream content) */
+.d6 {
+  --sb-bg:          #0D2240;
+  --sb-border:      rgba(255,255,255,.08);
+  --sb-text:        rgba(255,255,255,.65);
+  --sb-muted:       rgba(255,255,255,.28);
+  --sb-hover:       rgba(255,255,255,.06);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #8B1A1A;
+  --sb-active-bg:   rgba(255,255,255,.10);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #F8F6F1;
+  --surface:        #FFFFFF;
+  --border:         #DDD8CF;
+  --hover:          #F0EDE6;
+  --text:           #0D2240;
+  --text-2:         #333333;
+  --muted:          #666666;
+  --accent:         #8B1A1A;
+  --accent-dim:     #FDF3F3;
+  --accent-border:  #E8C0C0;
+  --accent-btn-text:#FFFFFF;
+}
+
+/* D7 — Precision Steel (dark steel-blue + crimson) */
+.d7 {
+  --sb-bg:          #1B2E45;
+  --sb-border:      rgba(255,255,255,.08);
+  --sb-text:        rgba(255,255,255,.62);
+  --sb-muted:       rgba(255,255,255,.25);
+  --sb-hover:       rgba(255,255,255,.06);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #C0524A;
+  --sb-active-bg:   rgba(192,82,74,.2);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #F4F5F7;
+  --surface:        #FFFFFF;
+  --border:         #E2E5EA;
+  --hover:          #F0F2F5;
+  --text:           #1B2E45;
+  --text-2:         #334155;
+  --muted:          #64748B;
+  --accent:         #8B1A1A;
+  --accent-dim:     #FDF3F3;
+  --accent-border:  #E8C0C0;
+  --accent-btn-text:#FFFFFF;
+}
+
+/* D8 — The Consul (Navy + Forest Green) */
+.d8 {
+  --sb-bg:          #0D2240;
+  --sb-border:      rgba(255,255,255,.08);
+  --sb-text:        rgba(255,255,255,.65);
+  --sb-muted:       rgba(255,255,255,.28);
+  --sb-hover:       rgba(255,255,255,.06);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #2E7D32;
+  --sb-active-bg:   rgba(46,125,50,.22);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #FAFAF8;
+  --surface:        #FFFFFF;
+  --border:         #E8EDE8;
+  --hover:          #F4F8F4;
+  --text:           #0D2240;
+  --text-2:         #333333;
+  --muted:          #607060;
+  --accent:         #2E7D32;
+  --accent-dim:     #F0FBF0;
+  --accent-border:  #B8DEBB;
+  --accent-btn-text:#FFFFFF;
+}
+.d8 .logo-rule { background: #2E7D32 !important; }
+.d8 .metric-label { color: #2E7D32; }
+.d8 .page-title-rule { background: #2E7D32; }
+.d8 .table-head-label { color: #2E7D32; }
+.d8 .sb-item.active { border-left-color: #2E7D32; }
+.d8 .metric { border-left-color: #2E7D32; }
+
+/* D9 — Crimson Authority (crimson sidebar) */
+.d9 {
+  --sb-bg:          #6B1414;
+  --sb-border:      rgba(255,255,255,.10);
+  --sb-text:        rgba(255,255,255,.65);
+  --sb-muted:       rgba(255,255,255,.30);
+  --sb-hover:       rgba(255,255,255,.08);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    rgba(255,255,255,.55);
+  --sb-active-bg:   rgba(255,255,255,.14);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #FAFAF8;
+  --surface:        #FFFFFF;
+  --border:         #EAE6DF;
+  --hover:          #F8F6F1;
+  --text:           #0D2240;
+  --text-2:         #333333;
+  --muted:          #666666;
+  --accent:         #0D2240;
+  --accent-dim:     #EEF2F8;
+  --accent-border:  #B8C8DF;
+  --accent-btn-text:#FFFFFF;
+}
+.d9 .logo-rule { background: rgba(255,255,255,.4) !important; }
+.d9 .sb-item.active { border-left-color: rgba(255,255,255,.6); }
+.d9 .metric { border-left-color: #8B1A1A; }
+.d9 .metric-label { color: #8B1A1A; }
+.d9 .page-title-rule { background: #8B1A1A; }
+.d9 .table-head-label { color: #8B1A1A; }
+.d9 .env-pill { background: #EEF2F8; color: #0D2240; border-color: #B8C8DF; }
+
+/* D10 — The Bridge (Navy + Teal, crimson EBB marker) */
+.d10 {
+  --sb-bg:          #0D2240;
+  --sb-border:      rgba(255,255,255,.08);
+  --sb-text:        rgba(255,255,255,.65);
+  --sb-muted:       rgba(255,255,255,.28);
+  --sb-hover:       rgba(255,255,255,.06);
+  --sb-logo-main:   #FFFFFF;
+  --sb-logo-sub:    #0D9488;
+  --sb-active-bg:   rgba(13,148,136,.2);
+  --sb-active-text: #FFFFFF;
+  --page-bg:        #FAFAFA;
+  --surface:        #FFFFFF;
+  --border:         #E2EDED;
+  --hover:          #F4FAFA;
+  --text:           #0D2240;
+  --text-2:         #334155;
+  --muted:          #5F8080;
+  --accent:         #0D9488;
+  --accent-dim:     #F0FDFA;
+  --accent-border:  #99D6D1;
+  --accent-btn-text:#FFFFFF;
+}
+.d10 .metric { border-left-color: #8B1A1A; }
+.d10 .metric-label { color: #8B1A1A; }
+.d10 .page-title-rule { background: #8B1A1A; }
+.d10 .table-head-label { color: #8B1A1A; }
+.d10 .sb-item.active { border-left-color: #0D9488; }
+
+
+/* ── Helper overrides ───────────────────────────── */
+.d3 .sb-item.active { border-left-color: #8B1A1A; }
+</style>
+</head>
+<body>
+
+<nav class="page-nav" id="top">
+  <span class="brand">Wizard<span>CD</span> — Redesign Concepts</span>
+  <a href="#d1" class="active">01 · Flagship</a>
+  <a href="#d2">02 · Editorial</a>
+  <a href="#d3">03 · Ledger</a>
+  <a href="#d4">04 · Midnight</a>
+  <a href="#d5">05 · The Ink</a>
+  <a href="#d6">06 · Command</a>
+  <a href="#d7">07 · Steel</a>
+  <a href="#d8">08 · Consul</a>
+  <a href="#d9">09 · Crimson</a>
+  <a href="#d10">10 · Bridge</a>
+</nav>
+
+
+<!-- ══════════════════════════════════════════════════
+     D1 — THE FLAGSHIP
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d1">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 01</div>
+    <h2 class="concept-title">The Flagship</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Navy sidebar · White content · Crimson accent.</strong> Full, direct EBB inheritance. The sidebar is navy — the same navy as EBB's logo and cover pages. Every panel has a crimson left-accent border. Headings use Libre Baskerville. This reads as: <em>this tool was built by the same people who built EBB.</em> The most authoritative option.</p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#F8F6F1;border-color:#ccc"></div><div class="swatch-label">Cream</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#EAE6DF"></div><div class="swatch-label">Stone</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#333333"></div><div class="swatch-label">Body</div></div>
+    </div>
+  </div>
+
+  <div class="logo-row">
+    <div class="logo-card" style="background:#FAFAF8;border:1px solid #EAE6DF;">
+      <div class="logo-card-label" style="color:#999">LIGHT VARIANT — on white/cream</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">Wizard<span style="color:#8B1A1A">CD</span></div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.32em;margin-top:7px">D E P L O Y M E N T &nbsp; P L A T F O R M</div>
+      <div class="logo-parent" style="color:#666;opacity:1">by EBB Systems · Engineered by Bytes Ltd</div>
+    </div>
+    <div class="logo-card" style="background:#0D2240;border:1px solid #0D2240;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.3)">DARK VARIANT — on navy</div>
+      <div class="logo-rule" style="width:28px;background:#D44040"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#D44040">CD</span></div>
+      <div class="logo-sub" style="color:#D44040;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.32em;margin-top:7px">D E P L O Y M E N T &nbsp; P L A T F O R M</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems · Engineered by Bytes Ltd</div>
+    </div>
+  </div>
+
+  <div class="app-shell d1">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule"></div>
+        <div class="logo-main">Wizard<span style="color:#C0524A">CD</span></div>
+        <div class="logo-sub" style="color:#8B1A1A">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes Ltd</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div>
+          <div class="page-title">Deployment Activity</div>
+          <div class="page-title-rule"></div>
+          <div class="page-sub">Real-time job tracking and lifecycle management.</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div><div class="metric-sub">All-time</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div><div class="metric-sub">No active jobs</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div><div class="metric-sub">Completed</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div><div class="metric-sub">Investigate</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head">
+            <div class="table-head-label">Recent Jobs</div>
+            <input class="table-search" placeholder="Search…"/>
+            <button class="deploy-btn">+ Deploy</button>
+          </div>
+          <table>
+            <thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Lifecycle</th><th>Duration</th></tr></thead>
+            <tbody>
+              <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+              <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+              <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D2 — THE EDITORIAL
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d2">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 02</div>
+    <h2 class="concept-title">The Editorial</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>White sidebar · Cream content · Navy structure.</strong> All white and cream — like a high-quality printed technical document turned into software. Sidebar is white with clean stone borders. Content sits on cream. Maximum clarity, zero noise. Feels like an established publication's digital tool. <em>Sophisticated restraint.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#F8F6F1;border-color:#ccc"></div><div class="swatch-label">Cream</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#EAE6DF"></div><div class="swatch-label">Stone</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#FFFFFF;border:1px solid #EAE6DF;">
+      <div class="logo-card-label" style="color:#999">LIGHT — on white</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">WizardCD</div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T &nbsp; P L A T F O R M</div>
+      <div class="logo-parent" style="color:#666;opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#F8F6F1;border:1px solid #EAE6DF;">
+      <div class="logo-card-label" style="color:#999">CREAM — on cream panels</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">WizardCD</div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T &nbsp; P L A T F O R M</div>
+      <div class="logo-parent" style="color:#666;opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d2">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#0D2240">WizardCD</div>
+        <div class="logo-sub" style="color:#8B1A1A">D E P L O Y M E N T</div>
+        <div class="logo-parent" style="color:#999">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version" style="color:#999">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking and lifecycle management.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div><div class="metric-sub">All-time</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div><div class="metric-sub">No active</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div><div class="metric-sub">Completed</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div><div class="metric-sub">Investigate</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D3 — THE LEDGER
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d3">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 03</div>
+    <h2 class="concept-title">The Ledger</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Cream sidebar · White content · Navy active states.</strong> Sidebar uses EBB's cream `#F8F6F1` — the warmest of the three. Active nav items go full navy (not crimson-tinted). Content on crisp white. Feels like a premium accounting or legal platform — warm, trusted, built to last. <em>Understated authority.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#F8F6F1;border-color:#ccc"></div><div class="swatch-label">Cream</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#EAE6DF"></div><div class="swatch-label">Stone</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#F8F6F1;border:1px solid #DDD8CF;">
+      <div class="logo-card-label" style="color:#999">CREAM — sidebar logo</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">Wizard<span style="color:#8B1A1A">CD</span></div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#888;opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#0D2240;border:1px solid #0D2240;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.3)">DARK — modal headers etc.</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+      <div class="logo-sub" style="color:#C0524A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d3">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#0D2240">Wizard<span style="color:#8B1A1A">CD</span></div>
+        <div class="logo-sub" style="color:#8B1A1A">D E P L O Y M E N T</div>
+        <div class="logo-parent" style="color:#888">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version" style="color:#999">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking and lifecycle management.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D4 — MIDNIGHT NAVY
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d4">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 04</div>
+    <h2 class="concept-title">Midnight Navy</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Full dark navy throughout · Crimson accent.</strong> The dark variant of EBB's own palette. Sidebar and content both in deep navy. Metrics, panels, borders all navy-toned. Crimson glows as the precision accent. Feels like a Bloomberg terminal, a Reuters dashboard, a serious financial data tool — built for professionals who work late. <em>Dark authority, no gimmicks.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#091829"></div><div class="swatch-label">Deep Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#112035"></div><div class="swatch-label">Navy Mid</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#C0524A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#091829;border:1px solid rgba(255,255,255,.07);">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">DARK VARIANT — primary</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+      <div class="logo-sub" style="color:#C0524A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.25);opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#112035;border:1px solid rgba(255,255,255,.08);">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">PANEL VARIANT — on cards</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+      <div class="logo-sub" style="color:#C0524A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.25);opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d4">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+        <div class="logo-sub" style="color:#C0524A">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title" style="font-family:'Libre Baskerville',serif">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#FCD34D">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…" style="background:#091829;border-color:rgba(255,255,255,.1);color:#fff"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D5 — THE INK
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d5">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 05</div>
+    <h2 class="concept-title">The Ink</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Near-black sidebar · White content · Crimson only.</strong> No navy. Pure charcoal-black sidebar — like old Fleet Street print. Crimson is the sole accent, used with absolute precision. Content is clean white. This strips everything back to black ink on white paper. Feels like a financial newspaper, a Reuters terminal, a legal reference system. <em>Pure authority, zero decoration.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#111111"></div><div class="swatch-label">Black</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FAFAFA;border-color:#ccc"></div><div class="swatch-label">Off-white</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#333333"></div><div class="swatch-label">Body</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#FFFFFF;border:1px solid #e8e8e8;">
+      <div class="logo-card-label" style="color:#999">LIGHT — on white</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#111111">Wizard<span style="color:#8B1A1A">CD</span></div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#999;opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#111111;border:1px solid #111;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">DARK — on black</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+      <div class="logo-sub" style="color:#C0524A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d5">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+        <div class="logo-sub" style="color:#C0524A">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D6 — NAVY COMMAND
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d6">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 06</div>
+    <h2 class="concept-title">Navy Command</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Navy sidebar · Cream content · Stone borders.</strong> Navy command structure on the left, warm cream in the main workspace. The warmth of cream stops the navy from feeling cold. Borders are EBB stone. Reminiscent of a premium trading platform or enterprise resource tool — there is a clear "command" zone and a "work" zone. <em>Structured warmth.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#F8F6F1;border-color:#ccc"></div><div class="swatch-label">Cream</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#DDD8CF"></div><div class="swatch-label">Stone</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#0D2240;border:1px solid #0D2240;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">SIDEBAR — navy</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+      <div class="logo-sub" style="color:#C0524A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#F8F6F1;border:1px solid #DDD8CF;">
+      <div class="logo-card-label" style="color:#999">CONTENT — cream bg</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">Wizard<span style="color:#8B1A1A">CD</span></div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#888;opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d6">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+        <div class="logo-sub" style="color:#C0524A">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar" style="background:#F8F6F1">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric" style="background:#FFFFFF"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric" style="background:#FFFFFF"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric" style="background:#FFFFFF"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric" style="background:#FFFFFF"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head" style="background:#F0EDE6"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…" style="background:#FFFFFF"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D7 — PRECISION STEEL
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d7">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 07</div>
+    <h2 class="concept-title">Precision Steel</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Dark steel-blue sidebar · Light grey content · Crimson.</strong> A softer alternative to pure navy — `#1B2E45` sits between navy and charcoal, removing the political-party connotation while keeping authority. Slightly more modern-feeling than D1 while still completely in the EBB gravity. Feels like aerospace, defence, or precision engineering software. <em>Technical gravitas, slightly contemporary.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#1B2E45"></div><div class="swatch-label">Steel</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#F4F5F7;border-color:#ccc"></div><div class="swatch-label">Light Grey</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#E2E5EA"></div><div class="swatch-label">Border</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#F4F5F7;border:1px solid #E2E5EA;">
+      <div class="logo-card-label" style="color:#999">LIGHT — on grey</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#1B2E45">Wizard<span style="color:#8B1A1A">CD</span></div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#888;opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#1B2E45;border:1px solid #1B2E45;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">DARK — on steel</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+      <div class="logo-sub" style="color:#C0524A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d7">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#C0524A">CD</span></div>
+        <div class="logo-sub" style="color:#C0524A">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D8 — THE CONSUL
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d8">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 08</div>
+    <h2 class="concept-title">The Consul</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Navy sidebar · White content · Forest Green accent.</strong> Keeps EBB's navy authority but replaces crimson with deep forest green `#2E7D32`. Deployment = systems running = green. Infrastructure tools often use green (Terraform, Ansible, many ops dashboards). This is the most "technically appropriate" accent choice — green means go, systems live, deployment succeeded. <em>Navy authority, operational green.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#2E7D32"></div><div class="swatch-label">Forest Green</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#F0FBF0;border-color:#ccc"></div><div class="swatch-label">Green Tint</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#E8EDE8"></div><div class="swatch-label">Border</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#FAFAF8;border:1px solid #E8EDE8;">
+      <div class="logo-card-label" style="color:#999">LIGHT — navy/green</div>
+      <div class="logo-rule" style="width:28px;background:#2E7D32"></div>
+      <div class="logo-main" style="color:#0D2240">Wizard<span style="color:#2E7D32">CD</span></div>
+      <div class="logo-sub" style="color:#2E7D32;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#888;opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#0D2240;border:1px solid #0D2240;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">DARK — on navy</div>
+      <div class="logo-rule" style="width:28px;background:#2E7D32"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#4ADE80">CD</span></div>
+      <div class="logo-sub" style="color:#4ADE80;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d8">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#2E7D32"></div>
+        <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#4ADE80">CD</span></div>
+        <div class="logo-sub" style="color:#4ADE80">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D9 — CRIMSON AUTHORITY
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d9">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 09</div>
+    <h2 class="concept-title">Crimson Authority</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Deep crimson sidebar · White content · Navy text.</strong> Flip the palette — crimson becomes the structural colour, navy becomes the text. Bold and completely unique: no other deployment tool uses crimson-primary. Feels like a premium red subscription service, a serious legal platform, or a C-suite executive dashboard. Only for the confident. <em>Bold, singular, unforgettable.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#6B1414"></div><div class="swatch-label">Deep Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy (text)</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#EAE6DF"></div><div class="swatch-label">Stone</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#6B1414;border:1px solid #6B1414;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">SIDEBAR — deep crimson</div>
+      <div class="logo-rule" style="width:28px;background:rgba(255,255,255,.4)"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:rgba(255,255,255,.55)">CD</span></div>
+      <div class="logo-sub" style="color:rgba(255,255,255,.45);font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.25);opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#FAFAF8;border:1px solid #EAE6DF;">
+      <div class="logo-card-label" style="color:#999">LIGHT — navy on white</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">WizardCD</div>
+      <div class="logo-sub" style="color:#8B1A1A;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#888;opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d9">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:rgba(255,255,255,.35)"></div>
+        <div class="logo-main" style="color:#FFFFFF">WizardCD</div>
+        <div class="logo-sub" style="color:rgba(255,255,255,.45)">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn" style="background:#0D2240">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════
+     D10 — THE BRIDGE
+══════════════════════════════════════════════════ -->
+<section class="concept" id="d10">
+  <div class="concept-intro">
+    <div class="concept-num">Direction 10</div>
+    <h2 class="concept-title">The Bridge</h2>
+    <div class="concept-rule"></div>
+    <p class="concept-desc"><strong>Navy sidebar · White content · Dark Teal accent · Crimson EBB marker.</strong> A deliberate bridge between EBB's navy authority and WizardCD's existing teal identity. The crimson rule on the logo remains as the EBB sub-brand marker, but teal takes over as the product's own accent color. Panel left-borders use crimson (EBB). CTA buttons and active states use dark teal. Both identities coexist without conflict. <em>Brand continuity + product identity.</em></p>
+    <div class="palette-row">
+      <div class="swatch-group"><div class="swatch" style="background:#0D2240"></div><div class="swatch-label">Navy</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#8B1A1A"></div><div class="swatch-label">Crimson (EBB)</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#0D9488"></div><div class="swatch-label">Dark Teal</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#FFFFFF;border-color:#ccc"></div><div class="swatch-label">White</div></div>
+      <div class="swatch-group"><div class="swatch" style="background:#F0FDFA;border-color:#ccc"></div><div class="swatch-label">Teal Tint</div></div>
+    </div>
+  </div>
+  <div class="logo-row">
+    <div class="logo-card" style="background:#FAFAFA;border:1px solid #E2EDED;">
+      <div class="logo-card-label" style="color:#999">LIGHT — navy + teal</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#0D2240">Wizard<span style="color:#0D9488">CD</span></div>
+      <div class="logo-sub" style="color:#0D9488;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:#888;opacity:1">by EBB Systems</div>
+    </div>
+    <div class="logo-card" style="background:#0D2240;border:1px solid #0D2240;">
+      <div class="logo-card-label" style="color:rgba(255,255,255,.25)">DARK — on navy</div>
+      <div class="logo-rule" style="width:28px;background:#8B1A1A"></div>
+      <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#2DD4BF">CD</span></div>
+      <div class="logo-sub" style="color:#2DD4BF;font-family:'Libre Baskerville',serif;font-size:7px;letter-spacing:.3em;margin-top:7px">D E P L O Y M E N T</div>
+      <div class="logo-parent" style="color:rgba(255,255,255,.28);opacity:1">by EBB Systems</div>
+    </div>
+  </div>
+  <div class="app-shell d10">
+    <div class="sb">
+      <div class="sb-logo">
+        <div class="logo-rule" style="background:#8B1A1A"></div>
+        <div class="logo-main" style="color:#FFFFFF">Wizard<span style="color:#2DD4BF">CD</span></div>
+        <div class="logo-sub" style="color:#2DD4BF">D E P L O Y M E N T</div>
+        <div class="logo-parent">by EBB Systems</div>
+      </div>
+      <div class="sb-nav">
+        <div class="sb-item active"><span class="dot"></span> Dashboard</div>
+        <div class="sb-item"><span class="dot"></span> New Deploy</div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-item"><span class="dot"></span> Settings</div>
+        <div class="sb-version">WizardCD v1.0.0<br/>Engineered by Bytes</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="tagline">One Config · One Command · Continuous Magic</div>
+        <div class="env-pill"><span class="env-dot"></span>SIT</div>
+      </div>
+      <div class="content">
+        <div><div class="page-title">Deployment Activity</div><div class="page-title-rule"></div><div class="page-sub">Real-time job tracking.</div></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Jobs</div><div class="metric-value">70</div></div>
+          <div class="metric"><div class="metric-label">Running</div><div class="metric-value" style="color:#92400E">0</div></div>
+          <div class="metric"><div class="metric-label">Successful</div><div class="metric-value green">34</div></div>
+          <div class="metric"><div class="metric-label">Failed</div><div class="metric-value red">27</div></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-head-label">Recent Jobs</div><input class="table-search" placeholder="Search…"/><button class="deploy-btn">+ Deploy</button></div>
+          <table><thead><tr><th>Job ID</th><th>Application</th><th>Env</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr><td class="job-id">350f3c57…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>49s</td></tr>
+            <tr><td class="job-id">98836389…</td><td class="app-name">eureka-registry-ms</td><td><span class="env-tag">SIT</span></td><td class="status-ok">● Success</td><td>50s</td></tr>
+            <tr><td class="job-id">3fbe552f…</td><td class="app-name">auth-service</td><td><span class="env-tag">UAT</span></td><td class="status-err">● Failed</td><td>51s</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<div style="padding:40px 40px;background:#0D2240;border-top:3px solid #8B1A1A;text-align:center">
+  <div style="font-family:'Libre Baskerville',serif;font-weight:700;font-size:13px;color:#FFFFFF;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px">WizardCD · Redesign Concepts 2026</div>
+  <div style="font-size:11px;color:rgba(255,255,255,.35);letter-spacing:0.08em">Engineered by Bytes Ltd · EBB Systems</div>
+</div>
+
+<script>
+// highlight active nav on scroll
+const sections = document.querySelectorAll('.concept');
+const links = document.querySelectorAll('.page-nav a');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 80) cur = s.id; });
+  links.forEach(l => { l.classList.toggle('active', l.getAttribute('href') === '#'+cur); });
+});
+</script>
+</body>
+</html>
