@@ -71,3 +71,6 @@ temp/
 # =========================
 coverage/
 .cache/
+
+# Phase 4 — local snapshots of production data (never commit)
+snapshots/

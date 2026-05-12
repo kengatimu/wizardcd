@@ -51,6 +51,36 @@
 
 
 # =============================================================================
+# COMMON GOTCHAS — READ THESE ONCE
+# =============================================================================
+# Three traps that bite during day-to-day operation. Each has a one-line fix.
+#
+#   (1) WRONG PORT IN THE UI
+#       The container exposes SSH on HOST port 2222 (mapped to container port 22).
+#       In the WizardCD UI's SSH ENDPOINT field, type:  127.0.0.1 : 2222
+#       NOT 127.0.0.1 : 22  — that hits macOS Remote Login (or nothing) and
+#       you'll get: "Connection refused".
+#
+#   (2) STALE known_hosts AFTER EVERY REBUILD
+#       Each time you `docker compose down --rmi local && up -d --build`,
+#       the container gets a fresh SSH host key. Your Mac's ~/.ssh/known_hosts
+#       still has the OLD fingerprint for [127.0.0.1]:2222, so SSH refuses:
+#         "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!"
+#       One-line fix — surgically remove just that host's entry:
+#         ssh-keygen -R "[127.0.0.1]:2222"
+#       Then retry — `accept-new` picks up the new fingerprint silently.
+#       (The wizardcd-client-local alias in PART 4.3 uses
+#        UserKnownHostsFile=/dev/null so it never hits this trap.)
+#
+#   (3) RUNNING THE KEY-AUTHORIZE STEP TWICE
+#       PART 5.2 appends the 4 pubkeys to /home/deploy/.ssh/authorized_keys
+#       using `cat >>`. If you run it twice you'll end up with 8 lines (each
+#       key duplicated). It's harmless — SSH matches the first occurrence —
+#       but to de-duplicate cleanly, run the "dedupe" snippet in PART 5.3.
+# =============================================================================
+
+
+# =============================================================================
 # PART 1 — ONE-TIME MAC SETUP
 # =============================================================================
 
@@ -348,6 +378,10 @@ curl -s http://localhost:8081/runner/public-keys | python3 -m json.tool
 # -----------------------------------------------------------------------------
 # 5.2  Authorize all 4 runner pubkeys on the container's deploy user
 #
+#      ⚠️  This step is NOT idempotent — running it twice appends duplicate
+#          lines. Harmless (SSH matches the first occurrence) but clutters
+#          authorized_keys. If you need to re-run, jump to §5.4 (dedupe).
+#
 #      Option A — bulk-append all 4 keys at once (one-liner)
 # -----------------------------------------------------------------------------
 
@@ -377,12 +411,32 @@ ssh wizardcd-client-local
 
 docker compose exec wizardcd-client cat /home/deploy/.ssh/authorized_keys
 
-# Expected — at least 5 lines:
+# Expected — at least 5 lines (after §4.2 + §5.2):
 #   ssh-ed25519 AAAA... wizardcd-client-local@macbook    ← Mac admin key (§4.2)
 #   ssh-ed25519 AAAA... wizardcd-dev@runner              ← Runner DEV key
 #   ssh-ed25519 AAAA... wizardcd-sit@runner              ← Runner SIT key
 #   ssh-ed25519 AAAA... wizardcd-uat@runner              ← Runner UAT key
 #   ssh-ed25519 AAAA... wizardcd-prod@runner             ← Runner PROD key
+#
+# If you see 8+ lines and the wizardcd-* keys appear twice, the §5.2 command
+# was run more than once. Run §5.4 to dedupe.
+
+
+# -----------------------------------------------------------------------------
+# 5.4  Dedupe authorized_keys (only if §5.2 was run multiple times)
+#
+#      Idempotent: keeps the first occurrence of each unique line, drops
+#      duplicates. Preserves order, preserves permissions.
+# -----------------------------------------------------------------------------
+
+docker compose exec wizardcd-client bash -c '
+  awk "!seen[\$0]++" /home/deploy/.ssh/authorized_keys > /tmp/authorized_keys.dedup &&
+  mv /tmp/authorized_keys.dedup /home/deploy/.ssh/authorized_keys &&
+  chown deploy:deploy /home/deploy/.ssh/authorized_keys &&
+  chmod 600 /home/deploy/.ssh/authorized_keys &&
+  echo "After dedupe:" &&
+  cat /home/deploy/.ssh/authorized_keys
+'
 
 
 # =============================================================================
@@ -393,7 +447,35 @@ docker compose exec wizardcd-client cat /home/deploy/.ssh/authorized_keys
 
 
 # -----------------------------------------------------------------------------
-# 6.1  SSH as deploy using each environment key
+# 6.0  PREREQUISITE — clear any stale [127.0.0.1]:2222 entry from known_hosts
+#
+#      If you've ever SSH'd to host:port [127.0.0.1]:2222 before (an earlier
+#      container build, a Vagrant VM, another local service), your ~/.ssh/
+#      known_hosts has a stale fingerprint that won't match the fresh
+#      container's. SSH will refuse with:
+#         "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!"
+#
+#      Surgical one-liner — removes ONLY the offending entry:
+# -----------------------------------------------------------------------------
+
+ssh-keygen -R "[127.0.0.1]:2222"
+
+# Expected output:
+#   # Host [127.0.0.1]:2222 found: line NN
+#   /Users/bishop/.ssh/known_hosts updated.
+#   Original contents retained as /Users/bishop/.ssh/known_hosts.old
+#
+# Or if no entry existed:
+#   (no output — silent success)
+
+
+# -----------------------------------------------------------------------------
+# 6.1  SSH as deploy using each environment key (with output verification)
+#
+#      Each key gets `StrictHostKeyChecking=accept-new` so the first run
+#      records the new fingerprint automatically; subsequent runs skip the
+#      prompt. The `UserKnownHostsFile=/dev/null` means we never grow a stale
+#      entry from these test runs.
 # -----------------------------------------------------------------------------
 
 for env in dev sit uat prod; do
@@ -408,25 +490,74 @@ for env in dev sit uat prod; do
 done
 
 # Expected for each env:
+#   ── Testing dev key ────────────────────
 #   dev key works: deploy@wizardcd-client-local
+#   ── Testing sit key ────────────────────
 #   sit key works: deploy@wizardcd-client-local
+#   ── Testing uat key ────────────────────
 #   uat key works: deploy@wizardcd-client-local
+#   ── Testing prod key ────────────────────
 #   prod key works: deploy@wizardcd-client-local
 
 
 # -----------------------------------------------------------------------------
-# 6.2  Easier — use the WizardCD UI's "Test Connection" button
+# 6.2  Bonus — full smoke test as DEV (includes Java check)
+#
+#      Single command that proves SSH + remote command execution + Java
+#      runtime are all wired correctly. This is the canonical "is the
+#      container ready to receive deployments?" test.
+# -----------------------------------------------------------------------------
+
+ssh -i ~/.ssh/wizardcd_dev_ed25519 \
+    -p 2222 \
+    -o StrictHostKeyChecking=accept-new \
+    deploy@127.0.0.1 \
+    "echo DEV key works: \$(whoami)@\$(hostname) && java -version"
+
+# Expected:
+#   DEV key works: deploy@wizardcd-client-local
+#   openjdk version "25.0.x" ...
+#   OpenJDK Runtime Environment Temurin-25.0.x ...
+#   OpenJDK 64-Bit Server VM Temurin-25.0.x ...
+
+
+# -----------------------------------------------------------------------------
+# 6.3  Interactive shell into the container (for ad-hoc debugging)
+#
+#      Three equivalent ways — pick whichever fits the moment.
+# -----------------------------------------------------------------------------
+
+# Via SSH from Mac (most production-like)
+ssh wizardcd-client-local
+# Now sitting at: deploy@wizardcd-client-local:~$
+# Type `exit` to return to Mac.
+
+# Via docker compose (no SSH needed; works even with no authorized_keys)
+cd /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/docker/client
+docker compose exec wizardcd-client bash       # lands as root
+docker compose exec -u deploy wizardcd-client bash   # lands as deploy
+
+# Single command without opening a shell
+docker compose exec wizardcd-client java -version
+
+
+# -----------------------------------------------------------------------------
+# 6.4  Easier — use the WizardCD UI's "Test Connection" button
 #
 #      New Deploy → Step 1: SSH Target →
 #        Environment   : DEV  (or any)
 #        SSH User      : deploy
 #        SSH Host      : 127.0.0.1
-#        SSH Port      : 2222
+#        SSH Port      : 2222           ← ⚠️ NOT 22; see "Common Gotchas" above
 #        Target Base Path : /app/home/deploy/deployments
 #      → click "Test Connection"
 #
 #      Expected: "✓ Runner can reach the server successfully — ready to continue."
 #      The Java auto-detection should then find /usr/lib/jvm/temurin-25-jdk-amd64/bin/java.
+#
+#      If you see "Connection refused" → port is wrong (probably typed 22).
+#      If you see "Permission denied (publickey)" → keys aren't authorized
+#      (re-run §5.2, then §5.4 to dedupe if needed).
 # -----------------------------------------------------------------------------
 
 
@@ -632,6 +763,26 @@ curl -s http://localhost:8080/actuator/health
 #
 # Q: "Cannot connect to the Docker daemon"
 # A: Same — make sure Docker Desktop / OrbStack is running, OR `colima start`.
+#
+# Q: UI Test Connection says "Connection refused" on port 22
+# A: You typed (or accepted the placeholder) port 22 in the SSH ENDPOINT field.
+#    The container exposes SSH on host port 2222 (mapped to container 22).
+#    Edit the SSH Port field in the wizard from 22 → 2222 and retry.
+#    Verify with runner logs:
+#      grep "SSH test connection requested" /Users/bishop/Desktop/Bishop/Personal/EBB_Systems/WizardCd/web/logs/runner-service-ms.log | tail -3
+#    You should see `127.0.0.1:2222`, not `127.0.0.1:22`.
+#
+# Q: "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!" on SSH
+# A: Stale fingerprint in ~/.ssh/known_hosts. Happens every time you rebuild
+#    the container (down --rmi local && up -d --build creates new host keys).
+#    One-line fix — remove just that host's entry:
+#      ssh-keygen -R "[127.0.0.1]:2222"
+#    Then retry SSH. The `wizardcd-client-local` alias (PART 4.3) avoids this
+#    permanently by using UserKnownHostsFile=/dev/null.
+#
+# Q: authorized_keys has the same key listed multiple times
+# A: §5.2 was run more than once — `cat >>` appends; it doesn't dedupe.
+#    Harmless (SSH uses the first match) but messy. Run §5.4 to dedupe.
 #
 # Q: "ssh: connect to host 127.0.0.1 port 2222: Connection refused"
 # A: Container isn't running. Check:
