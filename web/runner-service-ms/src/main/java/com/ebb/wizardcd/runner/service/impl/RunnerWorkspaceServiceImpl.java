@@ -1,10 +1,8 @@
 package com.ebb.wizardcd.runner.service.impl;
 
 import com.ebb.wizardcd.runner.dto.DeploymentRequest;
-import com.ebb.wizardcd.runner.dto.JobMetadata;
 import com.ebb.wizardcd.runner.service.RunnerWorkspaceService;
 import com.ebb.wizardcd.runner.service.YamlGenerationService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,25 +25,19 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
     // Root directory where all job workspaces live
     private final String workspaceRoot;
 
-    // JSON serializer for metadata.json
-    private final ObjectMapper objectMapper;
-
     // YAML serializer for deployment-config.yml
     private final YamlGenerationService yamlGenerationService;
 
     public RunnerWorkspaceServiceImpl(@Value("${runner.workspaceRoot}") String workspaceRoot,
-                                      ObjectMapper objectMapper,
                                       YamlGenerationService yamlGenerationService) {
         this.workspaceRoot = workspaceRoot;
-        this.objectMapper = objectMapper;
         this.yamlGenerationService = yamlGenerationService;
     }
 
     @Override
     public Path prepareWorkspace(String jobId, DeploymentRequest request,
                                  MultipartFile jarArtifact, MultipartFile libZip,
-                                 List<MultipartFile> certZips, List<MultipartFile> extraZips,
-                                 JobMetadata metadata) {
+                                 List<MultipartFile> certZips, List<MultipartFile> extraZips) {
         try {
 
             // --------------------------------------------------
@@ -155,21 +147,11 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
             Path yamlPath = yamlGenerationService.generateYaml(jobId, request, effectiveJarName, inputDir);
             log.info("Deployment config generated at {}", yamlPath);
 
-            // --------------------------------------------------
-            // Write immutable metadata.json (identity snapshot)
-            // --------------------------------------------------
-            Path metadataFile = jobRoot.resolve("metadata.json");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataFile.toFile(), metadata);
-            log.info("Metadata snapshot written for job {}", jobId);
-
-            // --------------------------------------------------
-            // Persist original DeploymentRequest as request.json
-            // Enables re-deploy flow (Phase 3) — the full config
-            // can be loaded without re-entering the wizard.
-            // --------------------------------------------------
-            Path requestFile = inputDir.resolve("request.json");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(requestFile.toFile(), request);
-            log.info("Deployment request persisted at {}", requestFile);
+            // Phase 4 Stage 5: metadata.json + request.json writes removed.
+            // Identity metadata + DeploymentRequest snapshot now live in the
+            // `deployments` DB table (deployments.config_snapshot JSONB), owned
+            // by DeploymentPersistenceService. The workspace dir holds only
+            // filesystem artefacts (JAR, lib, certs, deploy.log, etc.).
 
             // Return absolute config path for controlled execution
             return yamlPath;

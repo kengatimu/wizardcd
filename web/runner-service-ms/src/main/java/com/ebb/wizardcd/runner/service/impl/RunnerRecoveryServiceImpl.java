@@ -1,119 +1,89 @@
 package com.ebb.wizardcd.runner.service.impl;
 
-import com.ebb.wizardcd.runner.enums.JobExecutionStateStatus;
-import com.ebb.wizardcd.runner.service.RunnerJobStateService;
+import com.ebb.wizardcd.runner.enums.JobStatus;
+import com.ebb.wizardcd.runner.persistence.entity.DeploymentEntity;
+import com.ebb.wizardcd.runner.service.DeploymentPersistenceService;
 import com.ebb.wizardcd.runner.service.RunnerRecoveryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.List;
 
+/**
+ * Phase 4 Stage 5 — DB-driven crash recovery on startup.
+ *
+ * <p>Replaces the earlier filesystem scan of {@code workspace/jobs/}. We now
+ * query the {@code deployments} table for any rows in a non-terminal state
+ * (CREATED / VALIDATING / PREPARING_WORKSPACE / RUNNING / ABORT_REQUESTED) and
+ * transition them to FAILED with a "runner restarted" message.
+ *
+ * <p>Two reasons for this approach over the file scan:
+ * <ol>
+ *   <li><b>Correctness</b> — the file scan was filtering by execution
+ *       sub-state (RECEIVED / WORKSPACE_READY / RUNNING) which Stage 5 no
+ *       longer persists. Lifecycle status is the canonical source of "stuck
+ *       or not" and that lives in the DB.</li>
+ *   <li><b>Performance</b> — boot-time scan of N workspace dirs becomes a
+ *       single indexed query on {@code idx_deployments_status}.</li>
+ * </ol>
+ *
+ * <p>Unmigrated old jobs (pre-Stage-5 file-only) cannot be recovered through
+ * this service because they have no DB row. That's acceptable for Phase 4:
+ *   - If they were in a stuck file state when the runner stopped, restart
+ *     doesn't make them "less stuck"; user-visible status remains whatever
+ *     the old status.json said.
+ *   - Stage 6's migration tool will back-fill DB rows from these workspace
+ *     dirs, after which subsequent restarts can recover them normally.
+ */
 @Service
 public class RunnerRecoveryServiceImpl implements RunnerRecoveryService {
 
     private static final Logger log = LoggerFactory.getLogger(RunnerRecoveryServiceImpl.class);
 
-    // Runner-owned service for reading and updating execution state
-    private final RunnerJobStateService jobStateService;
+    private final DeploymentPersistenceService persistence;
 
-    public RunnerRecoveryServiceImpl(RunnerJobStateService jobStateService) {
-        this.jobStateService = jobStateService;
+    public RunnerRecoveryServiceImpl(DeploymentPersistenceService persistence) {
+        this.persistence = persistence;
     }
 
     @Override
     public void reconcileOnStartup() {
+        log.info("Runner recovery — scanning DB for deployments stuck in non-terminal states");
 
-        // Recovery entry point invoked once at application startup
-        log.info("Runner recovery started — scanning workspace for incomplete jobs");
-
-        // Root directory containing all job workspaces
-        Path jobsRoot = Paths.get("workspace/jobs");
-
-        // If workspace directory does not exist, nothing to reconcile
-        if (!Files.isDirectory(jobsRoot)) {
-            log.info("workspace/jobs directory not found — recovery skipped");
-            return;
-        }
-
-        try (DirectoryStream<Path> jobDirectories = Files.newDirectoryStream(jobsRoot)) {
-
-            // Iterate through every job directory
-            for (Path jobDir : jobDirectories) {
-
-                // Ignore non-directory entries
-                if (!Files.isDirectory(jobDir)) {
-                    continue;
-                }
-
-                // Reconcile a single job based on its last persisted execution state
-                reconcileSingleJob(jobDir);
-            }
-
+        List<DeploymentEntity> stuck;
+        try {
+            stuck = persistence.findStuckDeployments();
         } catch (Exception e) {
-
-            // Any failure during scan is logged but does not crash runner startup
-            log.error("Runner recovery failed during workspace scan: {}", e.getMessage());
-        }
-
-        // Recovery phase completed — runner now consistent
-        log.info("Runner recovery completed");
-    }
-
-    private void reconcileSingleJob(Path jobDir) {
-
-        // Extract jobId from directory name
-        String jobId = jobDir.getFileName().toString();
-
-        // Read last persisted execution state from status.json
-        JobExecutionStateStatus lastState = jobStateService.readCurrentState(jobId);
-
-        // If no execution state exists, nothing to reconcile
-        if (lastState == null) {
+            // DB unavailable on startup is fatal in production but we don't want
+            // to bring the runner down — log error and continue.
+            log.error("Recovery DB query failed — skipping recovery. New jobs will still work. Reason: {}",
+                    e.getMessage(), e);
             return;
         }
 
-        // Recovery rules:
-        // RECEIVED          : safe (never executed)
-        // WORKSPACE_READY   : runner crashed before execution
-        // RUNNING           : runner crashed during execution
-        // SUCCEEDED         : terminal, do nothing
-        // FAILED            : terminal, do nothing
-        // TIMEOUT           : terminal, do nothing
-
-        switch (lastState) {
-
-            case RECEIVED:
-                // Job was accepted but never executed — safe to leave unchanged
-                return;
-
-            case SUCCEEDED:
-                // Terminal successful state — no mutation required
-                return;
-
-            case FAILED:
-                // Terminal failure state — no mutation required
-                return;
-
-            case TIMEOUT:
-                // Terminal timeout state — no mutation required
-                return;
-
-            case WORKSPACE_READY:
-                // Runner prepared workspace but crashed before execution
-                log.warn("Job {} was WORKSPACE_READY during crash — marking FAILED", jobId);
-
-                jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED, "Runner restarted before execution began");
-                return;
-
-            case RUNNING:
-                // Runner crashed while deploy.sh was running
-                log.warn("Job {} was RUNNING during crash — marking FAILED", jobId);
-
-                jobStateService.updateState(jobId, JobExecutionStateStatus.FAILED, "Runner restarted during execution");
+        if (stuck.isEmpty()) {
+            log.info("Runner recovery — no stuck deployments found");
+            return;
         }
+
+        log.warn("Runner recovery — found {} stuck deployment(s); marking each as FAILED", stuck.size());
+
+        int recovered = 0;
+        for (DeploymentEntity d : stuck) {
+            try {
+                persistence.transitionStatus(d.getId(), JobStatus.FAILED,
+                        "Runner restarted while job was in state " + d.getStatus());
+                log.warn("Recovered stuck deployment {} (app={}/{} was {} → now FAILED)",
+                        d.getId(), d.getAppName(), d.getEnvName(), d.getStatus());
+                recovered++;
+            } catch (Exception e) {
+                log.error("Failed to recover stuck deployment {}: {}", d.getId(), e.getMessage(), e);
+                // Continue with others — one row failing recovery shouldn't
+                // block recovery of the rest.
+            }
+        }
+
+        log.info("Runner recovery complete — recovered {}/{} stuck deployment(s)", recovered, stuck.size());
     }
 }

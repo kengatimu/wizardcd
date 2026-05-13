@@ -1,10 +1,10 @@
 package com.ebb.wizardcd.runner.service.impl;
 
 import com.ebb.wizardcd.runner.dto.DeploymentRequest;
-import com.ebb.wizardcd.runner.dto.JobMetadata;
 import com.ebb.wizardcd.runner.enums.JobExecutionStateStatus;
 import com.ebb.wizardcd.runner.enums.JobStatus;
 import com.ebb.wizardcd.runner.service.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,9 +16,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
@@ -53,6 +53,8 @@ public class RunnerServiceImpl implements RunnerService {
     private final RunnerJobStateService jobStateService;
     private final ProcessExecutorService processExecutorService;
     private final ObjectMapper objectMapper;
+    /** Phase 4 Stage 5 — DB-backed deployment persistence (insert row before any lifecycle write). */
+    private final DeploymentPersistenceService persistence;
 
     // Single-thread executor guarantees serialized deployments (V1 model)
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -67,7 +69,8 @@ public class RunnerServiceImpl implements RunnerService {
                              RunnerWorkspaceService workspaceService,
                              RunnerJobStateService jobStateService,
                              ProcessExecutorService processExecutorService,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             DeploymentPersistenceService persistence) {
         this.scriptsDir = scriptsDir;
         this.executionTimeoutMinutes = executionTimeoutMinutes;
         this.maxConcurrentJobs = maxConcurrentJobs;
@@ -76,6 +79,7 @@ public class RunnerServiceImpl implements RunnerService {
         this.jobStateService = jobStateService;
         this.processExecutorService = processExecutorService;
         this.objectMapper = objectMapper;
+        this.persistence = persistence;
     }
 
     // Accepts deployment request and delegates execution asynchronously
@@ -92,8 +96,15 @@ public class RunnerServiceImpl implements RunnerService {
         // Validate the request details
         deploymentValidatorService.validate(request);
 
-        // Initialize lifecycle state machine
-        transitionState(jobId, JobStatus.CREATED);
+        // Phase 4 Stage 5 — create the deployment ROW in the DB up-front, before
+        // any lifecycle transition can fire. This is the canonical "I'm tracking
+        // this job now" moment. The row starts in CREATED state (the persistence
+        // service inserts the initial deployment_states row too).
+        String effectiveType = (jobType != null) ? jobType : "deploy";
+        createDeploymentRow(jobId, request, effectiveType, /* sourceJobId */ null);
+
+        // Initialize lifecycle state machine. CREATED was just inserted by
+        // createDeployment; transitionState() will transition to VALIDATING.
         transitionState(jobId, JobStatus.VALIDATING);
 
         // Persist initial execution snapshot for observability
@@ -106,11 +117,51 @@ public class RunnerServiceImpl implements RunnerService {
         }
 
         // Submit job into single-thread executor (non-blocking)
-        String effectiveType = (jobType != null) ? jobType : "deploy";
         executor.submit(() -> executeJob(jobId, request, jarArtifact, libZip, certZips, extraZips, effectiveType));
 
         // Immediately return RUNNING since execution is asynchronous
         return JobStatus.RUNNING;
+    }
+
+    /**
+     * Phase 4 Stage 5 helper — inserts the {@code deployments} row + initial
+     * {@code deployment_states} row before any lifecycle transition fires.
+     *
+     * <p>The DeploymentRequest is serialised to JSON and stored in
+     * {@code config_snapshot} (JSONB) so a future redeploy / rollback can replay
+     * the exact deploy config without rebuilding it from the wizard.
+     *
+     * <p>If JSON serialisation fails (shouldn't — DeploymentRequest is a plain
+     * POJO), we still create the row with a null snapshot so the deployment is
+     * trackable; the redeploy flow falls back to the file-based request.json
+     * on the workspace dir during the transition window.
+     */
+    private void createDeploymentRow(String jobId, DeploymentRequest request,
+                                     String jobType, UUID sourceJobId) {
+        String configJson = null;
+        try {
+            configJson = objectMapper.writeValueAsString(request);
+        } catch (JsonProcessingException jpe) {
+            // Defensive only — serialisation failure here is exceptional.
+            log.warn("Failed to serialise DeploymentRequest for job {} — config_snapshot will be null", jobId, jpe);
+        }
+
+        Path workspacePath = Path.of(workspaceService.getWorkspaceRoot(), jobId);
+
+        CreateDeploymentCommand cmd = new CreateDeploymentCommand(
+                UUID.fromString(jobId),
+                request.getAppName(),
+                request.getEnvironment(),
+                jobType,
+                request.getJarName(),
+                configJson,
+                sourceJobId,
+                workspacePath.toString(),
+                /* createdBy */ null);
+
+        persistence.createDeployment(cmd);
+        log.info("Deployment row inserted for job {} (app={}, env={}, type={})",
+                jobId, request.getAppName(), request.getEnvironment(), jobType);
     }
 
     // Performs full deployment lifecycle inside executor thread
@@ -123,11 +174,10 @@ public class RunnerServiceImpl implements RunnerService {
             // Move lifecycle into workspace preparation phase
             transitionState(jobId, JobStatus.PREPARING_WORKSPACE);
 
-            // Create immutable job identity snapshot
-            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now(), jobType);
-
-            // Prepare isolated job workspace
-            Path workspaceConfig = workspaceService.prepareWorkspace(jobId, request, jarArtifact, libZip, certZips, extraZips, metadata);
+            // Prepare isolated job workspace (filesystem artefacts only;
+            // metadata is in the deployments table managed by Stage 4 service)
+            Path workspaceConfig = workspaceService.prepareWorkspace(
+                    jobId, request, jarArtifact, libZip, certZips, extraZips);
 
             // Persist workspace readiness execution state
             jobStateService.updateState(jobId, JobExecutionStateStatus.WORKSPACE_READY, "Workspace prepared");
@@ -238,8 +288,15 @@ public class RunnerServiceImpl implements RunnerService {
             throw new IllegalArgumentException("Deployment request must not be null");
         }
 
-        // Initialize lifecycle
-        transitionState(jobId, JobStatus.CREATED);
+        // Phase 4 Stage 5 — create the deployment row up front (rollback type)
+        // The roadmap calls for source_job_id to be set on rollback jobs to
+        // point at the original deployment they're reverting; we don't have
+        // that info here (caller is RunnerController.rollback which has the
+        // original jobId) — leave null for now and revisit when refactoring
+        // the controller to thread it through.
+        createDeploymentRow(jobId, request, "rollback", /* sourceJobId */ null);
+
+        // Initialize lifecycle (CREATED was just inserted by createDeploymentRow)
         transitionState(jobId, JobStatus.VALIDATING);
         jobStateService.updateState(jobId, JobExecutionStateStatus.RECEIVED, "Rollback job accepted by runner");
 
@@ -259,17 +316,15 @@ public class RunnerServiceImpl implements RunnerService {
         try {
             transitionState(jobId, JobStatus.PREPARING_WORKSPACE);
 
-            // Create minimal workspace: just config YAML + logs dir
-            JobMetadata metadata = new JobMetadata(jobId, "system", request.getAppName(), request.getEnvironment(), Instant.now(), "rollback");
+            // Create minimal workspace: just config YAML + logs dir.
+            // metadata.json is no longer written — deployment metadata is in
+            // the `deployments` DB table (inserted by createDeploymentRow in
+            // runRollback).
             Path jobRoot = Path.of(workspaceService.getWorkspaceRoot(), jobId);
             Path inputDir = jobRoot.resolve("input");
             Path logDir = jobRoot.resolve("logs");
             java.nio.file.Files.createDirectories(inputDir);
             java.nio.file.Files.createDirectories(logDir);
-
-            // Write metadata
-            objectMapper.writerWithDefaultPrettyPrinter()
-                    .writeValue(jobRoot.resolve("metadata.json").toFile(), metadata);
 
             // Generate YAML config (reuse existing service)
             String effectiveJarName = request.getJarName() != null ? request.getJarName() : "rollback.jar";
