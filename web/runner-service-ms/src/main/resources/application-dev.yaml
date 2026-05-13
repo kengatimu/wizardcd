@@ -74,6 +74,9 @@ wizardcd:
 
 #actuator configs
 management:
+  endpoint:
+    health:
+      show-details: always
   endpoints:
     web:
       exposure:
