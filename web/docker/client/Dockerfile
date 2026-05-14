@@ -31,13 +31,17 @@ RUN apt-get update && apt-get install -y \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# ── 4.2 — Adoptium Temurin 25 JDK (matches AWS exactly) ──
+# ── 4.2 — Adoptium Temurin 17 JDK ──
+# Slim install — only Java 17 (the version current internal JARs target).
+# Add more LTS versions later by appending `temurin-21-jdk temurin-25-jdk`
+# to the install list and rebuilding.
+# Installation path: /usr/lib/jvm/temurin-17-jdk-amd64/bin/java
 RUN wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public \
       | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
     && echo 'deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb jammy main' \
       > /etc/apt/sources.list.d/adoptium.list \
     && apt-get update \
-    && apt-get install -y temurin-25-jdk \
+    && apt-get install -y temurin-17-jdk \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 4.4 — deploy user (mirrors `adduser --disabled-password deploy`) ──
@@ -62,9 +66,20 @@ RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd
     && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
     && sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 
-# Deploy target dir — matches WizardCD UI's "Target Base Path" field
-RUN mkdir -p /app/home/deploy/deployments \
-    && chown -R deploy:deploy /app/home
+# Deploy target dirs — match the paths used by the WizardCD UI's
+# "Target Base Path" field. Pre-creating with deploy ownership means
+# the runner's `mkdir -p .../<app>/<env>` calls (run as `deploy` over
+# SSH) won't fail with EACCES on the root-owned parents.
+#
+# Add more paths here as you start targeting them in the wizard, e.g.
+#   /u02/apps    (multi-volume layout)
+#   /opt/apps    (FHS-friendly)
+# Anything created post-build via `docker exec -u root` is ephemeral —
+# survives container restarts but is lost on `docker compose up -d --build`.
+RUN mkdir -p \
+      /app/home/deploy/deployments \
+      /u01/gag/registry \
+    && chown -R deploy:deploy /app/home /u01
 
 EXPOSE 22
 
