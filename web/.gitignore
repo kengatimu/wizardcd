@@ -74,3 +74,13 @@ coverage/
 
 # Phase 4 — local snapshots of production data (never commit)
 snapshots/
+
+# =========================
+# RUNNER RUNTIME ARTEFACTS (per-deploy — never commit)
+# =========================
+# Per-job workspaces — uploaded JARs, generated YAML, deploy.log etc.
+# Recovered from PostgreSQL on restart; safe to delete at any time.
+workspace/
+
+# Generated Tanuki wrapper configs (one per deploy)
+runner/wrappers/tanuki/configs/
