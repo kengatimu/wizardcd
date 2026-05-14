@@ -240,3 +240,57 @@ export async function testSshConnection(params: {
   const { data } = await apiClient.post<SshTestResult>('/ssh/test', params)
   return data
 }
+
+// ── Deploy-path preflight (Step 2 of the wizard) ─────────────────────────────
+
+/**
+ * Possible outcomes from {@link checkDeployPath}. Drives the colour + content
+ * of the Step 2 path-status panel.
+ *
+ *  • OK                   exists, owned by runAs       → sig-green ✓, Next enabled
+ *  • WRONG_OWNER          exists, wrong owner          → sig-yellow ⚠ + chown script
+ *  • MISSING              missing, parent writable     → sig-blue ℹ "runner will create"
+ *  • PARENT_NOT_WRITABLE  missing, parent root-owned   → sig-yellow ⚠ + sudo mkdir script
+ *  • INVALID_PATH         client-side guard rejected   → sig-red ✗
+ *  • UNREACHABLE          SSH itself failed            → sig-red ✗
+ */
+export type PathCheckStatus =
+  | 'OK'
+  | 'WRONG_OWNER'
+  | 'MISSING'
+  | 'PARENT_NOT_WRITABLE'
+  | 'INVALID_PATH'
+  | 'UNREACHABLE'
+
+export interface PathCheckResult {
+  status:                 PathCheckStatus
+  path:                   string
+  exists:                 boolean | null
+  actualOwner:            string | null
+  expectedOwner:          string
+  parentPath:             string | null
+  parentExists:           boolean | null
+  parentWritableByRunAs:  boolean | null
+  /** Shell commands the user copy-pastes to fix the issue. Empty for OK / MISSING. */
+  fixCommands:            string[]
+  /** One-line human-readable summary shown in the panel header. */
+  humanReason:            string
+  /** Last line of SSH stderr (sanitised) — only populated for UNREACHABLE. */
+  sshErrorTail:           string | null
+}
+
+/**
+ * Check whether the supplied deploy path on the target server is usable.
+ * Fires from Step 2 of the wizard the moment DEPLOY PATH is entered/changed.
+ */
+export async function checkDeployPath(params: {
+  sshUser:        string
+  sshHost:        string
+  sshPort:        number
+  environment:    string
+  runAsUser:      string
+  targetBasePath: string
+}): Promise<PathCheckResult> {
+  const { data } = await apiClient.post<PathCheckResult>('/ssh/check-path', params)
+  return data
+}

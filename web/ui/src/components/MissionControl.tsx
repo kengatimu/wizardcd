@@ -427,10 +427,10 @@ function PreflightCheck({ form }: { form: MissionControlProps['form'] }) {
         detail={r?.targetReachable ? `${form.sshUser}@${form.sshHost}:${form.sshPort}` : r?.message ?? undefined}
       />
 
-      {/* Write permissions */}
+      {/* Write permissions — label flips with the actual state so the icon + text don't contradict */}
       <CheckItem
         ok={r?.writable ?? null}
-        label="Permissions OK"
+        label={r?.writable === false ? 'Permission denied' : 'Permissions OK'}
         detail={r?.writable
           ? `Write access to ${abbreviatePath(form.targetBasePath)}`
           : r?.targetReachable ? 'No write access to deploy path' : undefined}

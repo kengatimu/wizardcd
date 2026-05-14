@@ -4,13 +4,14 @@ import { ArrowLeft, ArrowRight, Wand2, Upload, Check, X, Copy, Wifi, WifiOff, Lo
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { submitJob, fetchRunnerPublicKeys, fetchRunnerInfo, testSshConnection } from '../api/jobs'
+import { submitJob, fetchRunnerPublicKeys, fetchRunnerInfo, testSshConnection, checkDeployPath } from '../api/jobs'
 import type { DeploymentRequest } from '../types/DeploymentRequest'
 import FormField, { SelectField, FieldWrapper, RowInput, RowSelect, RowField } from '../components/FormField'
 import ToggleSwitch from '../components/ToggleSwitch'
 import DynamicList from '../components/DynamicList'
 import { useTheme, type ActiveEnv } from '../context/ThemeContext'
 import MissionControl, { SIDEBAR_MAX_W } from '../components/MissionControl'
+import { DeployPathStatusPanel } from '../components/DeployPathStatusPanel'
 
 // ── Step metadata ─────────────────────────────────────────────────
 
@@ -1177,6 +1178,25 @@ export default function DeployPage() {
   const [portDetection,         setPortDetection]         = useState<{ source: string; profile: string | null } | null>(null)
   const [portMismatchDismissed, setPortMismatchDismissed] = useState(false)
 
+  // ── Step 2 deploy-path preflight (Phase 4 follow-up) ──────────────────────
+  // 'idle'     — nothing entered yet, no check yet
+  // 'checking' — request in flight to /ssh/check-path
+  // 'ok'       — path exists + owned by runAsUser
+  // 'wrong_owner'         — path exists, wrong owner (amber + chown script)
+  // 'missing'             — doesn't exist, parent writable (blue ℹ, runner will create)
+  // 'parent_not_writable' — doesn't exist, parent root-owned (amber + sudo mkdir)
+  // 'invalid_path'        — client-side guard rejected (red)
+  // 'unreachable'         — SSH itself failed (red — fix Step 1 first)
+  // 'stale'               — inputs changed since last successful check; click Re-check
+  const [pathCheckState,  setPathCheckState]  = useState<
+    'idle' | 'checking' | 'ok' | 'wrong_owner' | 'missing'
+    | 'parent_not_writable' | 'invalid_path' | 'unreachable' | 'stale'
+  >('idle')
+  const [pathCheckResult, setPathCheckResult] = useState<import('../api/jobs').PathCheckResult | null>(null)
+  /** Last-checked inputs key — used to detect when the cached result is stale. */
+  const [pathCheckedKey,  setPathCheckedKey]  = useState<string | null>(null)
+  const [pathCopiedIdx,   setPathCopiedIdx]   = useState<number | null>(null)
+
   // ── JVM heap unit toggles (used in advanced separate-heap mode) ─────────
   const [xmsUnit, setXmsUnit] = useState<'m' | 'g'>(() =>
     form.xms.endsWith('g') ? 'g' : 'm',
@@ -1471,7 +1491,20 @@ export default function DeployPage() {
     }, 80)
   }
 
+  // Step-2 hard gate — refuse to advance into Step 3 when the deploy path is
+  // known to be broken on the server. Soft states (idle / missing / ok / stale)
+  // don't block; only the four "you must act on the server" states do.
+  const pathBlocksStep2 =
+    pathCheckState === 'wrong_owner'
+    || pathCheckState === 'parent_not_writable'
+    || pathCheckState === 'invalid_path'
+    || pathCheckState === 'unreachable'
+
   const handleNext = () => {
+    if (step === 2 && pathBlocksStep2) {
+      toast.error('Fix the deploy path on the server (see the path-status panel) before continuing.')
+      return
+    }
     setDeparted((prev) => new Set([...prev, step]))
     const next = step + 1
     setVisited((prev) => new Set([...prev, next]))
@@ -1732,6 +1765,67 @@ export default function DeployPage() {
       setTestConnMsg('runner-unreachable')
     }
   }
+
+  // ── Step 2 deploy-path preflight ─────────────────────────────────────────
+  // Fires on blur of the DEPLOY PATH field, plus on demand via the Re-check
+  // button. Result is cached by inputs key — changing host/user/runAs/path
+  // invalidates the cache and marks the state 'stale' until the user re-checks.
+  const pathCheckInputsKey = (): string =>
+    [form.sshHost, form.sshPort, form.sshUser, form.environment,
+     form.runAsUser, form.targetBasePath.trim()].join('|')
+
+  const handleCheckDeployPath = useCallback(async () => {
+    const path    = form.targetBasePath.trim()
+    const runAs   = form.runAsUser.trim()
+    const sshUser = form.sshUser.trim()
+    const sshHost = form.sshHost.trim()
+    const sshPort = parseInt(form.sshPort, 10)
+    // Need every input filled before we can check; if anything's missing,
+    // sit at 'idle' so the panel doesn't render misleading state.
+    if (!path || !runAs || !sshUser || !sshHost || !sshPort) {
+      setPathCheckState('idle')
+      setPathCheckResult(null)
+      return
+    }
+    setPathCheckState('checking')
+    try {
+      const res = await checkDeployPath({
+        sshUser, sshHost, sshPort,
+        environment:    form.environment,
+        runAsUser:      runAs,
+        targetBasePath: path,
+      })
+      setPathCheckResult(res)
+      setPathCheckedKey(pathCheckInputsKey())
+      // Map the server's status enum (uppercase) → our lowercase state token
+      setPathCheckState(res.status.toLowerCase().replace(/_/g, '_') as typeof pathCheckState)
+    } catch {
+      // Fetch itself failed — show a generic UNREACHABLE
+      setPathCheckResult({
+        status: 'UNREACHABLE',
+        path,
+        exists: null,
+        actualOwner: null,
+        expectedOwner: runAs,
+        parentPath: null,
+        parentExists: null,
+        parentWritableByRunAs: null,
+        fixCommands: [],
+        humanReason: 'Cannot reach the runner service — check the API connection.',
+        sshErrorTail: null,
+      })
+      setPathCheckState('unreachable')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.targetBasePath, form.runAsUser, form.sshUser, form.sshHost, form.sshPort, form.environment])
+
+  // Mark the cached check stale whenever any of the inputs that fed it change.
+  useEffect(() => {
+    if (pathCheckedKey && pathCheckedKey !== pathCheckInputsKey() && pathCheckState !== 'idle') {
+      setPathCheckState('stale')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.targetBasePath, form.runAsUser, form.sshUser, form.sshHost, form.sshPort, form.environment])
 
   // Apply a history entry to the live form.
   // File references (JAR, ZIPs) are intentionally left as null —
@@ -2996,7 +3090,25 @@ export default function DeployPage() {
                     hint={<>Root directory on the target server where applications are deployed. App lands at <span className="font-mono">{form.targetBasePath.trim() || '<path>'}/{form.appName.trim() || '<appName>'}/</span></>}
                     value={form.targetBasePath}
                     onChange={(e) => set('targetBasePath', e.target.value)}
+                    onBlur={handleCheckDeployPath}
                     error={errors.targetBasePath}
+                  />
+
+                  {/* Deploy-path preflight status panel */}
+                  <DeployPathStatusPanel
+                    state={pathCheckState}
+                    result={pathCheckResult}
+                    canCheck={
+                      !!form.targetBasePath.trim() && !!form.runAsUser.trim() &&
+                      !!form.sshUser.trim() && !!form.sshHost.trim() && !!form.sshPort.trim()
+                    }
+                    onRecheck={handleCheckDeployPath}
+                    copiedIdx={pathCopiedIdx}
+                    onCopy={(idx, text) => {
+                      void navigator.clipboard.writeText(text)
+                      setPathCopiedIdx(idx)
+                      setTimeout(() => setPathCopiedIdx(null), 1800)
+                    }}
                   />
 
                   {/* Live summary */}
@@ -4455,19 +4567,31 @@ export default function DeployPage() {
         </div>
 
         {/* Next / Deploy — compact primary */}
-        <div>
+        <div className="flex flex-col items-end gap-1">
           {step < 4 ? (
-            <button
-              type="button"
-              onClick={handleNext}
-              className="group inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[12px] font-semibold text-white bg-wiz-gold hover:bg-wiz-gold-light hover:translate-x-0.5 active:scale-95 transition-all duration-200"
-              style={{ boxShadow: '0 3px 10px rgba(139,26,26,0.28), 0 1px 2px rgba(139,26,26,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 16px rgba(139,26,26,0.36), 0 2px 4px rgba(139,26,26,0.22), inset 0 1px 0 rgba(255,255,255,0.18)' }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 3px 10px rgba(139,26,26,0.28), 0 1px 2px rgba(139,26,26,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' }}
-            >
-              <span>Next step</span>
-              <ArrowRight size={12} strokeWidth={2.5} className="group-hover:translate-x-0.5 transition-transform" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={step === 2 && pathBlocksStep2}
+                title={step === 2 && pathBlocksStep2 ? 'Fix the deploy path on the server first' : undefined}
+                className={clsx(
+                  'group inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[12px] font-semibold text-white bg-wiz-gold hover:bg-wiz-gold-light hover:translate-x-0.5 active:scale-95 transition-all duration-200',
+                  step === 2 && pathBlocksStep2 && 'opacity-50 cursor-not-allowed hover:translate-x-0',
+                )}
+                style={{ boxShadow: '0 3px 10px rgba(139,26,26,0.28), 0 1px 2px rgba(139,26,26,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' }}
+                onMouseEnter={(e) => { if (!(step === 2 && pathBlocksStep2)) { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 16px rgba(139,26,26,0.36), 0 2px 4px rgba(139,26,26,0.22), inset 0 1px 0 rgba(255,255,255,0.18)' } }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 3px 10px rgba(139,26,26,0.28), 0 1px 2px rgba(139,26,26,0.18), inset 0 1px 0 rgba(255,255,255,0.15)' }}
+              >
+                <span>Next step</span>
+                <ArrowRight size={12} strokeWidth={2.5} className="group-hover:translate-x-0.5 transition-transform" />
+              </button>
+              {step === 2 && pathBlocksStep2 && (
+                <p className="text-[10px] text-sig-yellow leading-tight max-w-[280px] text-right">
+                  Fix the deploy path on the server (see the panel above the runtime row) before continuing.
+                </p>
+              )}
+            </>
           ) : (
             <button
               type="button"
