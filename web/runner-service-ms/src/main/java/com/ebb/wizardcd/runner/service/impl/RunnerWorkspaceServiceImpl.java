@@ -50,8 +50,19 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
                 throw new IllegalArgumentException("Invalid jobId format");
             }
 
-            // Resolve job workspace root
-            Path jobRoot = Path.of(workspaceRoot, jobId);
+            // Resolve job workspace root.
+            //
+            // We normalize() + toAbsolutePath() up-front so that every downstream
+            // path (inputDir, libDir, certDir, extraDir, ...) is a clean absolute
+            // path with no '..' segments. This matters for the ZIP-slip guard in
+            // extractZipToDir: the guard compares an entry path *after* normalize()
+            // against the targetDir using Path.startsWith() (component-wise). If
+            // targetDir still contains '..' segments (because the configured
+            // `runner.workspaceRoot` is something like `${user.dir}/../workspace/jobs`),
+            // the comparison fails for every nested entry — false-positive
+            // ZIP-slip rejections like 'lib/javassist-3.29.2-GA.jar' even though
+            // the entry resolves inside targetDir.
+            Path jobRoot = Path.of(workspaceRoot, jobId).toAbsolutePath().normalize();
 
             // Prevent accidental workspace reuse.
             // We check for the 'input/' subdirectory, NOT the job root directory.
@@ -188,6 +199,11 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
     // ZIP-slip protection is applied on the resolved entry path.
     // ------------------------------------------------------------------
     private void extractZipToDir(MultipartFile zip, Path targetDir) throws IOException {
+        // Defence-in-depth: normalize targetDir locally so the ZIP-slip
+        // startsWith() check is robust even if a caller passes a path that
+        // still contains '..' or '.' segments. Pair with the normalize() at
+        // jobRoot construction.
+        targetDir = targetDir.toAbsolutePath().normalize();
         log.info("Extracting ZIP: {} → {}", zip.getOriginalFilename(), targetDir);
 
         // ── Pass 1: detect common top-level prefix ──────────────────────
