@@ -14,6 +14,7 @@ import RollbackModal from '../components/RollbackModal'
 import type { DashboardSummary } from '../types/DashboardSummary'
 import type { JobSummary } from '../types/JobSummary'
 import StatusBadge from '../components/StatusBadge'
+import JobTypeBadge from '../components/JobTypeBadge'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -252,12 +253,12 @@ function PulseRibbon({ jobs, navigate }: PulseRibbonProps) {
   )
 }
 
-// ── Skeleton Row (6 cols) ─────────────────────────────────────────
+// ── Skeleton Row (7 cols — Job ID | App | Type | Env | Status | Started | Duration) ──
 
 function SkeletonRow() {
   return (
     <tr>
-      {Array.from({ length: 6 }).map((_, i) => (
+      {Array.from({ length: 7 }).map((_, i) => (
         <td key={i} className="px-4 py-2">
           <div className="skeleton h-4 rounded w-3/4" />
         </td>
@@ -655,12 +656,13 @@ export default function DashboardPage() {
               Application is the "flex" column — takes remaining space after fixed cols. */}
           <table className="w-full text-sm table-fixed">
             <colgroup>
-              <col className="w-[27%]" />   {/* Job ID — widened so full UUID fits on one line */}
-              <col className="w-[19%]" />   {/* Application */}
-              <col className="w-[9%]"  />   {/* Environment */}
-              <col className="w-[12%]" />   {/* Status */}
-              <col className="w-[19%]" />   {/* Started */}
-              <col className="w-[14%]" />   {/* Duration */}
+              <col className="w-[24%]" />   {/* Job ID — slightly tighter to make room for Type, full UUID still fits */}
+              <col className="w-[18%]" />   {/* Application */}
+              <col className="w-[9%]"  />   {/* Type — deploy / redeploy / rollback */}
+              <col className="w-[8%]"  />   {/* Environment */}
+              <col className="w-[11%]" />   {/* Status */}
+              <col className="w-[17%]" />   {/* Started */}
+              <col className="w-[13%]" />   {/* Duration */}
             </colgroup>
             <thead>
               <tr className="bg-wiz-raised border-b-2 border-wiz-border-mid">
@@ -669,6 +671,9 @@ export default function DashboardPage() {
                 </th>
                 <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-wiz-muted">
                   Application
+                </th>
+                <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-wiz-muted">
+                  Type
                 </th>
                 <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-wiz-muted">
                   Environment
@@ -735,6 +740,11 @@ export default function DashboardPage() {
                         </span>
                       </td>
 
+                      {/* Type — deploy / redeploy / rollback */}
+                      <td className="px-4 py-2">
+                        <JobTypeBadge type={job.jobType} />
+                      </td>
+
                       {/* Environment */}
                       <td className="px-4 py-2">
                         <EnvBadge env={job.environment} />
@@ -787,7 +797,7 @@ export default function DashboardPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center">
+                  <td colSpan={7} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Activity size={32} className="text-wiz-border-mid" />
                       {hasActiveFilters ? (
