@@ -2165,7 +2165,16 @@ export default function DeployPage() {
         <div className="max-w-3xl xl:!max-w-[1132px]">
           {(() => {
             const stepStatuses = STEPS.map(s => getStepStatus(s.id, step, visited, form, jvmConfigEnabled))
-            const completed    = stepStatuses.filter(s => s === 'complete').length
+            // Step 4 (the final review screen) has no form fields — count it as
+            // complete when all prior steps validate, regardless of whether the
+            // user is currently parked on it. Fixes the misleading "3/4 complete"
+            // pill when the user reaches the review with all data filled (natural
+            // reading is 100%).
+            const reviewIdx      = STEPS.length - 1
+            const reviewComplete = stepStatuses.slice(0, reviewIdx).every(s => s === 'complete')
+            const completed      = stepStatuses
+              .filter((s, i) => s === 'complete' || (i === reviewIdx && reviewComplete))
+              .length
             const progressPct  = (completed / STEPS.length) * 100
             const isAllDone    = completed === STEPS.length
             // Hide the floating chip at the extremes — at 0 it collides with
