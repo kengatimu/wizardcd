@@ -92,51 +92,55 @@ export WIZARDCONFIG="${INPUT_DIR}/deployment-config.yml"
 source "${SCRIPT_DIR}/helpers.sh"
 
 # -----------------------------------------------------------
-# Ensure yq v4.44.3 is installed (strict enforcement)
+# Validate yq is present and on a compatible major version.
+#
+# Why this changed (2026-05-14):
+#   The previous implementation pinned an EXACT version (v4.44.3) and
+#   attempted an auto-install of the Linux binary via `sudo mv` when it
+#   didn't match. Two problems:
+#
+#     1. The runner spawns deploy.sh without a TTY, so sudo cannot prompt
+#        for a password — it fails with "a terminal is required to read
+#        the password" and aborts the deploy. This is exactly how local
+#        Mac runs (and most CI contexts) break.
+#
+#     2. The download URL was hard-coded to `yq_linux_amd64`, which is a
+#        Linux ELF binary. Installing it onto macOS leaves a broken yq.
+#
+#   yq v4 follows a stable command syntax — any v4.x release will parse
+#   our deployment-config.yml correctly. So the contract is simply:
+#   "we need yq v4". If it's missing, we tell the user how to install it
+#   for their OS instead of trying to do it under sudo in the background.
 # -----------------------------------------------------------
+readonly YQ_REFERENCE_VERSION="v4.44.3"      # the version the project is developed against
+
 ensure_yq_installed() {
-  local required_version="v4.44.3"
-  local install_path="/usr/local/bin/yq"
-  local tmp_binary="/tmp/yq"
-
-  local current_version=""
-
-  if command -v yq >/dev/null 2>&1; then
-    current_version="$(yq --version 2>/dev/null | awk '{print $NF}' || true)"
-  fi
-
-  if [[ "$current_version" == "$required_version" ]]; then
-    return 0
-  fi
-
-  log_warn "yq ${required_version} required — detected: ${current_version:-none}. Installing..."
-
-  if ! command -v curl >/dev/null 2>&1; then
-    log_error "curl is required to install yq automatically."
+  if ! command -v yq >/dev/null 2>&1; then
+    log_error "yq is not installed or not on PATH."
+    case "$(uname -s)" in
+      Darwin) log_error "Install with: brew install yq" ;;
+      Linux)  log_error "Install with: sudo curl -L https://github.com/mikefarah/yq/releases/download/${YQ_REFERENCE_VERSION}/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq" ;;
+      *)      log_error "Install yq v4.x from https://github.com/mikefarah/yq/releases" ;;
+    esac
     exit $EXIT_INVALID_ARGS
   fi
 
-  local yq_url="https://github.com/mikefarah/yq/releases/download/${required_version}/yq_linux_amd64"
+  # Extract a clean "X.Y.Z" — yq prints e.g. "yq (https://github.com/...) version v4.48.1"
+  local raw current major
+  raw="$(yq --version 2>/dev/null || true)"
+  current="${raw##* }"     # last whitespace-separated token: "v4.48.1"
+  current="${current#v}"   # strip leading "v"
+  major="${current%%.*}"
 
-  curl -L "$yq_url" -o "$tmp_binary" || {
-    log_error "Failed to download yq ${required_version}"
+  if [[ "$major" != "4" ]]; then
+    log_error "yq v4.x required (developed against ${YQ_REFERENCE_VERSION}). Detected: ${current:-unknown}"
+    log_error "Replace your yq with a v4.x release: https://github.com/mikefarah/yq/releases"
     exit $EXIT_INVALID_ARGS
-  }
-
-  chmod +x "$tmp_binary"
-
-  if [[ "$EUID" -ne 0 ]]; then
-    if command -v sudo >/dev/null 2>&1; then
-      sudo mv "$tmp_binary" "$install_path"
-    else
-      log_error "Root or sudo privileges required to install yq."
-      exit $EXIT_INVALID_ARGS
-    fi
-  else
-    mv "$tmp_binary" "$install_path"
   fi
 
-  log_info "yq ${required_version} installed successfully."
+  if [[ "v${current}" != "$YQ_REFERENCE_VERSION" ]]; then
+    log_info "yq v${current} detected — compatible (reference version is ${YQ_REFERENCE_VERSION}, any v4.x works)."
+  fi
 }
 
 # ---------------------------------------------------------------
