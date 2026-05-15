@@ -102,6 +102,29 @@ DEPLOYMENT_TAR="/tmp/${APP}-${ENV}.tar.gz"
 # Helper Functions
 # --------------------------------------------------
 
+# Check whether a TCP port is open on the local target. Tries tools in
+# order of preference and falls back to a pure-bash /dev/tcp connect test
+# so this works even on minimal/slim base images that don't ship with
+# iproute2 (no `ss`), net-tools (no `netstat`) or lsof.
+#
+# Why this exists: the original implementation relied solely on
+#   `ss -lnt | grep -q ":${PORT}"`
+# which silently produces `ss: command not found` on minimal containers
+# (e.g. official Ubuntu slim/CIS-hardened images). The startup loop then
+# spins for the full PORT_WAIT_TIMEOUT even though the app is actually
+# up, and the deploy fails with a misleading "failed to bind port".
+#
+# The /dev/tcp fallback is a Bash built-in (no subprocesses) and is
+# strictly stronger than `ss`: it verifies the app is ACCEPTING
+# connections, not merely listening on the socket.
+port_open() {
+  local port=$1
+  if command -v ss      >/dev/null 2>&1 && ss      -lnt 2>/dev/null | grep -Eq "[:.]${port}[[:space:]]"; then return 0; fi
+  if command -v netstat >/dev/null 2>&1 && netstat -lnt 2>/dev/null | grep -Eq "[:.]${port}[[:space:]]"; then return 0; fi
+  # /dev/tcp — bash built-in TCP connect. Subshell so the fd auto-closes.
+  (exec 3<>/dev/tcp/127.0.0.1/"${port}") >/dev/null 2>&1
+}
+
 # Safely create directory — tries normal mkdir first, falls back to sudo mkdir.
 # This allows the deploy user to create directories outside its home when a
 # sudoers rule grants NOPASSWD: /bin/mkdir (set up by WizardCD installer).
@@ -263,8 +286,10 @@ start_app() {
       exit 60
     fi
 
-    # Check if port is bound
-    if ss -lnt | grep -q ":${SERVER_PORT}"; then
+    # Check if the port is bound — uses port_open() helper which tries
+    # ss → netstat → bash /dev/tcp so this works on minimal images that
+    # don't ship iproute2/net-tools.
+    if port_open "${SERVER_PORT}"; then
       log_info "  Port ${SERVER_PORT} is ready (took ${port_waited}s)"
       break
     fi
@@ -322,8 +347,10 @@ start_app() {
       exit 60
     fi
 
-    # Ensure application port is still bound
-    if ! ss -lnt | grep -q ":${SERVER_PORT}"; then
+    # Ensure application port is still bound — same portability rule as
+    # the startup wait loop: use port_open() so we don't depend on `ss`
+    # being installed on the target.
+    if ! port_open "${SERVER_PORT}"; then
       log_error "Application crashed during stability monitoring at ${elapsed}s — port ${SERVER_PORT} not bound"
       log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
       exit 60

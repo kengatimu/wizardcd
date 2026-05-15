@@ -229,11 +229,16 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
       isAborted       ? (executeSection.hasError ? 'error' : 'success') :
       executeSection.hasError ? 'error' : 'success'
 
+    // Stability Check stays "pending" until its own log section actually
+    // appears. The previous logic flipped it to "running" the moment the
+    // Execute Remote section started, which made Remote and Stability paint
+    // as simultaneously running. The only "running" path now is the explicit
+    // stabilityActive branch (last log line mentions "stability check").
     const stabilityStatus: PhaseStatus =
       !inRunning        ? 'pending' :
       isSuccess         ? 'success' :
       stabilityActive   ? 'running' :
-      !stabilitySection ? (isAborted ? 'aborted' : (executeSection && !executeSection.hasError ? (isLive ? 'running' : 'pending') : 'pending')) :
+      !stabilitySection ? (isAborted ? 'aborted' : 'pending') :
       isAborted         ? (stabilitySection.hasError ? 'error' : 'success') :
       stabilitySection.hasError ? 'error' : 'success'
 
@@ -279,11 +284,17 @@ function PhasesContent({ sections, lifecycleState, isLive, selectedPhase, onSele
       isAborted      ? (remoteSection.hasError ? 'error' : 'success') :
       remoteSection.hasError ? 'error' : 'success'
 
+    // Stability Check stays "pending" until its own log section actually
+    // appears. The previous logic flipped it to "running" the moment the
+    // Remote Deployment section started, which made Remote and Stability
+    // paint as simultaneously running. The only "running" path now is the
+    // explicit stabilityActive branch (last log line mentions "stability
+    // check").
     const stabilityStatus: PhaseStatus =
       !inRunning        ? 'pending' :
       isSuccess         ? 'success' :
       stabilityActive   ? 'running' :
-      !stabilitySection ? (isAborted ? 'aborted' : (remoteSection && !remoteSection.hasError ? (isLive ? 'running' : 'pending') : 'pending')) :
+      !stabilitySection ? (isAborted ? 'aborted' : 'pending') :
       isAborted         ? (stabilitySection.hasError ? 'error' : 'success') :
       stabilitySection.hasError ? 'error' : 'success'
 

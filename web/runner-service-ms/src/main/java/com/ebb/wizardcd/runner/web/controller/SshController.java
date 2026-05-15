@@ -1,5 +1,7 @@
 package com.ebb.wizardcd.runner.web.controller;
 
+import com.ebb.wizardcd.runner.dto.PathCheckRequest;
+import com.ebb.wizardcd.runner.dto.PathCheckResult;
 import com.ebb.wizardcd.runner.dto.PreflightResult;
 import com.ebb.wizardcd.runner.dto.SshTestRequest;
 import com.ebb.wizardcd.runner.dto.SshTestResult;
@@ -130,4 +132,35 @@ public class SshController {
             String targetBasePath,
             String appName
     ) {}
+
+    /**
+     * Checks the state of the deploy-target path on the remote server.
+     * Called from Step 2 of the New Deploy wizard the moment the user has filled in
+     * DEPLOY PATH + RUN AS. The runner SSHes in and returns a structured
+     * {@link PathCheckResult} the UI uses to drive the path-status panel.
+     *
+     * <p>See {@link com.ebb.wizardcd.runner.service.SshKeyService#checkPath} for
+     * the full set of possible outcomes.
+     */
+    @PostMapping("/ssh/check-path")
+    public ResponseEntity<PathCheckResult> checkPath(@RequestBody PathCheckRequest request) {
+        log.info("Deploy path check requested for {}@{}:{} [env={}, runAs={}, path={}]",
+                request.getSshUser(), request.getSshHost(), request.getSshPort(),
+                request.getEnvironment(), request.getRunAsUser(), request.getTargetBasePath());
+
+        PathCheckResult result = sshKeyService.checkPath(
+                request.getSshUser(),
+                request.getSshHost(),
+                request.getSshPort() != null ? request.getSshPort() : 22,
+                request.getEnvironment(),
+                request.getRunAsUser(),
+                request.getTargetBasePath()
+        );
+
+        log.info("Deploy path check result for {}@{}: status={} owner={} (expected={})",
+                request.getSshUser(), request.getSshHost(),
+                result.getStatus(), result.getActualOwner(), result.getExpectedOwner());
+
+        return ResponseEntity.ok(result);
+    }
 }

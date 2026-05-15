@@ -8,6 +8,8 @@ import com.ebb.wizardcd.runner.dto.JobResponse;
 import com.ebb.wizardcd.runner.dto.JobSummary;
 import com.ebb.wizardcd.runner.enums.JobExecutionStateStatus;
 import com.ebb.wizardcd.runner.enums.JobStatus;
+import com.ebb.wizardcd.runner.persistence.entity.DeploymentEntity;
+import com.ebb.wizardcd.runner.service.DeploymentPersistenceService;
 import com.ebb.wizardcd.runner.service.JobQueryService;
 import com.ebb.wizardcd.runner.service.RunnerJobStateService;
 import com.ebb.wizardcd.runner.service.RunnerService;
@@ -29,6 +31,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -46,19 +49,23 @@ public class RunnerController {
     private final JobQueryService jobQueryService;
     private final ObjectMapper objectMapper;
     private final com.ebb.wizardcd.runner.service.SshKeyService sshKeyService;
+    /** Phase 4 Stage 5 — DB-backed lookup for config_snapshot + appName/envName. */
+    private final DeploymentPersistenceService persistence;
 
     public RunnerController(@Value("${runner.workspaceRoot}") String workspaceRoot,
                             RunnerService runnerService,
                             RunnerJobStateService jobStateService,
                             JobQueryService jobQueryService,
                             ObjectMapper objectMapper,
-                            com.ebb.wizardcd.runner.service.SshKeyService sshKeyService) {
+                            com.ebb.wizardcd.runner.service.SshKeyService sshKeyService,
+                            DeploymentPersistenceService persistence) {
         this.workspaceRoot = workspaceRoot;
         this.runnerService = runnerService;
         this.jobStateService = jobStateService;
         this.jobQueryService = jobQueryService;
         this.objectMapper = objectMapper;
         this.sshKeyService = sshKeyService;
+        this.persistence = persistence;
     }
 
     // Accept deployment request and return HTTP 202 because execution is asynchronous
@@ -171,20 +178,42 @@ public class RunnerController {
         // Build base response
         JobResponse response = new JobResponse(jobId, lifecycle, execution, history);
 
-        // Enrich with application / environment / createdAt from metadata.json
-        try {
-            Path metadataPath = Path.of(workspaceRoot, jobId, "metadata.json");
-            if (Files.exists(metadataPath)) {
-                JobMetadata meta = objectMapper.readValue(metadataPath.toFile(), JobMetadata.class);
-                response.setApplication(meta.getApplication());
-                response.setEnvironment(meta.getEnvironment());
-                response.setCreatedAt(meta.getCreatedAt());
+        // Enrich with application / environment / createdAt — DB first, then file fallback
+        boolean enrichedFromDb = false;
+        Optional<UUID> uuid = parseJobUuid(jobId);
+        if (uuid.isPresent()) {
+            Optional<DeploymentEntity> entity = persistence.findById(uuid.get());
+            if (entity.isPresent()) {
+                DeploymentEntity d = entity.get();
+                response.setApplication(d.getAppName());
+                response.setEnvironment(d.getEnvName());
+                response.setCreatedAt(d.getCreatedAt());
+                enrichedFromDb = true;
             }
-        } catch (Exception e) {
-            log.warn("Could not read metadata for job {}: {}", jobId, e.getMessage());
+        }
+        if (!enrichedFromDb) {
+            // File fallback — for unmigrated old jobs (Stage 5/6 transition window)
+            try {
+                Path metadataPath = Path.of(workspaceRoot, jobId, "metadata.json");
+                if (Files.exists(metadataPath)) {
+                    JobMetadata meta = objectMapper.readValue(metadataPath.toFile(), JobMetadata.class);
+                    response.setApplication(meta.getApplication());
+                    response.setEnvironment(meta.getEnvironment());
+                    response.setCreatedAt(meta.getCreatedAt());
+                }
+            } catch (Exception e) {
+                log.warn("Could not read metadata for job {} (file fallback): {}", jobId, e.getMessage());
+            }
         }
 
         return ResponseEntity.ok(response);
+    }
+
+    /** Parse a String jobId to UUID, returning empty for non-UUID inputs (test fixtures, malformed). */
+    private static Optional<UUID> parseJobUuid(String jobId) {
+        if (jobId == null || jobId.isBlank()) return Optional.empty();
+        try { return Optional.of(UUID.fromString(jobId)); }
+        catch (IllegalArgumentException e) { return Optional.empty(); }
     }
 
     /**
@@ -318,12 +347,36 @@ public class RunnerController {
     }
 
     /**
-     * Loads deployment config for a job, with fallback to other jobs with same app/env.
+     * Loads deployment config for a job. Phase 4 Stage 5 — DB first, file fallback.
+     *
+     * <p>Three search strategies, applied in order:
+     * <ol>
+     *   <li>DB primary — {@code deployments.config_snapshot} JSONB for the given jobId</li>
+     *   <li>File primary — {@code workspace/jobs/<id>/input/request.json}
+     *       (covers unmigrated old jobs)</li>
+     *   <li>Same-app/env scan — last resort for jobs that have no own config
+     *       (e.g. rollback or migration-truncated rows). Pulls the most recent
+     *       config_snapshot for the same (appName, envName) combination.</li>
+     * </ol>
      */
     private DeploymentRequest loadDeploymentConfig(String jobId) {
+        // 1. DB primary — read config_snapshot JSON straight off the deployments row
+        Optional<UUID> uuid = parseJobUuid(jobId);
+        if (uuid.isPresent()) {
+            Optional<DeploymentEntity> entity = persistence.findById(uuid.get());
+            if (entity.isPresent() && entity.get().getConfigSnapshot() != null) {
+                try {
+                    return objectMapper.readValue(entity.get().getConfigSnapshot(), DeploymentRequest.class);
+                } catch (Exception e) {
+                    log.warn("Failed to deserialise config_snapshot for job {}: {}", jobId, e.getMessage());
+                    // fall through to file fallback
+                }
+            }
+        }
+
+        // 2. File primary — request.json on disk (unmigrated jobs)
         Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
         DeploymentRequest config = null;
-
         if (Files.exists(requestFile)) {
             try {
                 config = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
@@ -332,20 +385,35 @@ public class RunnerController {
             }
         }
 
+        // 3. Same-app/env scan — last resort
         if (config == null) {
-            log.info("No valid request.json for job {} — searching for config from same app/env", jobId);
-            Path metadataFile = Path.of(workspaceRoot, jobId, "metadata.json");
+            log.info("No own config for job {} — searching for same app/env", jobId);
+
             String targetApp = null;
             String targetEnv = null;
 
-            if (Files.exists(metadataFile)) {
-                try {
-                    JobMetadata meta = objectMapper.readValue(metadataFile.toFile(), JobMetadata.class);
-                    targetApp = meta.getApplication();
-                    targetEnv = meta.getEnvironment();
-                } catch (Exception ignored) {}
+            // Try DB first for app/env identity
+            if (uuid.isPresent()) {
+                Optional<DeploymentEntity> entity = persistence.findById(uuid.get());
+                if (entity.isPresent()) {
+                    targetApp = entity.get().getAppName();
+                    targetEnv = entity.get().getEnvName();
+                }
             }
 
+            // Fallback to file metadata.json
+            if (targetApp == null || targetEnv == null) {
+                Path metadataFile = Path.of(workspaceRoot, jobId, "metadata.json");
+                if (Files.exists(metadataFile)) {
+                    try {
+                        JobMetadata meta = objectMapper.readValue(metadataFile.toFile(), JobMetadata.class);
+                        targetApp = meta.getApplication();
+                        targetEnv = meta.getEnvironment();
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            // Scan workspace for a sibling job with matching app/env that has a usable config
             if (targetApp != null && targetEnv != null) {
                 java.io.File[] jobDirs = new java.io.File(workspaceRoot).listFiles(java.io.File::isDirectory);
                 if (jobDirs != null) {
@@ -358,7 +426,8 @@ public class RunnerController {
                                 if (targetApp.equals(candidateMeta.getApplication())
                                         && targetEnv.equals(candidateMeta.getEnvironment())) {
                                     config = objectMapper.readValue(candidateRequest.toFile(), DeploymentRequest.class);
-                                    log.info("Using config from job {} for rollback", jobDir.getName());
+                                    log.info("Using config from sibling job {} for {}/{}",
+                                            jobDir.getName(), targetApp, targetEnv);
                                     break;
                                 }
                             } catch (Exception ignored) {}
@@ -403,7 +472,8 @@ public class RunnerController {
         return ResponseEntity.accepted().body(response);
     }
 
-    // Return the original DeploymentRequest config used for a specific job
+    // Return the original DeploymentRequest config used for a specific job.
+    // Phase 4 Stage 5: DB-first via loadDeploymentConfig(), with file fallback for old jobs.
     @GetMapping("/{jobId}/config")
     public ResponseEntity<DeploymentRequest> getConfig(@PathVariable String jobId) {
         log.debug("Getting deployment config for job {}", jobId);
@@ -414,19 +484,12 @@ public class RunnerController {
             return ResponseEntity.badRequest().build();
         }
 
-        Path requestFile = Path.of(workspaceRoot, jobId, "input", "request.json");
-        if (Files.notExists(requestFile)) {
-            log.warn("No request.json found for job {}", jobId);
+        DeploymentRequest config = loadDeploymentConfig(jobId);
+        if (config == null) {
+            log.warn("No config found for job {} (DB or file)", jobId);
             return ResponseEntity.notFound().build();
         }
-
-        try {
-            DeploymentRequest config = objectMapper.readValue(requestFile.toFile(), DeploymentRequest.class);
-            return ResponseEntity.ok(config);
-        } catch (Exception e) {
-            log.error("Failed to read request.json for job {}: {}", jobId, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
+        return ResponseEntity.ok(config);
     }
 
     // Return last N lines of runner log without loading entire file into memory

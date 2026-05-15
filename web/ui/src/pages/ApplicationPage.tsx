@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { fetchJobs } from '../api/jobs'
 import StatusBadge from '../components/StatusBadge'
+import JobTypeBadge from '../components/JobTypeBadge'
 import type { JobSummary } from '../types/JobSummary'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -317,15 +318,17 @@ export default function ApplicationPage() {
               ) : (
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
-                    <col className="w-[10%]" />   {/* Env */}
-                    <col className="w-[16%]" />   {/* Status */}
-                    <col className="w-[20%]" />   {/* Started */}
+                    <col className="w-[9%]"  />   {/* Env */}
+                    <col className="w-[11%]" />   {/* Type — deploy / redeploy / rollback */}
+                    <col className="w-[14%]" />   {/* Status */}
+                    <col className="w-[18%]" />   {/* Started */}
                     <col className="w-[12%]" />   {/* Duration */}
-                    <col className="w-[42%]" />   {/* Job ID */}
+                    <col className="w-[36%]" />   {/* Job ID */}
                   </colgroup>
                   <thead>
                     <tr className="border-b border-wiz-border bg-wiz-bg text-wiz-muted text-[10px] uppercase tracking-wider">
                       <th className="text-left px-4 py-2.5">Env</th>
+                      <th className="text-left px-4 py-2.5">Type</th>
                       <th className="text-left px-4 py-2.5">Status</th>
                       <th className="text-left px-4 py-2.5">Started</th>
                       <th className="text-left px-4 py-2.5">Duration</th>
@@ -355,6 +358,11 @@ export default function ApplicationPage() {
                             ) : (
                               <span className="text-xs text-wiz-muted font-mono">{job.environment ?? '—'}</span>
                             )}
+                          </td>
+
+                          {/* Type — deploy / redeploy / rollback */}
+                          <td className="px-4 py-2.5">
+                            <JobTypeBadge type={job.jobType} />
                           </td>
 
                           {/* Status */}

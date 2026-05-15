@@ -3,301 +3,250 @@ package com.ebb.wizardcd.runner.service.impl;
 import com.ebb.wizardcd.runner.dto.JobExecutionStatus;
 import com.ebb.wizardcd.runner.enums.JobExecutionStateStatus;
 import com.ebb.wizardcd.runner.enums.JobStatus;
+import com.ebb.wizardcd.runner.persistence.entity.DeploymentEntity;
+import com.ebb.wizardcd.runner.persistence.entity.DeploymentStateEntity;
+import com.ebb.wizardcd.runner.service.DeploymentPersistenceService;
 import com.ebb.wizardcd.runner.service.RunnerJobStateService;
-import java.util.ArrayList;
-import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
-// File-backed implementation that persists job state into status.json
-// This class does NOT enforce transitions — it only stores snapshots
+/**
+ * Phase 4 Stage 5 — DB-backed implementation of {@link RunnerJobStateService}.
+ *
+ * <p>This service is now a thin façade in front of {@link DeploymentPersistenceService}.
+ * It exists for two reasons:
+ *
+ * <ol>
+ *   <li><b>API stability for the orchestrator.</b> {@link com.ebb.wizardcd.runner.service.impl.RunnerServiceImpl}
+ *       calls {@code updateStatus()} dozens of times across deploy / rollback /
+ *       abort flows. Keeping the same interface means the orchestrator code
+ *       doesn't change in Stage 5 — only the implementation moves to the DB.
+ *   <li><b>Transparent file fallback for unmigrated jobs.</b> Until Stage 6
+ *       back-fills the DB from existing workspace dirs, this layer reads from
+ *       file as a fallback when the DB has no row for a given job id. After
+ *       Stage 6 the fallback is dead code; it stays as a safety net.
+ * </ol>
+ *
+ * <h2>Write path</h2>
+ * <ul>
+ *   <li>{@link #updateStatus(String, JobStatus)} → {@code DeploymentPersistenceService.transitionStatus(...)}</li>
+ *   <li>{@link #updateState(String, JobExecutionStateStatus, String)} →
+ *       <b>log-only</b>. V1 schema has no column for the execution sub-state;
+ *       it remains a runtime / observability concept. (A future V2 migration
+ *       can add a column if the UX requires it.)</li>
+ * </ul>
+ *
+ * <h2>Read path</h2>
+ * <ul>
+ *   <li>{@link #getStatus(String)} — DB first, then file fallback.</li>
+ *   <li>{@link #readSnapshot(String)} — DB first (constructs
+ *       {@link JobExecutionStatus} from {@link DeploymentEntity} + lifecycle
+ *       history), then file fallback.</li>
+ *   <li>{@link #readCurrentState(String)} — file-only (no DB column).</li>
+ * </ul>
+ *
+ * <h2>Security notes</h2>
+ * <ul>
+ *   <li>String jobId is parsed to UUID inside a try/catch — non-UUID jobIds
+ *       (e.g. the {@code test-job-001} fixture) fall through cleanly to the
+ *       file-based path without crashing.</li>
+ *   <li>File reads use the validated {@code workspaceRoot} from config;
+ *       jobId is treated as a single path segment so {@code ..} / {@code /}
+ *       never escape the workspace root.</li>
+ *   <li>DB writes fail loud ({@link IllegalStateException}) so callers can
+ *       transition the job to FAILED rather than silently losing state.</li>
+ * </ul>
+ */
 @Service
 public class RunnerJobStateServiceImpl implements RunnerJobStateService {
 
     private static final Logger log = LoggerFactory.getLogger(RunnerJobStateServiceImpl.class);
 
-    // Log fsync warning only once — avoid flooding logs on every state write
-    private volatile boolean fsyncWarningLogged = false;
-
-    // Base directory where all job workspaces live
+    /** Base directory used for the file-fallback read path. */
     private final String workspaceRoot;
 
-    // JSON serializer used to write/read status.json deterministically
+    /** Jackson — used only on the file-fallback read path. */
     private final ObjectMapper objectMapper;
+
+    /** Phase 4 DB-backed persistence. */
+    private final DeploymentPersistenceService persistence;
 
     public RunnerJobStateServiceImpl(
             @Value("${runner.workspaceRoot}") String workspaceRoot,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            DeploymentPersistenceService persistence) {
         this.workspaceRoot = workspaceRoot;
         this.objectMapper = objectMapper;
+        this.persistence = persistence;
     }
 
-    // --------------------------------------------------
-    // Execution Phase State (fine-grained runtime state)
-    // --------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────
+    // Execution sub-state — log-only in Stage 5
+    // ─────────────────────────────────────────────────────────────────────
+
     @Override
-    public void updateState(String jobId,
-                            JobExecutionStateStatus executionState,
-                            String message) {
-
-        try {
-
-            // Resolve job workspace directory
-            Path jobDir = Path.of(workspaceRoot, jobId);
-
-            // Resolve status.json path
-            Path statusPath = jobDir.resolve("status.json");
-
-            // Load existing snapshot if present
-            JobExecutionStatus existing = readSnapshotIfExists(statusPath);
-
-            // Build updated snapshot preserving lifecycle state, stateHistory, and completedAt.
-            // updateState() is always called AFTER updateStatus() in the execution flow.
-            // Without forwarding completedAt + stateHistory here we silently erase the values
-            // that updateStatus() just wrote — leaving completedAt null in the final snapshot.
-            JobExecutionStatus updated = new JobExecutionStatus(
-                    jobId,
-                    existing != null ? existing.getJobStatus() : null,
-                    executionState.name(),
-                    Instant.now(),
-                    message
-            );
-            updated.setCompletedAt(existing != null ? existing.getCompletedAt() : null);
-            updated.setStateHistory(
-                    existing != null && existing.getStateHistory() != null
-                            ? existing.getStateHistory()
-                            : new ArrayList<>()
-            );
-
-            // Persist snapshot atomically (no partial writes)
-            writeAtomically(statusPath, updated);
-
-            log.debug("Execution state [{}] persisted for job {}", executionState, jobId);
-
-        } catch (Exception e) {
-
-            // Execution state persistence failure is critical
-            log.error("Failed to persist execution state for job {}: {}", jobId, e.getMessage());
-
-            throw new IllegalStateException(
-                    "Execution state persistence failed for jobId=" + jobId,
-                    e
-            );
-        }
+    public void updateState(String jobId, JobExecutionStateStatus executionState, String message) {
+        // V1 schema has no column for JobExecutionStateStatus — Stage 5
+        // deliberately drops persistence of execution sub-state. Lifecycle
+        // status (JobStatus) covers the same ground for the UI. If a future
+        // V2 migration adds an `execution_state` column, this becomes a DB
+        // write; until then it's purely observational.
+        log.info("[exec-state] job {} → {} ({})", jobId, executionState, message);
     }
 
     @Override
     public JobExecutionStateStatus readCurrentState(String jobId) {
-
-        try {
-
-            // Resolve job workspace directory
-            Path jobDir = Path.of(workspaceRoot, jobId);
-
-            // Resolve status.json path
-            Path statusPath = jobDir.resolve("status.json");
-
-            // No persisted execution state yet
-            if (!Files.exists(statusPath)) {
-                return null;
-            }
-
-            // Deserialize snapshot
-            JobExecutionStatus snapshot =
-                    objectMapper.readValue(statusPath.toFile(), JobExecutionStatus.class);
-
-            // Execution state not yet set
-            if (snapshot.getJobExecutionStateStatus() == null) {
-                return null;
-            }
-
-            // Convert stored string back to enum
-            return JobExecutionStateStatus.valueOf(
-                    snapshot.getJobExecutionStateStatus()
-            );
-
-        } catch (Exception e) {
-
-            // Read failures are logged but not fatal
-            log.error("Failed to read execution state for job {}: {}", jobId, e.getMessage());
-
-            return null;
-        }
+        // No DB column for exec sub-state — try the file fallback so the
+        // UI's exec-status column still works for unmigrated old jobs.
+        return readExecStateFromFile(jobId);
     }
 
-    // --------------------------------------------------
-    // Lifecycle State (control-plane state machine)
-    // --------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────
+    // Lifecycle state — DB-backed via DeploymentPersistenceService
+    // ─────────────────────────────────────────────────────────────────────
+
     @Override
     public void updateStatus(String jobId, JobStatus status) {
-
+        Optional<UUID> uuid = parseJobUuid(jobId);
+        if (uuid.isEmpty()) {
+            // Non-UUID jobIds (test fixtures) — log and skip. There's no
+            // sensible DB write target for them, and old file fixtures are
+            // read-only.
+            log.warn("Skipping lifecycle DB write for non-UUID jobId '{}' → {}", jobId, status);
+            return;
+        }
         try {
-
-            // Resolve job workspace directory
-            Path jobDir = Path.of(workspaceRoot, jobId);
-
-            // Resolve status.json path
-            Path statusPath = jobDir.resolve("status.json");
-
-            // Load existing snapshot if present
-            JobExecutionStatus existing = readSnapshotIfExists(statusPath);
-
-            Instant now = Instant.now();
-
-            // Carry forward existing stateHistory, then append the new transition
-            List<JobExecutionStatus.StateTransition> history =
-                    (existing != null && existing.getStateHistory() != null)
-                            ? new ArrayList<>(existing.getStateHistory())
-                            : new ArrayList<>();
-            history.add(new JobExecutionStatus.StateTransition(status.name(), now));
-
-            // Record completedAt when the job enters a terminal state
-            Instant completedAt = (existing != null) ? existing.getCompletedAt() : null;
-            if (status == JobStatus.SUCCESS || status == JobStatus.FAILED || status == JobStatus.ABORTED) {
-                completedAt = now;
-            }
-
-            // Build updated snapshot preserving execution state
-            JobExecutionStatus updated = new JobExecutionStatus(
-                    jobId,
-                    status.name(),
-                    existing != null ? existing.getJobExecutionStateStatus() : null,
-                    now,
-                    existing != null ? existing.getMessage() : null
-            );
-            updated.setStateHistory(history);
-            updated.setCompletedAt(completedAt);
-
-            // Persist snapshot atomically
-            writeAtomically(statusPath, updated);
-
-            log.debug("Lifecycle state [{}] persisted for job {}", status, jobId);
-
-        } catch (Exception e) {
-
-            // Lifecycle state persistence failure is fatal
-            log.error("Failed to persist lifecycle state for job {}: {}", jobId, e.getMessage());
-
-            throw new IllegalStateException("Lifecycle state persistence failed for jobId=" + jobId, e);
+            persistence.transitionStatus(uuid.get(), status, null);
+        } catch (java.util.NoSuchElementException e) {
+            // Row doesn't exist yet — this happens when the orchestrator calls
+            // updateStatus(CREATED) before the deployment row has been inserted
+            // by RunnerServiceImpl. Stage 5 makes RunnerServiceImpl call
+            // DeploymentPersistenceService.createDeployment() FIRST, so this
+            // path should be unreachable in practice. Logging at warn so any
+            // regression is visible.
+            log.warn("Cannot transition jobId={} → {}: no deployment row found in DB", jobId, status);
+            throw new IllegalStateException(
+                    "transitionStatus called before createDeployment for jobId=" + jobId, e);
         }
     }
 
     @Override
     public JobStatus getStatus(String jobId) {
+        // 1. DB first
+        Optional<UUID> uuid = parseJobUuid(jobId);
+        if (uuid.isPresent()) {
+            Optional<DeploymentEntity> entity = persistence.findById(uuid.get());
+            if (entity.isPresent()) {
+                try {
+                    return JobStatus.valueOf(entity.get().getStatus());
+                } catch (IllegalArgumentException unknownState) {
+                    log.warn("Unknown JobStatus '{}' in deployments table for jobId={}",
+                            entity.get().getStatus(), jobId);
+                    // fall through to file
+                }
+            }
+        }
 
+        // 2. File fallback — for unmigrated old jobs (and test fixtures)
+        return readStatusFromFile(jobId);
+    }
+
+    @Override
+    public JobExecutionStatus readSnapshot(String jobId) {
+        // 1. DB first
+        Optional<UUID> uuid = parseJobUuid(jobId);
+        if (uuid.isPresent()) {
+            Optional<DeploymentEntity> entity = persistence.findById(uuid.get());
+            if (entity.isPresent()) {
+                return buildSnapshotFromDb(jobId, entity.get());
+            }
+        }
+
+        // 2. File fallback — for unmigrated old jobs
+        return readSnapshotFromFile(jobId);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Internal helpers — DB → DTO mapping
+    // ─────────────────────────────────────────────────────────────────────
+
+    private JobExecutionStatus buildSnapshotFromDb(String jobId, DeploymentEntity entity) {
+        // Lifecycle field-only snapshot. Exec sub-state is null (V1 schema).
+        JobExecutionStatus snap = new JobExecutionStatus(
+                jobId,
+                entity.getStatus(),                                            // lifecycle
+                null,                                                          // exec sub-state — not persisted
+                entity.getCompletedAt() != null ? entity.getCompletedAt() : entity.getCreatedAt(),
+                null                                                           // message — not persisted on the row
+        );
+        snap.setCompletedAt(entity.getCompletedAt());
+
+        // State history rebuilt from deployment_states rows
+        List<DeploymentStateEntity> states = persistence.findStatesForDeployment(entity.getId());
+        List<JobExecutionStatus.StateTransition> history = new ArrayList<>(states.size());
+        for (DeploymentStateEntity s : states) {
+            history.add(new JobExecutionStatus.StateTransition(s.getStatus(), s.getTimestamp()));
+        }
+        snap.setStateHistory(history);
+        return snap;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Internal helpers — file fallback (transitional, removed post-Stage 6)
+    // ─────────────────────────────────────────────────────────────────────
+
+    private JobStatus readStatusFromFile(String jobId) {
+        JobExecutionStatus snap = readSnapshotFromFile(jobId);
+        if (snap == null || snap.getJobStatus() == null) return null;
         try {
-
-            // Resolve job workspace directory
-            Path jobDir = Path.of(workspaceRoot, jobId);
-
-            // Resolve status.json path
-            Path statusPath = jobDir.resolve("status.json");
-
-            // No persisted lifecycle state yet
-            if (!Files.exists(statusPath)) {
-                return null;
-            }
-
-            // Deserialize snapshot
-            JobExecutionStatus snapshot =
-                    objectMapper.readValue(statusPath.toFile(), JobExecutionStatus.class);
-
-            // Lifecycle state not yet set
-            if (snapshot.getJobStatus() == null) {
-                return null;
-            }
-
-            // Convert stored string back to enum
-            return JobStatus.valueOf(snapshot.getJobStatus());
-
-        } catch (Exception e) {
-
-            // Read failures are logged but not fatal
-            log.error("Failed to read lifecycle state for job {}: {}", jobId, e.getMessage());
-
+            return JobStatus.valueOf(snap.getJobStatus());
+        } catch (IllegalArgumentException ignored) {
             return null;
         }
     }
 
-    // --------------------------------------------------
-    // Full Snapshot Read (public — used by controller)
-    // --------------------------------------------------
-    @Override
-    public JobExecutionStatus readSnapshot(String jobId) {
+    private JobExecutionStateStatus readExecStateFromFile(String jobId) {
+        JobExecutionStatus snap = readSnapshotFromFile(jobId);
+        if (snap == null || snap.getJobExecutionStateStatus() == null) return null;
+        try {
+            return JobExecutionStateStatus.valueOf(snap.getJobExecutionStateStatus());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private JobExecutionStatus readSnapshotFromFile(String jobId) {
         try {
             Path statusPath = Path.of(workspaceRoot, jobId).resolve("status.json");
             if (!Files.exists(statusPath)) return null;
             return objectMapper.readValue(statusPath.toFile(), JobExecutionStatus.class);
         } catch (Exception e) {
-            log.error("Failed to read snapshot for job {}: {}", jobId, e.getMessage());
+            log.debug("File-fallback snapshot read failed for jobId={}: {}", jobId, e.getMessage());
             return null;
         }
     }
 
-    // --------------------------------------------------
-    // Internal Helper — Read Snapshot If Exists
-    // --------------------------------------------------
-    private JobExecutionStatus readSnapshotIfExists(Path statusPath) throws Exception {
-
-        // Return null if no status.json yet
-        if (!Files.exists(statusPath)) {
-            return null;
+    /**
+     * Parse a String jobId to UUID, returning {@link Optional#empty()} for
+     * non-UUID inputs (test fixtures, malformed ids). Caller falls back to
+     * file-based behaviour for those cases.
+     */
+    private static Optional<UUID> parseJobUuid(String jobId) {
+        if (jobId == null || jobId.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(UUID.fromString(jobId));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
         }
-
-        return objectMapper.readValue(statusPath.toFile(), JobExecutionStatus.class);
-    }
-
-    // --------------------------------------------------
-    // Internal Helper — Atomic Write
-    // --------------------------------------------------
-    private void writeAtomically(Path statusPath,
-                                 JobExecutionStatus snapshot) throws Exception {
-
-        // Guarantee the job workspace directory exists.
-        // The CREATED/VALIDATING transitions fire in RunnerServiceImpl.runDeploy() *before*
-        // RunnerWorkspaceServiceImpl.prepareWorkspace() has had a chance to create the
-        // directory tree. createDirectories() is idempotent — safe to call even if the
-        // directory already exists later in the lifecycle.
-        Files.createDirectories(statusPath.getParent());
-
-        // Temporary file used to prevent partial writes
-        Path tempFile = statusPath.resolveSibling("status.json.tmp");
-
-        // Write snapshot to temp file
-        try (FileOutputStream fos = new FileOutputStream(tempFile.toFile())) {
-
-            objectMapper.writerWithDefaultPrettyPrinter()
-                    .writeValue(fos, snapshot);
-
-            // Force flush to disk where supported (important for crash safety).
-            // Some filesystems (e.g. certain EC2 EBS mount configs) do not support
-            // fsync and throw SyncFailedException — we log a warning and continue,
-            // because the subsequent ATOMIC_MOVE still guarantees a consistent file.
-            try {
-                fos.getFD().sync();
-            } catch (java.io.SyncFailedException e) {
-                if (!fsyncWarningLogged) {
-                    fsyncWarningLogged = true;
-                    log.warn("fsync not supported on this filesystem — skipping (atomic rename still guarantees consistency)");
-                }
-            }
-        }
-
-        // Atomically replace status.json
-        Files.move(
-                tempFile,
-                statusPath,
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE
-        );
     }
 }

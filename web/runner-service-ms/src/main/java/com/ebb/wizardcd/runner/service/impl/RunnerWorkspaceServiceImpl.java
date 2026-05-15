@@ -1,10 +1,8 @@
 package com.ebb.wizardcd.runner.service.impl;
 
 import com.ebb.wizardcd.runner.dto.DeploymentRequest;
-import com.ebb.wizardcd.runner.dto.JobMetadata;
 import com.ebb.wizardcd.runner.service.RunnerWorkspaceService;
 import com.ebb.wizardcd.runner.service.YamlGenerationService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,25 +25,19 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
     // Root directory where all job workspaces live
     private final String workspaceRoot;
 
-    // JSON serializer for metadata.json
-    private final ObjectMapper objectMapper;
-
     // YAML serializer for deployment-config.yml
     private final YamlGenerationService yamlGenerationService;
 
     public RunnerWorkspaceServiceImpl(@Value("${runner.workspaceRoot}") String workspaceRoot,
-                                      ObjectMapper objectMapper,
                                       YamlGenerationService yamlGenerationService) {
         this.workspaceRoot = workspaceRoot;
-        this.objectMapper = objectMapper;
         this.yamlGenerationService = yamlGenerationService;
     }
 
     @Override
     public Path prepareWorkspace(String jobId, DeploymentRequest request,
                                  MultipartFile jarArtifact, MultipartFile libZip,
-                                 List<MultipartFile> certZips, List<MultipartFile> extraZips,
-                                 JobMetadata metadata) {
+                                 List<MultipartFile> certZips, List<MultipartFile> extraZips) {
         try {
 
             // --------------------------------------------------
@@ -58,8 +50,19 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
                 throw new IllegalArgumentException("Invalid jobId format");
             }
 
-            // Resolve job workspace root
-            Path jobRoot = Path.of(workspaceRoot, jobId);
+            // Resolve job workspace root.
+            //
+            // We normalize() + toAbsolutePath() up-front so that every downstream
+            // path (inputDir, libDir, certDir, extraDir, ...) is a clean absolute
+            // path with no '..' segments. This matters for the ZIP-slip guard in
+            // extractZipToDir: the guard compares an entry path *after* normalize()
+            // against the targetDir using Path.startsWith() (component-wise). If
+            // targetDir still contains '..' segments (because the configured
+            // `runner.workspaceRoot` is something like `${user.dir}/../workspace/jobs`),
+            // the comparison fails for every nested entry — false-positive
+            // ZIP-slip rejections like 'lib/javassist-3.29.2-GA.jar' even though
+            // the entry resolves inside targetDir.
+            Path jobRoot = Path.of(workspaceRoot, jobId).toAbsolutePath().normalize();
 
             // Prevent accidental workspace reuse.
             // We check for the 'input/' subdirectory, NOT the job root directory.
@@ -155,21 +158,11 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
             Path yamlPath = yamlGenerationService.generateYaml(jobId, request, effectiveJarName, inputDir);
             log.info("Deployment config generated at {}", yamlPath);
 
-            // --------------------------------------------------
-            // Write immutable metadata.json (identity snapshot)
-            // --------------------------------------------------
-            Path metadataFile = jobRoot.resolve("metadata.json");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(metadataFile.toFile(), metadata);
-            log.info("Metadata snapshot written for job {}", jobId);
-
-            // --------------------------------------------------
-            // Persist original DeploymentRequest as request.json
-            // Enables re-deploy flow (Phase 3) — the full config
-            // can be loaded without re-entering the wizard.
-            // --------------------------------------------------
-            Path requestFile = inputDir.resolve("request.json");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(requestFile.toFile(), request);
-            log.info("Deployment request persisted at {}", requestFile);
+            // Phase 4 Stage 5: metadata.json + request.json writes removed.
+            // Identity metadata + DeploymentRequest snapshot now live in the
+            // `deployments` DB table (deployments.config_snapshot JSONB), owned
+            // by DeploymentPersistenceService. The workspace dir holds only
+            // filesystem artefacts (JAR, lib, certs, deploy.log, etc.).
 
             // Return absolute config path for controlled execution
             return yamlPath;
@@ -206,6 +199,11 @@ public class RunnerWorkspaceServiceImpl implements RunnerWorkspaceService {
     // ZIP-slip protection is applied on the resolved entry path.
     // ------------------------------------------------------------------
     private void extractZipToDir(MultipartFile zip, Path targetDir) throws IOException {
+        // Defence-in-depth: normalize targetDir locally so the ZIP-slip
+        // startsWith() check is robust even if a caller passes a path that
+        // still contains '..' or '.' segments. Pair with the normalize() at
+        // jobRoot construction.
+        targetDir = targetDir.toAbsolutePath().normalize();
         log.info("Extracting ZIP: {} → {}", zip.getOriginalFilename(), targetDir);
 
         // ── Pass 1: detect common top-level prefix ──────────────────────

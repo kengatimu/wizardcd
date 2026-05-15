@@ -6,6 +6,7 @@ import { LayoutDashboard, Wand2, Settings, Sparkles, BarChart3 } from 'lucide-re
 import clsx from 'clsx'
 import { fetchJobs } from '../api/jobs'
 import type { JobSummary } from '../types/JobSummary'
+import type { JobLifecycleStatus } from '../types/enums'
 
 // ── Navigation definitions ────────────────────────────────────────
 
@@ -187,8 +188,24 @@ function SettingsLink() {
 
 
 // ── Weekly Activity Mini Chart ─────────────────────────────────────
-// 7-day micro bar chart — counts deploys per day, colours bars red if
-// any failed that day, green otherwise. Pure CSS, no chart library.
+// 7-day micro bar chart — counts deploys per day. Each bar is split
+// into one stacked segment per deploy, ordered chronologically with the
+// LATEST DEPLOY AT THE TOP. Same-status consecutive segments visually
+// merge (no separators) so a 3-success / 2-failed / 1-success day reads
+// as three distinct blocks of decreasing recency. Pure CSS, no chart lib.
+
+// Map a lifecycle status to the segment fill colour used on the navy
+// sidebar background. Terminal states get their semantic signal colour;
+// any in-progress state (CREATED / RUNNING / etc.) shows as blue so the
+// segment still reads as "something is happening here".
+const SIDEBAR_STATUS_BG: Partial<Record<JobLifecycleStatus, string>> = {
+  SUCCESS: 'bg-sig-green',
+  FAILED:  'bg-sig-red',
+  ABORTED: 'bg-white/35',
+}
+function sidebarStatusBg(status: JobLifecycleStatus): string {
+  return SIDEBAR_STATUS_BG[status] ?? 'bg-sig-blue/70'  // in-progress fallback
+}
 
 function WeeklyActivityChart() {
   const navigate = useNavigate()
@@ -203,23 +220,35 @@ function WeeklyActivityChart() {
   const days = useMemo(() => {
     if (!jobs) return []
     const now = new Date()
-    const result: { label: string; date: string; count: number; failed: number; success: number }[] = []
+    const result: {
+      label:   string
+      date:    string
+      count:   number
+      failed:  number
+      success: number
+      aborted: number
+      jobs:    JobSummary[]   // sorted desc by createdAt — newest first
+    }[] = []
     for (let i = 6; i >= 0; i--) {
       const day = new Date(now)
       day.setDate(day.getDate() - i)
       day.setHours(0, 0, 0, 0)
       const next = new Date(day)
       next.setDate(next.getDate() + 1)
-      const dayJobs = jobs.filter(j => {
-        const t = new Date(j.createdAt).getTime()
-        return t >= day.getTime() && t < next.getTime()
-      })
+      const dayJobs = jobs
+        .filter(j => {
+          const t = new Date(j.createdAt).getTime()
+          return t >= day.getTime() && t < next.getTime()
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       result.push({
         label:   day.toLocaleDateString('en-GB', { weekday: 'short' })[0],
         date:    day.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' }),
         count:   dayJobs.length,
         failed:  dayJobs.filter(j => j.lifecycleStatus === 'FAILED').length,
         success: dayJobs.filter(j => j.lifecycleStatus === 'SUCCESS').length,
+        aborted: dayJobs.filter(j => j.lifecycleStatus === 'ABORTED').length,
+        jobs:    dayJobs,
       })
     }
     return result
@@ -284,14 +313,32 @@ function WeeklyActivityChart() {
         </span>
       </div>
 
-      {/* Bars — gradient fill, today gets a crimson glow ring */}
+      {/* Bars — one segment per deploy, ordered chronologically with the
+          NEWEST DEPLOY AT THE TOP. Same-status consecutive segments visually
+          merge (no separators) so the bar reads as outcome bands ordered by
+          recency. flex-col + flex:1 1 0 on each segment divides the bar
+          height evenly across all deploys (no manual % math, no rendering
+          collapse). */}
       <div className="flex items-end gap-[3px] h-9">
         {days.map((d, i) => {
           const heightPct = d.count === 0 ? 0 : Math.max(12, (d.count / max) * 100)
           const isToday = i === days.length - 1
+          // Glow follows the LATEST deploy's outcome (the segment at the top
+          // of the stack, where the eye lands first). "Latest succeeded" =
+          // green halo even on a rough day; "latest failed" = red halo.
+          const latest = d.jobs[0]
+          const glow =
+            !latest                              ? '' :
+            latest.lifecycleStatus === 'FAILED'  ? 'group-hover/bar:shadow-[0_0_10px_rgba(255,123,114,0.6)]' :
+            latest.lifecycleStatus === 'SUCCESS' ? 'group-hover/bar:shadow-[0_0_10px_rgba(63,185,80,0.6)]'   :
+                                                   'group-hover/bar:shadow-[0_0_10px_rgba(255,255,255,0.35)]'
+          const parts: string[] = []
+          if (d.success > 0) parts.push(`${d.success} ✓`)
+          if (d.failed  > 0) parts.push(`${d.failed} ✗`)
+          if (d.aborted > 0) parts.push(`${d.aborted} aborted`)
           const tooltip = d.count === 0
             ? `${d.date}: no deploys`
-            : `${d.date}: ${d.count} deploy${d.count > 1 ? 's' : ''}${d.failed > 0 ? `, ${d.failed} failed` : ''}`
+            : `${d.date}: ${d.count} deploy${d.count > 1 ? 's' : ''} — ${parts.join(', ')} · newest at top`
           return (
             <span
               key={i}
@@ -318,17 +365,24 @@ function WeeklyActivityChart() {
             >
               <span
                 className={clsx(
-                  'block rounded-[3px] transition-all duration-200',
-                  d.count === 0
-                    ? 'bg-white/[0.06] border border-white/[0.04]'
-                    : d.failed > 0
-                    ? 'bg-gradient-to-t from-sig-red to-sig-red/55 group-hover/bar:shadow-[0_0_10px_rgba(255,123,114,0.6)]'
-                    : 'bg-gradient-to-t from-sig-green to-sig-green/55 group-hover/bar:shadow-[0_0_10px_rgba(63,185,80,0.6)]',
+                  'block rounded-[3px] overflow-hidden flex flex-col transition-all duration-200',
+                  d.count === 0 && 'bg-white/[0.06] border border-white/[0.04]',
                   d.count > 0 && 'group-hover/bar:scale-x-[1.4]',
+                  d.count > 0 && glow,
                   isToday && d.count > 0 && 'ring-2 ring-white/45 ring-offset-1 ring-offset-wiz-panel',
                 )}
                 style={{ height: `${heightPct}%`, minHeight: d.count > 0 ? 4 : 2, transformOrigin: 'bottom' }}
-              />
+              >
+                {/* d.jobs is sorted newest-first; flex-col renders top→bottom
+                    in document order ⇒ newest deploy is the top segment. */}
+                {d.jobs.map(job => (
+                  <span
+                    key={job.jobId}
+                    className={sidebarStatusBg(job.lifecycleStatus)}
+                    style={{ flex: '1 1 0', minHeight: 0 }}
+                  />
+                ))}
+              </span>
             </span>
           )
         })}

@@ -25,6 +25,22 @@ log_info()   { echo "[INFO]  $(date '+%Y-%m-%d %H:%M:%S')  $*"; }
 log_warn()   { echo "[WARN]  $(date '+%Y-%m-%d %H:%M:%S')  $*"; }
 log_error()  { echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S')  $*" >&2; }
 
+# Portable "is this TCP port open locally?" check.
+#
+# Tries `ss` → `netstat` → falls back to a pure-bash /dev/tcp connect
+# test so this works on minimal/slim base images that don't ship with
+# iproute2 or net-tools. The /dev/tcp form is a Bash built-in and is
+# strictly stronger than `ss`: it confirms the app is ACCEPTING
+# connections, not merely listening. See the matching helper in
+# application-deployment.sh — kept inline here because this script
+# is piped over SSH to the target and runs in isolation.
+port_open() {
+  local port=$1
+  if command -v ss      >/dev/null 2>&1 && ss      -lnt 2>/dev/null | grep -Eq "[:.]${port}[[:space:]]"; then return 0; fi
+  if command -v netstat >/dev/null 2>&1 && netstat -lnt 2>/dev/null | grep -Eq "[:.]${port}[[:space:]]"; then return 0; fi
+  (exec 3<>/dev/tcp/127.0.0.1/"${port}") >/dev/null 2>&1
+}
+
 trap 'log_error "Unexpected error on line $LINENO (exit code $?)"; exit 1' ERR
 
 # --------------------------------------------------
@@ -161,8 +177,8 @@ while (( port_waited < PORT_WAIT_TIMEOUT )); do
     exit 60
   fi
 
-  # Check if port is bound
-  if ss -lnt | grep -q ":${SERVER_PORT}"; then
+  # Check if port is bound — portable: ss → netstat → bash /dev/tcp.
+  if port_open "${SERVER_PORT}"; then
     log_info "  Port ${SERVER_PORT} is ready (took ${port_waited}s)"
     break
   fi
@@ -215,7 +231,7 @@ while (( elapsed < STABILITY_WINDOW )); do
     exit 60
   fi
 
-  if ! ss -lnt | grep -q ":${SERVER_PORT}"; then
+  if ! port_open "${SERVER_PORT}"; then
     log_error "Application crashed during stability monitoring at ${elapsed}s — port ${SERVER_PORT} not bound"
     log_error "Check the application logs at: ${APP_PATH}/logs/wrapper.log"
     exit 60

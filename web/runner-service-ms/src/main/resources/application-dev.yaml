@@ -23,7 +23,37 @@ logging:
     path: ${user.dir}/../logs
   level:
     ROOT: INFO
-    com.ebb.wizardcd.runner: DEBUG     # more verbose on dev for active development
+    com.ebb.wizardcd.runner: INFO     # more verbose on dev for active development
+
+# ─── Phase 4 — local PostgreSQL on Mac ─────────────────────────────
+# Created via: psql -c "CREATE USER wizardcd WITH PASSWORD 'localdev';
+#                       CREATE DATABASE wizardcd OWNER wizardcd;"
+# Connection : jdbc:postgresql://localhost:5432/wizardcd
+# Credentials: wizardcd / localdev (local dev only — never reuse in prod)
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/wizardcd
+    username: wizardcd
+    password: localdev
+    hikari:
+      maximum-pool-size: 5             # dev = tiny pool; prod (uat/sit) bumps this up
+      pool-name: wizardcd-hikari
+  jpa:
+    hibernate:
+      ddl-auto: validate               # Flyway manages schema; Hibernate only validates
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true               # readable SQL in logs
+        jdbc:
+          time_zone: UTC               # store TIMESTAMPs as UTC, decode on read
+    open-in-view: false                # close session after controller returns — no lazy loading in views
+    show-sql: false                    # rely on logging.level for SQL traces, not this flag
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true          # OK to start against a non-empty DB (defensive)
+    validate-on-migrate: true
 
 server:
   port: 8081
@@ -44,6 +74,9 @@ wizardcd:
 
 #actuator configs
 management:
+  endpoint:
+    health:
+      show-details: always
   endpoints:
     web:
       exposure:

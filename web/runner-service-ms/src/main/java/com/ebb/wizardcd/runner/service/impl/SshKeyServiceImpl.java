@@ -1,5 +1,6 @@
 package com.ebb.wizardcd.runner.service.impl;
 
+import com.ebb.wizardcd.runner.dto.PathCheckResult;
 import com.ebb.wizardcd.runner.dto.PreflightResult;
 import com.ebb.wizardcd.runner.dto.SshTestResult;
 import com.ebb.wizardcd.runner.service.SshKeyService;
@@ -10,11 +11,14 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -292,6 +296,235 @@ public class SshKeyServiceImpl implements SshKeyService {
             return epochStr.trim();
         }
     }
+
+    // ── Deploy path state check (Step 2 of wizard) ────────────────────────────
+
+    /** Whitelist for the deploy path: absolute Linux path, no shell metacharacters. */
+    private static final Pattern DEPLOY_PATH_ALLOWED = Pattern.compile("^/[A-Za-z0-9_\\-./]+$");
+
+    /**
+     * Top-level directories that must never be used as a deploy target. These are
+     * either system-managed (filesystem won't survive deploy churn) or contain
+     * sensitive content that must not be touched. Subpaths beneath them are
+     * accepted (e.g. {@code /var/log/myapp} is fine; {@code /var} is not).
+     */
+    private static final Set<String> FORBIDDEN_PATH_PREFIXES = Set.of(
+            "/etc", "/usr", "/bin", "/sbin", "/boot",
+            "/dev", "/proc", "/sys", "/lib", "/lib32", "/lib64",
+            "/run", "/root"
+    );
+
+    @Override
+    public PathCheckResult checkPath(String sshUser, String sshHost, int sshPort,
+                                     String environment, String runAsUser, String targetBasePath) {
+        PathCheckResult result = new PathCheckResult();
+        result.setPath(targetBasePath);
+        result.setExpectedOwner(runAsUser);
+
+        // ── 1. Client-side guards — no SSH if the input is obviously bad ──
+        String invalidReason = validateDeployPath(targetBasePath);
+        if (invalidReason != null) {
+            result.setStatus(PathCheckResult.Status.INVALID_PATH);
+            result.setHumanReason(invalidReason);
+            return result;
+        }
+
+        // Normalise — strip trailing slashes (except for "/" itself which is
+        // already rejected by FORBIDDEN_PATH_PREFIXES)
+        String path = targetBasePath.replaceAll("/+$", "");
+        result.setPath(path);
+        String parentPath = parentOf(path);
+        result.setParentPath(parentPath);
+
+        // ── 2. SSH to the target and run a parseable check script ──
+        try {
+            ensureKeyExists(environment);
+            String keyPath = resolveKeyPath(environment);
+
+            // The path has already passed DEPLOY_PATH_ALLOWED so it cannot
+            // contain quotes, backticks, $, ;, & — safe to inject into the
+            // single-quoted bash variable below.
+            String checkScript =
+                    "P='" + path + "'; " +
+                    "PARENT=\"$(dirname \"$P\")\"; " +
+                    "if [ -e \"$P\" ]; then " +
+                    "  OWN=$(stat -c %U \"$P\" 2>/dev/null || stat -f %Su \"$P\" 2>/dev/null || echo UNKNOWN); " +
+                    "  echo \"EXISTS|$OWN\"; " +
+                    "else " +
+                    "  if [ -e \"$PARENT\" ]; then " +
+                    "    if [ -w \"$PARENT\" ]; then echo 'MISSING|PARENT_WRITABLE'; " +
+                    "    else echo 'MISSING|PARENT_NOT_WRITABLE'; fi; " +
+                    "  else " +
+                    "    echo 'MISSING|PARENT_MISSING'; " +
+                    "  fi; " +
+                    "fi";
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    "ssh",
+                    "-i", keyPath,
+                    "-o", "BatchMode=yes",
+                    "-o", "StrictHostKeyChecking=accept-new",
+                    "-o", "ConnectTimeout=" + SSH_CONNECT_TIMEOUT_SECONDS,
+                    "-p", String.valueOf(sshPort),
+                    sshUser + "@" + sshHost,
+                    checkScript);
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes()).trim();
+            boolean finished = process.waitFor(SSH_PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            if (!finished) {
+                process.destroyForcibly();
+                return unreachable(result, "Connection timed out after "
+                        + SSH_CONNECT_TIMEOUT_SECONDS + " seconds.");
+            }
+
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                return unreachable(result, lastNonEmptyLine(output));
+            }
+
+            // ── 3. Parse the script's structured output ──
+            return interpretCheckScriptOutput(output, result, runAsUser);
+
+        } catch (Exception e) {
+            log.error("Deploy path check failed for {}@{}:{} path={} env={}: {}",
+                    sshUser, sshHost, sshPort, targetBasePath, environment, e.getMessage());
+            return unreachable(result, e.getMessage());
+        }
+    }
+
+    /** Reject paths up-front when they don't pass the whitelist. */
+    private static String validateDeployPath(String path) {
+        if (path == null || path.isBlank()) return "Deploy path is empty.";
+        if (path.length() > 500) return "Deploy path exceeds 500 characters.";
+        if (!path.startsWith("/")) return "Deploy path must be absolute (start with /).";
+        if (path.contains("..")) return "Deploy path must not contain '..' segments.";
+        if (!DEPLOY_PATH_ALLOWED.matcher(path).matches()) {
+            return "Deploy path contains illegal characters. Allowed: letters, digits, _ - . /";
+        }
+        if (path.equals("/")) return "Cannot deploy to the filesystem root.";
+        // System directory guard
+        for (String forbidden : FORBIDDEN_PATH_PREFIXES) {
+            if (path.equals(forbidden) || path.startsWith(forbidden + "/")) {
+                return "Deploy path under " + forbidden + " is not allowed — choose a non-system directory.";
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Interpret the {@code EXISTS|<owner>} or {@code MISSING|<state>} line
+     * returned by the remote check script.
+     */
+    private static PathCheckResult interpretCheckScriptOutput(String output,
+                                                              PathCheckResult result,
+                                                              String runAsUser) {
+        String line = lastNonEmptyLine(output);
+        if (line == null) {
+            return unreachable(result, "Empty response from remote check script.");
+        }
+
+        String path = result.getPath();
+        String parent = result.getParentPath();
+
+        if (line.startsWith("EXISTS|")) {
+            String owner = line.substring("EXISTS|".length()).trim();
+            result.setExists(Boolean.TRUE);
+            result.setActualOwner(owner);
+            result.setParentExists(Boolean.TRUE);
+
+            if (owner.equals(runAsUser)) {
+                result.setStatus(PathCheckResult.Status.OK);
+                result.setHumanReason("Path exists and is owned by " + runAsUser + ".");
+            } else {
+                result.setStatus(PathCheckResult.Status.WRONG_OWNER);
+                result.setHumanReason("Path exists but is owned by " + owner
+                        + ", not " + runAsUser + ".");
+                result.setFixCommands(List.of(
+                        "sudo chown -R " + runAsUser + ":" + runAsUser + " " + path
+                ));
+            }
+            return result;
+        }
+
+        if (line.startsWith("MISSING|")) {
+            result.setExists(Boolean.FALSE);
+            String state = line.substring("MISSING|".length()).trim();
+
+            switch (state) {
+                case "PARENT_WRITABLE" -> {
+                    result.setParentExists(Boolean.TRUE);
+                    result.setParentWritableByRunAs(Boolean.TRUE);
+                    result.setStatus(PathCheckResult.Status.MISSING);
+                    result.setHumanReason("Path doesn't exist yet. The runner will create it on first deploy "
+                            + "(parent " + parent + " is writable by " + runAsUser + ").");
+                }
+                case "PARENT_NOT_WRITABLE" -> {
+                    result.setParentExists(Boolean.TRUE);
+                    result.setParentWritableByRunAs(Boolean.FALSE);
+                    result.setStatus(PathCheckResult.Status.PARENT_NOT_WRITABLE);
+                    result.setHumanReason("Path doesn't exist and " + parent
+                            + " is not writable by " + runAsUser + ". Create it manually:");
+                    result.setFixCommands(List.of(
+                            "sudo mkdir -p " + path,
+                            "sudo chown -R " + runAsUser + ":" + runAsUser + " " + path
+                    ));
+                }
+                case "PARENT_MISSING" -> {
+                    result.setParentExists(Boolean.FALSE);
+                    result.setParentWritableByRunAs(Boolean.FALSE);
+                    result.setStatus(PathCheckResult.Status.PARENT_NOT_WRITABLE);
+                    result.setHumanReason("Neither the path nor its parent " + parent
+                            + " exists. Create it manually:");
+                    result.setFixCommands(List.of(
+                            "sudo mkdir -p " + path,
+                            "sudo chown -R " + runAsUser + ":" + runAsUser + " " + path
+                    ));
+                }
+                default -> {
+                    return unreachable(result, "Unrecognised check-script response: " + line);
+                }
+            }
+            return result;
+        }
+
+        return unreachable(result, "Unrecognised check-script response: " + line);
+    }
+
+    private static PathCheckResult unreachable(PathCheckResult r, String tail) {
+        r.setStatus(PathCheckResult.Status.UNREACHABLE);
+        r.setHumanReason("Cannot reach the target server — fix Step 1 (SSH connection) first.");
+        r.setSshErrorTail(sanitiseTail(tail));
+        return r;
+    }
+
+    /** Sanitise the SSH stderr tail to remove control characters before returning to the UI. */
+    private static String sanitiseTail(String s) {
+        if (s == null) return null;
+        // Strip ANSI escapes + control chars; cap length.
+        String clean = s.replaceAll("\\u001B\\[[;\\d]*[A-Za-z]", "")
+                        .replaceAll("[\\p{Cntrl}&&[^\\n\\r\\t]]", "");
+        return clean.length() > 500 ? clean.substring(0, 500) + "…" : clean;
+    }
+
+    private static String lastNonEmptyLine(String text) {
+        if (text == null) return null;
+        String[] lines = text.split("\\R");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String t = lines[i].trim();
+            if (!t.isEmpty()) return t;
+        }
+        return null;
+    }
+
+    private static String parentOf(String path) {
+        int last = path.lastIndexOf('/');
+        if (last <= 0) return "/";
+        return path.substring(0, last);
+    }
+
 
     // ── Private helpers ───────────────────────────────────────────────────────
 

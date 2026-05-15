@@ -1,0 +1,33 @@
+# =============================================================================
+# WizardCD Client VM — local Docker compose
+# =============================================================================
+# Mirrors a single AWS EC2 client VM. The Mac runner SSHes into this
+# container on host port 2222 (mapped to container port 22) as the deploy
+# user using the per-environment keys at ~/.ssh/wizardcd_<env>_ed25519.
+#
+# Start  : docker compose up -d
+# Stop   : docker compose stop
+# Logs   : docker compose logs -f
+# Shell  : docker compose exec wizardcd-client bash
+# Rebuild: docker compose up -d --build
+# Destroy: docker compose down --rmi local --volumes
+#
+# Updated: 2026-05-11
+# =============================================================================
+
+services:
+  wizardcd-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wizardcd-client:local
+    container_name: wizardcd-client
+    hostname: wizardcd-client-local
+    ports:
+      # host:container — SSH on host port 2222 (Mac may already use 22 for Remote Login)
+      - "127.0.0.1:2222:22"
+    volumes:
+      # Bind-mount the deployments dir so you can inspect from Finder/Terminal
+      # without docker exec. The container writes here as the deploy user.
+      - ${HOME}/wizardcd-deploys:/app/home/deploy/deployments
+    restart: unless-stopped

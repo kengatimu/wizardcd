@@ -1,0 +1,48 @@
+# =============================================================================
+# TEST profile — H2 in-memory database (NEVER used at runtime)
+# =============================================================================
+# Activated by @ActiveProfiles("test") on test classes. Every test gets a
+# fresh H2 database that is auto-disposed when the JVM exits.
+#
+# H2 runs in PostgreSQL compatibility mode so JPA mappings + Flyway SQL
+# written for PostgreSQL behave the same way in tests as they do at runtime.
+# =============================================================================
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:wizardcd-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ''
+    hikari:
+      maximum-pool-size: 2
+      pool-name: wizardcd-hikari-test
+  jpa:
+    hibernate:
+      ddl-auto: validate           # Flyway still owns the schema in tests
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    clean-disabled: false          # tests may need to wipe between runs
+
+# Runner config — point at the real scripts + workspace dirs so the
+# RunnerEnvironmentValidator (boot-time component) passes its existence
+# and writability checks. Tests do NOT invoke deploy.sh — they just need
+# the directories to exist. Per-test isolation (when needed by future
+# integration tests) should be done with @TempDir + @DynamicPropertySource
+# rather than overriding at the profile level.
+runner:
+  scriptsDir: ${user.dir}/../runner             # web/runner — has deploy.sh + siblings
+  workspaceRoot: ${user.dir}/../workspace/jobs  # web/workspace/jobs (shared with dev)
+  executionTimeoutMinutes: 1
+  maxConcurrentJobs: 1
+  public-ip: 127.0.0.1
+
+logging:
+  level:
+    ROOT: WARN                     # quieter tests
+    com.ebb.wizardcd.runner: INFO
