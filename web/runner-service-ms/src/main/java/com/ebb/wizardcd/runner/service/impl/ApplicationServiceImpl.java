@@ -2,7 +2,9 @@ package com.ebb.wizardcd.runner.service.impl;
 
 import com.ebb.wizardcd.runner.enums.LiveConfigCapability;
 import com.ebb.wizardcd.runner.persistence.entity.ApplicationEntity;
+import com.ebb.wizardcd.runner.persistence.entity.OrganizationEntity;
 import com.ebb.wizardcd.runner.persistence.repository.ApplicationRepository;
+import com.ebb.wizardcd.runner.persistence.repository.OrganizationRepository;
 import com.ebb.wizardcd.runner.service.ApplicationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,9 +46,12 @@ public class ApplicationServiceImpl implements ApplicationService {
     private static final Logger log = LoggerFactory.getLogger(ApplicationServiceImpl.class);
 
     private final ApplicationRepository applicationRepo;
+    private final OrganizationRepository organizationRepo;
 
-    public ApplicationServiceImpl(ApplicationRepository applicationRepo) {
+    public ApplicationServiceImpl(ApplicationRepository applicationRepo,
+                                  OrganizationRepository organizationRepo) {
         this.applicationRepo = applicationRepo;
+        this.organizationRepo = organizationRepo;
     }
 
     // ── Reads ──────────────────────────────────────────────────────────────
@@ -132,6 +137,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         ApplicationEntity entity = new ApplicationEntity(
                 UUID.randomUUID(), trimmed, trimDescription(description));
+        entity.setOrganization(defaultOrg());
         ApplicationEntity saved = applicationRepo.save(entity);
         log.info("Application created id={} name='{}'", saved.getId(), saved.getName());
         return saved;
@@ -162,6 +168,7 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         ApplicationEntity fresh = new ApplicationEntity(
                 UUID.randomUUID(), trimmed, trimDescription(description));
+        fresh.setOrganization(defaultOrg());
         ApplicationEntity saved = applicationRepo.save(fresh);
         log.info("Application auto-registered id={} name='{}' (first deploy)",
                 saved.getId(), saved.getName());
@@ -262,5 +269,23 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (description == null) return null;
         String trimmed = description.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Resolve the seeded default organization. Phase 5 is single-org mode —
+     * every fresh app belongs to {@link OrganizationEntity#DEFAULT_ORG_ID}.
+     * Phase 15 multi-org will replace this with an
+     * {@code OrganizationContextHolder} that reads the active org from the
+     * caller's auth context.
+     *
+     * <p>Throws {@link IllegalStateException} on missing seed — that would
+     * mean V3 migration didn't run, which is an environment-setup bug
+     * the caller can't recover from.
+     */
+    private OrganizationEntity defaultOrg() {
+        return organizationRepo.findById(OrganizationEntity.DEFAULT_ORG_ID).orElseThrow(
+                () -> new IllegalStateException(
+                        "Default organization seed missing — V3 migration didn't run "
+                      + "or was rolled back. Check Flyway schema_history."));
     }
 }

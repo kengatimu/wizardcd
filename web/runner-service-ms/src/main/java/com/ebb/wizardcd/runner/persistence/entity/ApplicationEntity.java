@@ -5,7 +5,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -57,6 +61,28 @@ public class ApplicationEntity {
     /** Soft-delete marker. {@code null} = live row; non-null = archived. */
     @Column(name = "deleted_at")
     private Instant deletedAt;
+
+    // ── V3 additions: multi-tenancy ownership ─────────────────────────────
+
+    /**
+     * Parent organization. Always non-null in single-org mode (auto-set to
+     * {@link OrganizationEntity#DEFAULT_ORG_ID} by the V3 migration's
+     * back-fill and by the service layer for fresh apps).
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "org_id", nullable = false,
+                foreignKey = @ForeignKey(name = "fk_applications_org"))
+    private OrganizationEntity organization;
+
+    /**
+     * Optional team ownership. {@code null} = org-only (single-org mode
+     * default). Team CRUD lands in Phase 5.6's controllers; team-scoped
+     * visibility arrives in Phase 6 (needs users + RBAC).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id",
+                foreignKey = @ForeignKey(name = "fk_applications_team"))
+    private TeamEntity team;
 
     /** Last-known Live Config Push capability — see {@link LiveConfigCapability}. */
     @Enumerated(EnumType.STRING)
@@ -140,6 +166,12 @@ public class ApplicationEntity {
     public void setCapabilityDetails(String capabilityDetails) {
         this.capabilityDetails = capabilityDetails;
     }
+
+    public OrganizationEntity getOrganization() { return organization; }
+    public void setOrganization(OrganizationEntity organization) { this.organization = organization; }
+
+    public TeamEntity getTeam() { return team; }
+    public void setTeam(TeamEntity team) { this.team = team; }
 
     @Override
     public String toString() {

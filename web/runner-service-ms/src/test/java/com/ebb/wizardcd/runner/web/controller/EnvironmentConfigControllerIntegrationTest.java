@@ -1,9 +1,11 @@
 package com.ebb.wizardcd.runner.web.controller;
 
 import com.ebb.wizardcd.runner.persistence.entity.ApplicationEntity;
+import com.ebb.wizardcd.runner.persistence.entity.OrganizationEntity;
 import com.ebb.wizardcd.runner.persistence.repository.ApplicationRepository;
 import com.ebb.wizardcd.runner.persistence.repository.AuditEventRepository;
 import com.ebb.wizardcd.runner.persistence.repository.EnvironmentConfigRepository;
+import com.ebb.wizardcd.runner.persistence.repository.OrganizationRepository;
 import com.ebb.wizardcd.runner.service.audit.AuditAction;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -41,6 +43,7 @@ class EnvironmentConfigControllerIntegrationTest {
     @Autowired private ApplicationRepository         applicationRepo;
     @Autowired private EnvironmentConfigRepository   envRepo;
     @Autowired private AuditEventRepository          auditRepo;
+    @Autowired private OrganizationRepository        organizationRepo;
 
     private UUID appId;
 
@@ -52,9 +55,14 @@ class EnvironmentConfigControllerIntegrationTest {
         applicationRepo.deleteAll();
 
         // Every test in this class needs a parent app; seed one directly via
-        // the repository rather than the API for speed.
-        ApplicationEntity app = applicationRepo.save(
-                new ApplicationEntity(UUID.randomUUID(), "env-test-app", null));
+        // the repository rather than the API for speed. V3 made org_id NOT
+        // NULL — attach the default org seed.
+        OrganizationEntity defaultOrg = organizationRepo
+                .findById(OrganizationEntity.DEFAULT_ORG_ID).orElseThrow();
+        ApplicationEntity newApp = new ApplicationEntity(
+                UUID.randomUUID(), "env-test-app", null);
+        newApp.setOrganization(defaultOrg);
+        ApplicationEntity app = applicationRepo.save(newApp);
         this.appId = app.getId();
     }
 
@@ -163,8 +171,12 @@ class EnvironmentConfigControllerIntegrationTest {
         // app's path. We treat this as 404 (not 403) so we don't leak
         // existence of env configs across apps.
         UUID envId = createEnvViaApi("UAT");
-        ApplicationEntity otherApp = applicationRepo.save(
-                new ApplicationEntity(UUID.randomUUID(), "other-app", null));
+        OrganizationEntity defaultOrg = organizationRepo
+                .findById(OrganizationEntity.DEFAULT_ORG_ID).orElseThrow();
+        ApplicationEntity otherAppDraft = new ApplicationEntity(
+                UUID.randomUUID(), "other-app", null);
+        otherAppDraft.setOrganization(defaultOrg);
+        ApplicationEntity otherApp = applicationRepo.save(otherAppDraft);
 
         mockMvc.perform(get("/applications/{appId}/environments/{envId}",
                         otherApp.getId(), envId))

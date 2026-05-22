@@ -5,11 +5,13 @@ import com.ebb.wizardcd.runner.persistence.entity.AuditEventEntity;
 import com.ebb.wizardcd.runner.persistence.entity.DeploymentEntity;
 import com.ebb.wizardcd.runner.persistence.entity.DeploymentStateEntity;
 import com.ebb.wizardcd.runner.persistence.entity.EnvironmentConfigEntity;
+import com.ebb.wizardcd.runner.persistence.entity.OrganizationEntity;
 import com.ebb.wizardcd.runner.persistence.repository.ApplicationRepository;
 import com.ebb.wizardcd.runner.persistence.repository.AuditEventRepository;
 import com.ebb.wizardcd.runner.persistence.repository.DeploymentRepository;
 import com.ebb.wizardcd.runner.persistence.repository.DeploymentStateRepository;
 import com.ebb.wizardcd.runner.persistence.repository.EnvironmentConfigRepository;
+import com.ebb.wizardcd.runner.persistence.repository.OrganizationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,6 +61,7 @@ class FlywayMigrationIntegrationTest {
     @Autowired private DeploymentRepository        deploymentRepo;
     @Autowired private DeploymentStateRepository   deploymentStateRepo;
     @Autowired private AuditEventRepository        auditRepo;
+    @Autowired private OrganizationRepository      organizationRepo;
 
     // ── Test 1 — schema bootstrap ─────────────────────────────────────────
 
@@ -96,9 +99,15 @@ class FlywayMigrationIntegrationTest {
 
     @Test
     void everyJpaEntityRoundTripsThroughItsRepository() {
-        // applications
-        ApplicationEntity app = applicationRepo.save(
-                new ApplicationEntity(UUID.randomUUID(), "flyway-test-app", "smoke"));
+        // applications — V3 made org_id NOT NULL, so attach the seeded
+        // default org before saving. In the service layer this happens
+        // implicitly (single-org mode); here we wire it up by hand.
+        OrganizationEntity defaultOrg = organizationRepo
+                .findById(OrganizationEntity.DEFAULT_ORG_ID).orElseThrow();
+        ApplicationEntity newApp = new ApplicationEntity(
+                UUID.randomUUID(), "flyway-test-app", "smoke");
+        newApp.setOrganization(defaultOrg);
+        ApplicationEntity app = applicationRepo.save(newApp);
         assertThat(applicationRepo.findById(app.getId())).hasValueSatisfying(found ->
                 assertThat(found.getName()).isEqualTo("flyway-test-app"));
 
@@ -142,8 +151,12 @@ class FlywayMigrationIntegrationTest {
 
     @Test
     void derivedQueryFindersWork() {
-        ApplicationEntity app = applicationRepo.save(
-                new ApplicationEntity(UUID.randomUUID(), "finder-test-app", null));
+        OrganizationEntity defaultOrg = organizationRepo
+                .findById(OrganizationEntity.DEFAULT_ORG_ID).orElseThrow();
+        ApplicationEntity newApp = new ApplicationEntity(
+                UUID.randomUUID(), "finder-test-app", null);
+        newApp.setOrganization(defaultOrg);
+        ApplicationEntity app = applicationRepo.save(newApp);
 
         // ApplicationRepository custom finders
         assertThat(applicationRepo.findByName("finder-test-app")).isPresent();
