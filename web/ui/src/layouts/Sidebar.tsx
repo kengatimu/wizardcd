@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { LayoutDashboard, Wand2, Settings, Sparkles, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Wand2, Settings, Sparkles, BarChart3, Boxes } from 'lucide-react'
 import clsx from 'clsx'
 import { fetchJobs } from '../api/jobs'
 import type { JobSummary } from '../types/JobSummary'
@@ -25,6 +25,14 @@ const PRIMARY_NAV: NavItemDef[] = [
     label: 'Dashboard',
     icon: <LayoutDashboard size={15} />,
     exact: true,
+    iconAnim: 'anim-bob',
+  },
+  {
+    // Phase 5.2 — Applications registry. Active for both /applications and
+    // /apps/<name>; the NavLink end={false} match catches the detail pages too.
+    to: '/applications',
+    label: 'Applications',
+    icon: <Boxes size={15} />,
     iconAnim: 'anim-bob',
   },
   {
