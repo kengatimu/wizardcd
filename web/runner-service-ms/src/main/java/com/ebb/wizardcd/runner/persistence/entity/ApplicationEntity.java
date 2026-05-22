@@ -1,11 +1,16 @@
 package com.ebb.wizardcd.runner.persistence.entity;
 
+import com.ebb.wizardcd.runner.enums.LiveConfigCapability;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -46,6 +51,30 @@ public class ApplicationEntity {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    // ── V2 additions: soft-delete + live-push capability snapshot ──────────
+
+    /** Soft-delete marker. {@code null} = live row; non-null = archived. */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    /** Last-known Live Config Push capability — see {@link LiveConfigCapability}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "live_config_capability", length = 20)
+    private LiveConfigCapability liveConfigCapability;
+
+    /** When the capability was last probed. {@code null} = never. */
+    @Column(name = "capability_last_checked")
+    private Instant capabilityLastChecked;
+
+    /**
+     * Structured probe metadata (actuator version, exposed endpoints,
+     * management port + context, last error message). Stored as JSONB so
+     * future probe-enrichment doesn't need another migration.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "capability_details", columnDefinition = "jsonb")
+    private String capabilityDetails;
 
     // ── JPA lifecycle callbacks ────────────────────────────────────────────
 
@@ -91,8 +120,32 @@ public class ApplicationEntity {
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 
+    public Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
+
+    /** Convenience — equivalent to {@code getDeletedAt() != null}. */
+    public boolean isDeleted() { return deletedAt != null; }
+
+    public LiveConfigCapability getLiveConfigCapability() { return liveConfigCapability; }
+    public void setLiveConfigCapability(LiveConfigCapability liveConfigCapability) {
+        this.liveConfigCapability = liveConfigCapability;
+    }
+
+    public Instant getCapabilityLastChecked() { return capabilityLastChecked; }
+    public void setCapabilityLastChecked(Instant capabilityLastChecked) {
+        this.capabilityLastChecked = capabilityLastChecked;
+    }
+
+    public String getCapabilityDetails() { return capabilityDetails; }
+    public void setCapabilityDetails(String capabilityDetails) {
+        this.capabilityDetails = capabilityDetails;
+    }
+
     @Override
     public String toString() {
-        return "ApplicationEntity{id=" + id + ", name='" + name + "'}";
+        return "ApplicationEntity{id=" + id
+            + ", name='" + name + "'"
+            + (deletedAt != null ? ", deleted" : "")
+            + "}";
     }
 }
