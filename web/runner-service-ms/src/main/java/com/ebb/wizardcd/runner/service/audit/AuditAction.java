@@ -35,6 +35,12 @@ public final class AuditAction {
     public static final String ENV_CONFIG_UPDATED = "ENV_CONFIG_UPDATED";
     public static final String ENV_CONFIG_DELETED = "ENV_CONFIG_DELETED";
 
+    // ── Organizations + teams (Phase 5.6) ─────────────────────────────────
+    public static final String ORG_UPDATED  = "ORG_UPDATED";   // rename / plan change
+    public static final String TEAM_CREATED = "TEAM_CREATED";
+    public static final String TEAM_UPDATED = "TEAM_UPDATED";
+    public static final String TEAM_DELETED = "TEAM_DELETED";
+
     // ── Configuration (Phase 5+) ──────────────────────────────────────────
     public static final String CONFIG_CHANGE = "CONFIG_CHANGE";
 
