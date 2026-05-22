@@ -9,6 +9,7 @@ import ActivityPage from './pages/ActivityPage'
 import PlatformHealthPage from './pages/PlatformHealthPage'
 import ApplicationsListPage from './pages/ApplicationsListPage'
 import ApplicationPage from './pages/ApplicationPage'
+import ApplicationSetupWizardPage from './pages/ApplicationSetupWizardPage'
 export default function App() {
   return (
     <ThemeProvider>
@@ -19,6 +20,9 @@ export default function App() {
           <Route path="/activity"          element={<Layout><ActivityPage /></Layout>} />
           <Route path="/health"            element={<Layout><PlatformHealthPage /></Layout>} />
           <Route path="/applications"      element={<Layout><ApplicationsListPage /></Layout>} />
+          <Route path="/applications/new"  element={<Layout><ApplicationSetupWizardPage /></Layout>} />
+          <Route path="/applications/:appId/environments/new"        element={<Layout><ApplicationSetupWizardPage /></Layout>} />
+          <Route path="/applications/:appId/environments/:envId/edit" element={<Layout><ApplicationSetupWizardPage /></Layout>} />
           <Route path="/apps/:appName"     element={<Layout><ApplicationPage /></Layout>} />
           <Route path="/deploy"            element={<Layout><DeployPage /></Layout>} />
           <Route path="/jobs/:jobId"       element={<Layout><JobDetailPage /></Layout>} />
