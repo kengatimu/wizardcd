@@ -142,3 +142,5 @@ target/
 *.txt
 *.claude/
 *.md
+# Exception: canonical project docs in web/documents/ are tracked.
+!web/documents/*.md
