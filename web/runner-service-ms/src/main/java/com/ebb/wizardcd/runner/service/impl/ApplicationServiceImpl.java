@@ -1,5 +1,6 @@
 package com.ebb.wizardcd.runner.service.impl;
 
+import com.ebb.wizardcd.runner.enums.LiveConfigCapability;
 import com.ebb.wizardcd.runner.persistence.entity.ApplicationEntity;
 import com.ebb.wizardcd.runner.persistence.repository.ApplicationRepository;
 import com.ebb.wizardcd.runner.service.ApplicationService;
@@ -8,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -18,16 +20,22 @@ import java.util.UUID;
  * Default {@link ApplicationService} implementation backed by
  * {@link ApplicationRepository}.
  *
- * <p>Concurrency notes:
+ * <h2>Soft-delete strategy</h2>
+ * Every default read filters {@code deleted_at IS NULL}. The
+ * {@code …IncludingDeleted} variants exist for admin views + the deploy
+ * pipeline's auto-resurrect path. Writes (create / update) operate on
+ * the unique constraint as-is — duplicate-name checks include archived
+ * rows because the DB unique constraint includes them too.
+ *
+ * <h2>Concurrency notes</h2>
  * <ul>
- *   <li>{@link #findOrCreateByName(String, String)} is race-tolerant — the
- *       {@code UNIQUE(name)} constraint on the table is the source of truth.
- *       A second concurrent insert will raise a constraint violation; we
- *       fall through and re-read.</li>
+ *   <li>{@link #findOrCreateByName(String, String)} is race-tolerant —
+ *       the {@code UNIQUE(name)} constraint on the table is the source
+ *       of truth. A second concurrent insert raises a constraint
+ *       violation; we fall through and re-read.</li>
  *   <li>{@link #create(String, String)} prefers a pre-flight existence
- *       check so the caller gets a clean {@link IllegalArgumentException}
- *       instead of an opaque
- *       {@code DataIntegrityViolationException} stack.</li>
+ *       check so callers get a clean {@link IllegalArgumentException}
+ *       instead of an opaque {@code DataIntegrityViolationException}.</li>
  * </ul>
  */
 @Service
@@ -46,12 +54,25 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     @Transactional(readOnly = true)
     public Optional<ApplicationEntity> findById(UUID id) {
+        return applicationRepo.findByIdAndDeletedAtIsNull(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ApplicationEntity> findByIdIncludingDeleted(UUID id) {
         return applicationRepo.findById(id);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<ApplicationEntity> findByName(String name) {
+        if (name == null || name.isBlank()) return Optional.empty();
+        return applicationRepo.findByNameAndDeletedAtIsNull(name.trim());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ApplicationEntity> findByNameIncludingDeleted(String name) {
         if (name == null || name.isBlank()) return Optional.empty();
         return applicationRepo.findByName(name.trim());
     }
@@ -66,9 +87,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     @Transactional(readOnly = true)
     public List<ApplicationEntity> findAll() {
-        return applicationRepo.findAll().stream()
-                .sorted(Comparator.comparing(a -> a.getName().toLowerCase()))
-                .toList();
+        return applicationRepo.findByDeletedAtIsNullOrderByNameAsc();
     }
 
     @Override
@@ -76,10 +95,23 @@ public class ApplicationServiceImpl implements ApplicationService {
     public List<ApplicationEntity> search(String query) {
         if (query == null || query.isBlank()) return findAll();
         String needle = query.trim().toLowerCase();
-        return applicationRepo.findAll().stream()
+        return applicationRepo.findByDeletedAtIsNullOrderByNameAsc().stream()
                 .filter(a -> a.getName().toLowerCase().contains(needle))
                 .sorted(Comparator.comparing(a -> a.getName().toLowerCase()))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ApplicationEntity> findByCapability(LiveConfigCapability capability) {
+        if (capability == null) return List.of();
+        return applicationRepo.findByLiveConfigCapabilityAndDeletedAtIsNullOrderByNameAsc(capability);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countLive() {
+        return applicationRepo.countByDeletedAtIsNull();
     }
 
     // ── Writes ─────────────────────────────────────────────────────────────
@@ -89,9 +121,14 @@ public class ApplicationServiceImpl implements ApplicationService {
     public ApplicationEntity create(String name, String description) {
         validateName(name);
         String trimmed = name.trim();
+        // Duplicate check INCLUDES archived rows — the DB unique constraint
+        // does too. Callers wanting to "create" an archived name should
+        // restore the existing row instead.
         if (applicationRepo.existsByName(trimmed)) {
             throw new IllegalArgumentException(
-                    "Application '" + trimmed + "' already exists");
+                    "Application '" + trimmed + "' already exists "
+                  + "(it may be archived — restore it via the Undo affordance "
+                  + "or pick a different name)");
         }
         ApplicationEntity entity = new ApplicationEntity(
                 UUID.randomUUID(), trimmed, trimDescription(description));
@@ -105,14 +142,30 @@ public class ApplicationServiceImpl implements ApplicationService {
     public ApplicationEntity findOrCreateByName(String name, String description) {
         validateName(name);
         String trimmed = name.trim();
-        return applicationRepo.findByName(trimmed).orElseGet(() -> {
-            ApplicationEntity fresh = new ApplicationEntity(
-                    UUID.randomUUID(), trimmed, trimDescription(description));
-            ApplicationEntity saved = applicationRepo.save(fresh);
-            log.info("Application auto-registered id={} name='{}' (first deploy)",
-                    saved.getId(), saved.getName());
-            return saved;
-        });
+
+        // Auto-resurrect: if a soft-deleted row exists with this name,
+        // restore it. A deploy targeting an archived app means the user
+        // is using it again — silently bringing it back is the right
+        // behaviour. Audit log will record this as a normal CREATED →
+        // RUNNING lifecycle on the next deploy.
+        Optional<ApplicationEntity> existing = applicationRepo.findByName(trimmed);
+        if (existing.isPresent()) {
+            ApplicationEntity row = existing.get();
+            if (row.isDeleted()) {
+                log.info("Auto-restoring archived application id={} name='{}' "
+                       + "(deploy targets it)", row.getId(), row.getName());
+                row.setDeletedAt(null);
+                return applicationRepo.save(row);
+            }
+            return row;
+        }
+
+        ApplicationEntity fresh = new ApplicationEntity(
+                UUID.randomUUID(), trimmed, trimDescription(description));
+        ApplicationEntity saved = applicationRepo.save(fresh);
+        log.info("Application auto-registered id={} name='{}' (first deploy)",
+                saved.getId(), saved.getName());
+        return saved;
     }
 
     @Override
@@ -145,11 +198,52 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     @Transactional
     public void delete(UUID id) {
-        if (!applicationRepo.existsById(id)) {
-            throw new NoSuchElementException("No application with id " + id);
+        ApplicationEntity entity = applicationRepo.findById(id).orElseThrow(
+                () -> new NoSuchElementException("No application with id " + id));
+        if (entity.isDeleted()) {
+            // Idempotent: archived already → nothing to do.
+            return;
         }
-        applicationRepo.deleteById(id);
-        log.info("Application deleted id={}", id);
+        entity.setDeletedAt(Instant.now());
+        applicationRepo.save(entity);
+        log.info("Application archived id={} name='{}'", entity.getId(), entity.getName());
+    }
+
+    @Override
+    @Transactional
+    public ApplicationEntity restore(UUID id) {
+        ApplicationEntity entity = applicationRepo.findById(id).orElseThrow(
+                () -> new NoSuchElementException("No application with id " + id));
+        if (!entity.isDeleted()) {
+            // Idempotent: live already → no-op return.
+            return entity;
+        }
+        entity.setDeletedAt(null);
+        ApplicationEntity saved = applicationRepo.save(entity);
+        log.info("Application restored id={} name='{}'", saved.getId(), saved.getName());
+        return saved;
+    }
+
+    // ── Capability snapshot ───────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public ApplicationEntity recordCapability(UUID id,
+                                              LiveConfigCapability capability,
+                                              String detailsJson,
+                                              Instant probedAt) {
+        if (capability == null) {
+            throw new IllegalArgumentException("capability must not be null");
+        }
+        ApplicationEntity entity = applicationRepo.findById(id).orElseThrow(
+                () -> new NoSuchElementException("No application with id " + id));
+        entity.setLiveConfigCapability(capability);
+        entity.setCapabilityLastChecked(probedAt != null ? probedAt : Instant.now());
+        entity.setCapabilityDetails(detailsJson);
+        ApplicationEntity saved = applicationRepo.save(entity);
+        log.debug("Recorded capability id={} name='{}' capability={}",
+                saved.getId(), saved.getName(), capability);
+        return saved;
     }
 
     // ── Internal ───────────────────────────────────────────────────────────
