@@ -58,10 +58,14 @@ public record EnvironmentConfigRequest(
      * service fills them in.
      */
     public EnvironmentConfigEntity toEntity() {
+        // Pass envName through as-is (may be null on PUT-as-patch). The
+        // service-layer applyPatch() skips null fields; service-layer
+        // validatePresent() rejects null envName on POST. Defaulting to ""
+        // here would corrupt patch semantics.
         EnvironmentConfigEntity e = new EnvironmentConfigEntity(
                 null,    // id — service assigns
                 null,    // application — service assigns
-                envName != null ? envName : ""
+                envName
         );
         e.setSshUser(sshUser);
         e.setSshHost(sshHost);
