@@ -12,6 +12,8 @@ import DynamicList from '../components/DynamicList'
 import { useTheme, type ActiveEnv } from '../context/ThemeContext'
 import MissionControl, { SIDEBAR_MAX_W } from '../components/MissionControl'
 import { DeployPathStatusPanel } from '../components/DeployPathStatusPanel'
+import SavedConfigsPanel, { type LoadedConfig } from '../components/SavedConfigsPanel'
+import type { EnvironmentConfig } from '../types/EnvironmentConfig'
 
 // ── Step metadata ─────────────────────────────────────────────────
 
@@ -1155,6 +1157,12 @@ export default function DeployPage() {
   const [historyDismissed, setHistoryDismissed] = useState(false)
   const [historyExpanded,  setHistoryExpanded]  = useState(false)
 
+  // ── Saved configs (Phase 5 §5.3) ────────────────────────────────
+  // Pre-fill SSH/Java/runtime fields from a stored EnvironmentConfig
+  // instead of asking the user to retype them. See SavedConfigsPanel.
+  const [loadedConfig, setLoadedConfig] = useState<LoadedConfig | null>(null)
+  const [savedConfigsDismissed, setSavedConfigsDismissed] = useState(false)
+
   // ── Runner public keys, runner info & SSH test ──────────────────
   const [publicKeys,    setPublicKeys]    = useState<Record<string, string> | null>(null)
   const [keysLoading,   setKeysLoading]   = useState(false)
@@ -1312,7 +1320,109 @@ export default function DeployPage() {
     setContainerAware(false)
     setMaxRamPct('70.0')
     setDraftBanner(null)
+    setLoadedConfig(null)
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Apply a saved EnvironmentConfig to the form (Phase 5 §5.3a) ────────────
+  // Maps every field on the stored config into the wizard's FormState. We use
+  // sensible coercions for nullable backend fields (mainClass / jarName / heap
+  // can all be null on the server but the form holds them as strings). User
+  // can still override anything for this one deploy.
+  const applyEnvironmentConfig = useCallback(
+    (appName: string, env: EnvironmentConfig) => {
+      // Parse extraJvmOpts (stored as JSON-stringified array on the server)
+      let extraOpts: string[] = []
+      if (env.extraJvmOpts) {
+        try {
+          const parsed = JSON.parse(env.extraJvmOpts)
+          if (Array.isArray(parsed)) extraOpts = parsed.map(String)
+        } catch {
+          // Malformed — fall back to splitting on whitespace
+          extraOpts = env.extraJvmOpts.split(/\s+/).filter(Boolean)
+        }
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        // Identity
+        appName:        appName,
+        environment:    env.envName.toUpperCase(),
+        mainClass:      env.mainClass ?? '',
+        jarName:        env.jarName ?? '',
+        // SSH
+        sshUser:        env.sshUser,
+        sshHost:        env.sshHost,
+        sshPort:        String(env.sshPort),
+        targetBasePath: env.targetBasePath,
+        // Java
+        javaCommand:    env.javaCommand,
+        javaVersion:    env.javaVersion ?? '',
+        // JVM
+        xms:            env.xms ?? '',
+        xmx:            env.xmx ?? '',
+        extraOpts,
+        // Runtime
+        runAsUser:      env.runAsUser,
+        serverPort:     String(env.serverPort),
+        maxLogSize:     env.maxLogSize,
+        maxLogFiles:    String(env.maxLogFiles),
+        jarType:        env.libPath === 'lib' ? 'thin' : 'fat',
+        // Backup + stability
+        performBackup:   env.performBackup,
+        maxBackups:      String(env.maxBackups),
+        stabilityWindow: String(env.stabilityWindow),
+      }))
+
+      setLoadedConfig({
+        applicationId: env.appId,
+        environmentId: env.id,
+        appName,
+        envName:       env.envName.toUpperCase(),
+      })
+
+      // After loading: jump back to the top of Step 1 so the user sees the
+      // confirmation strip + the now-pre-filled SSH form.
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      toast.success(`Loaded ${appName} → ${env.envName.toUpperCase()}`, { duration: 2500 })
+    },
+    [],
+  )
+
+  // ── Unload the active config and clear pre-filled fields ───────────────────
+  // We only clear the fields that came from the config — file uploads, JVM
+  // tuning toggles, and any custom dirs/certs the user added stay intact so
+  // they don't lose context when they unload.
+  const unloadConfig = useCallback(() => {
+    setForm((prev) => ({
+      ...prev,
+      // Reset all fields that applyEnvironmentConfig sets, back to INITIAL
+      environment:    INITIAL.environment,
+      sshUser:        INITIAL.sshUser,
+      sshHost:        INITIAL.sshHost,
+      sshPort:        INITIAL.sshPort,
+      targetBasePath: INITIAL.targetBasePath,
+      appName:        INITIAL.appName,
+      mainClass:      INITIAL.mainClass,
+      javaCommand:    INITIAL.javaCommand,
+      javaVersion:    INITIAL.javaVersion,
+      xms:            INITIAL.xms,
+      xmx:            INITIAL.xmx,
+      extraOpts:      INITIAL.extraOpts,
+      runAsUser:      INITIAL.runAsUser,
+      serverPort:     INITIAL.serverPort,
+      maxLogSize:     INITIAL.maxLogSize,
+      maxLogFiles:    INITIAL.maxLogFiles,
+      jarType:        INITIAL.jarType,
+      jarName:        INITIAL.jarName,
+      performBackup:   INITIAL.performBackup,
+      maxBackups:      INITIAL.maxBackups,
+      stabilityWindow: INITIAL.stabilityWindow,
+    }))
+    setLoadedConfig(null)
+    setTestConnState('idle')
+    setTestConnMsg(null)
+    toast('Config unloaded — fields cleared', { duration: 2000 })
   }, [])
 
   // Restore draft on mount (runs once)
@@ -2394,6 +2504,18 @@ export default function DeployPage() {
           <>
             <div className="flex flex-col gap-5">
               <StepErrorBanner errors={errors} />
+
+              {/* ── SAVED CONFIGS (panel 0 — wiz-gold, optional shortcut) ──
+                  §5.0 #1 select-don't-type: pre-fill every SSH/Java/runtime
+                  field from a previously-saved EnvironmentConfig. Hidden
+                  entirely once the user dismisses it (per session). */}
+              <SavedConfigsPanel
+                loaded={loadedConfig}
+                onLoad={applyEnvironmentConfig}
+                onUnload={unloadConfig}
+                dismissed={savedConfigsDismissed}
+                setDismissed={setSavedConfigsDismissed}
+              />
 
               {/* ── SSH TARGET CONFIGURATION (panel 1 — green theme) ── */}
               <div id="ssh-target-panel" className="rounded border border-wiz-border border-l-2 border-l-sig-green/50 bg-wiz-surface overflow-hidden">
