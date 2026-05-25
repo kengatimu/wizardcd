@@ -197,6 +197,41 @@ function StepErrorBanner({ errors }: { errors: FormErrors }) {
   )
 }
 
+// ── ConfigSourceBadge (Phase 5 §5.3b) ─────────────────────────────────────
+// Right-aligned pill on the SSH Target panel header showing the active
+// saved config + how many fields have been overridden for this deploy.
+//
+//   0 overrides → green "From saved" pill
+//   N overrides → amber "N modified" pill (acts as a quiet diff signal —
+//                 user can hover to see which fields)
+function ConfigSourceBadge({
+  appName, envName, overriddenCount,
+}: { appName: string; envName: string; overriddenCount: number }) {
+  const clean = overriddenCount === 0
+  return (
+    <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+      <span
+        className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-sig-green/80"
+        title={`Loaded ${appName} → ${envName}`}
+      >
+        <Check size={10} />
+        <span className="hidden sm:inline">From saved</span>
+      </span>
+      <span className="text-[10px] font-mono font-semibold text-wiz-cream/70 max-w-[180px] truncate">
+        {appName} → {envName}
+      </span>
+      {!clean && (
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-sig-yellow/40 bg-sig-yellow-dim text-sig-yellow"
+          title="You have changed these values from the saved config — your overrides apply to this deploy only."
+        >
+          {overriddenCount} mod{overriddenCount === 1 ? '' : 's'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ── Step status ───────────────────────────────────────────────────
 // 'active'     — currently displayed step (gold)
 // 'complete'   — visited and all required fields filled (green + check)
@@ -1162,6 +1197,10 @@ export default function DeployPage() {
   // instead of asking the user to retype them. See SavedConfigsPanel.
   const [loadedConfig, setLoadedConfig] = useState<LoadedConfig | null>(null)
   const [savedConfigsDismissed, setSavedConfigsDismissed] = useState(false)
+  // Snapshot of the FormState values that came from the loaded config.
+  // Used to detect per-deploy overrides for the SSH Target panel badge
+  // and (in §5.3c) the optional save-back modal.
+  const [loadedSnapshot, setLoadedSnapshot] = useState<Partial<FormState> | null>(null)
 
   // ── Runner public keys, runner info & SSH test ──────────────────
   const [publicKeys,    setPublicKeys]    = useState<Record<string, string> | null>(null)
@@ -1321,6 +1360,7 @@ export default function DeployPage() {
     setMaxRamPct('70.0')
     setDraftBanner(null)
     setLoadedConfig(null)
+    setLoadedSnapshot(null)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1343,36 +1383,34 @@ export default function DeployPage() {
         }
       }
 
-      setForm((prev) => ({
-        ...prev,
-        // Identity
+      // Build the snapshot — single source of truth for what the config
+      // contributed. Same shape we apply to FormState below.
+      const snapshot: Partial<FormState> = {
         appName:        appName,
         environment:    env.envName.toUpperCase(),
         mainClass:      env.mainClass ?? '',
         jarName:        env.jarName ?? '',
-        // SSH
         sshUser:        env.sshUser,
         sshHost:        env.sshHost,
         sshPort:        String(env.sshPort),
         targetBasePath: env.targetBasePath,
-        // Java
         javaCommand:    env.javaCommand,
         javaVersion:    env.javaVersion ?? '',
-        // JVM
         xms:            env.xms ?? '',
         xmx:            env.xmx ?? '',
         extraOpts,
-        // Runtime
         runAsUser:      env.runAsUser,
         serverPort:     String(env.serverPort),
         maxLogSize:     env.maxLogSize,
         maxLogFiles:    String(env.maxLogFiles),
         jarType:        env.libPath === 'lib' ? 'thin' : 'fat',
-        // Backup + stability
         performBackup:   env.performBackup,
         maxBackups:      String(env.maxBackups),
         stabilityWindow: String(env.stabilityWindow),
-      }))
+      }
+
+      setForm((prev) => ({ ...prev, ...snapshot }))
+      setLoadedSnapshot(snapshot)
 
       setLoadedConfig({
         applicationId: env.appId,
@@ -1420,10 +1458,33 @@ export default function DeployPage() {
       stabilityWindow: INITIAL.stabilityWindow,
     }))
     setLoadedConfig(null)
+    setLoadedSnapshot(null)
     setTestConnState('idle')
     setTestConnMsg(null)
     toast('Config unloaded — fields cleared', { duration: 2000 })
   }, [])
+
+  // ── Override detection (Phase 5 §5.3b) ─────────────────────────────────────
+  // Computes which snapshot-tracked fields the user has edited since the config
+  // was loaded. Empty array when nothing's been overridden. Used by the SSH
+  // Target panel header badge and (in §5.3c) by the save-back modal.
+  const overriddenFields = useMemo<(keyof FormState)[]>(() => {
+    if (!loadedSnapshot) return []
+    const diffs: (keyof FormState)[] = []
+    for (const key of Object.keys(loadedSnapshot) as (keyof FormState)[]) {
+      const snap = loadedSnapshot[key]
+      const cur  = form[key]
+      // Special-case extraOpts since it's an array — shallow compare
+      if (key === 'extraOpts') {
+        const a = Array.isArray(snap) ? snap : []
+        const b = Array.isArray(cur)  ? cur  : []
+        if (a.length !== b.length || a.some((v, i) => v !== b[i])) diffs.push(key)
+        continue
+      }
+      if (snap !== cur) diffs.push(key)
+    }
+    return diffs
+  }, [form, loadedSnapshot])
 
   // Restore draft on mount (runs once)
   useEffect(() => {
@@ -2524,6 +2585,13 @@ export default function DeployPage() {
                   <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
                     SSH Target Configuration
                   </h3>
+                  {loadedConfig && (
+                    <ConfigSourceBadge
+                      appName={loadedConfig.appName}
+                      envName={loadedConfig.envName}
+                      overriddenCount={overriddenFields.length}
+                    />
+                  )}
                 </div>
                 <div className="divide-y divide-wiz-border/30">
                   <RowSelect
@@ -2940,6 +3008,13 @@ export default function DeployPage() {
                   <h3 className="font-mono font-semibold text-xs uppercase tracking-widest text-sig-green">
                     Application
                   </h3>
+                  {loadedConfig && (
+                    <ConfigSourceBadge
+                      appName={loadedConfig.appName}
+                      envName={loadedConfig.envName}
+                      overriddenCount={overriddenFields.length}
+                    />
+                  )}
                 </div>
 
                 {!form.jarArtifact ? (
