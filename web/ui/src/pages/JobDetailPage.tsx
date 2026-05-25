@@ -17,6 +17,7 @@ import { useJobStatus } from '../hooks/useJobStatus'
 import { useJobLogs } from '../hooks/useJobLogs'
 import StatusBadge from '../components/StatusBadge'
 import LogViewer from '../components/LogViewer'
+import ConfigDiffPanel from '../components/ConfigDiffPanel'
 import type { JobLifecycleStatus } from '../types/enums'
 import {
   parseLogSections,
@@ -1026,6 +1027,20 @@ export default function JobDetailPage() {
           </div>
 
         </div>
+
+        {/* ── Config Diff (Phase 5 §5.4) — what changed since last deploy ──
+            Renders below the main 3-column grid as a full-width section.
+            Hidden when we don't have the app/env metadata to query against. */}
+        {appName && activeEnv && (
+          <div className="mt-6">
+            <ConfigDiffPanel
+              currentJobId={jobId!}
+              currentApp={appName}
+              currentEnv={activeEnv}
+              currentCreatedAt={status?.createdAt}
+            />
+          </div>
+        )}
       </div>
     </>
   )
