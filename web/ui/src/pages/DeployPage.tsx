@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Wand2, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle, Clock, ChevronDown, Info, Search } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Wand2, Upload, Check, X, Copy, Wifi, WifiOff, Loader2, Shield, Plus, AlertTriangle, Clock, ChevronDown, Info, Search, Sparkles } from 'lucide-react'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -12,8 +12,9 @@ import DynamicList from '../components/DynamicList'
 import { useTheme, type ActiveEnv } from '../context/ThemeContext'
 import MissionControl, { SIDEBAR_MAX_W } from '../components/MissionControl'
 import { DeployPathStatusPanel } from '../components/DeployPathStatusPanel'
-import SavedConfigsPanel, { type LoadedConfig } from '../components/SavedConfigsPanel'
-import type { EnvironmentConfig } from '../types/EnvironmentConfig'
+import SavedConfigsPanel, { type LoadedConfig, LAST_USED_CONFIG_KEY, type PersistedLastUsed } from '../components/SavedConfigsPanel'
+import { updateEnvironment } from '../api/environments'
+import type { EnvironmentConfig, EnvironmentConfigRequest } from '../types/EnvironmentConfig'
 
 // ── Step metadata ─────────────────────────────────────────────────
 
@@ -228,6 +229,118 @@ function ConfigSourceBadge({
           {overriddenCount} mod{overriddenCount === 1 ? '' : 's'}
         </span>
       )}
+    </div>
+  )
+}
+
+// ── buildSaveBackPatch (Phase 5 §5.3c) ────────────────────────────────────
+// Given the form + the list of FormState keys the user has overridden since
+// loading a config, returns a sparse EnvironmentConfigRequest with only the
+// changed fields. Used by the SaveBackToast to push the user's edits back
+// to the stored EnvironmentConfig via PUT.
+function buildSaveBackPatch(
+  form: FormState,
+  overridden: (keyof FormState)[],
+): EnvironmentConfigRequest {
+  const patch: EnvironmentConfigRequest = {}
+  for (const key of overridden) {
+    switch (key) {
+      case 'environment':    patch.envName        = form.environment;       break
+      case 'sshUser':        patch.sshUser        = form.sshUser;           break
+      case 'sshHost':        patch.sshHost        = form.sshHost;           break
+      case 'sshPort':        patch.sshPort        = Number(form.sshPort);   break
+      case 'targetBasePath': patch.targetBasePath = form.targetBasePath;    break
+      case 'javaCommand':    patch.javaCommand    = form.javaCommand;       break
+      case 'javaVersion':    patch.javaVersion    = form.javaVersion || null; break
+      case 'runAsUser':      patch.runAsUser      = form.runAsUser;         break
+      case 'serverPort':     patch.serverPort     = Number(form.serverPort); break
+      case 'mainClass':      patch.mainClass      = form.mainClass || null; break
+      case 'jarName':        patch.jarName        = form.jarName || null;   break
+      case 'jarType':        patch.libPath        = form.jarType === 'thin' ? 'lib' : ''; break
+      case 'xms':            patch.xms            = form.xms || null;       break
+      case 'xmx':            patch.xmx            = form.xmx || null;       break
+      case 'extraOpts':      patch.extraJvmOpts   = form.extraOpts.length ? JSON.stringify(form.extraOpts) : null; break
+      case 'maxLogSize':     patch.maxLogSize     = form.maxLogSize;        break
+      case 'maxLogFiles':    patch.maxLogFiles    = Number(form.maxLogFiles); break
+      case 'performBackup':  patch.performBackup  = form.performBackup;     break
+      case 'maxBackups':     patch.maxBackups     = Number(form.maxBackups); break
+      case 'stabilityWindow': patch.stabilityWindow = Number(form.stabilityWindow); break
+      // appName is on the Application entity, not the env config — skip
+      case 'appName':        break
+      default:               break  // file uploads + cert/extra-dir uploads not patchable here
+    }
+  }
+  return patch
+}
+
+// ── SaveBackToast (Phase 5 §5.3c) ─────────────────────────────────────────
+// Custom react-hot-toast component that lingers across navigation. Shown
+// after a successful deploy when the user has overridden ≥1 field from
+// the loaded config. Two actions: Save (PUT the patch) or Not now.
+//
+// "Save these N changes back to {appName} → {envName}?" — the user already
+// knows what they changed (they typed it ≤2 min ago) so we don't render the
+// full diff; the count + title-attribute list is enough for the decision.
+function SaveBackToast(props: {
+  toastId:        string
+  loaded:         LoadedConfig
+  overriddenKeys: (keyof FormState)[]
+  patch:          EnvironmentConfigRequest
+}) {
+  const { toastId, loaded, overriddenKeys, patch } = props
+  const [saving, setSaving] = useState(false)
+  const fieldsList = overriddenKeys.map((k) => FIELD_LABELS[k] ?? k).join(', ')
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await updateEnvironment(loaded.applicationId, loaded.environmentId, patch)
+      toast.success(`Saved ${overriddenKeys.length} change${overriddenKeys.length === 1 ? '' : 's'} to ${loaded.appName} → ${loaded.envName}`)
+      toast.dismiss(toastId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save changes'
+      toast.error(msg)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-wiz-gold/40 border-l-[3px] border-l-wiz-gold bg-wiz-surface shadow-lg max-w-md">
+      <Sparkles size={14} className="text-wiz-gold flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-wiz-cream">
+          Save {overriddenKeys.length} change{overriddenKeys.length === 1 ? '' : 's'} to{' '}
+          <span className="font-semibold">{loaded.appName}</span> →{' '}
+          <span className="font-mono text-xs px-1 py-0.5 rounded bg-wiz-bg/60">{loaded.envName}</span>?
+        </p>
+        <p className="text-[11px] text-wiz-muted/70 mt-1" title={fieldsList}>
+          {fieldsList.length > 70 ? fieldsList.slice(0, 70) + '…' : fieldsList}
+        </p>
+        <div className="flex items-center gap-2 mt-2.5">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className={clsx(
+              'inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded transition-all',
+              saving
+                ? 'bg-wiz-gold/40 text-white/70 cursor-wait'
+                : 'bg-wiz-gold text-white hover:bg-wiz-gold/90',
+            )}
+          >
+            {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+            {saving ? 'Saving…' : 'Save back'}
+          </button>
+          <button
+            type="button"
+            onClick={() => toast.dismiss(toastId)}
+            disabled={saving}
+            className="text-xs font-medium px-3 py-1.5 rounded border border-wiz-border/60 text-wiz-muted hover:text-wiz-cream hover:border-wiz-border transition-all"
+          >
+            Not now
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1824,6 +1937,45 @@ export default function DeployPage() {
         setHistoryDismissed(false)
       } catch {
         // localStorage quota exceeded or unavailable — not critical
+      }
+
+      // ── Persist last-used config + offer to save divergences back (§5.3c) ──
+      // Only meaningful when the deploy came from a saved config (loadedConfig
+      // is set). If the user changed any fields, fire a long-lived toast so
+      // they can save back while the deploy runs in the background.
+      if (loadedConfig) {
+        try {
+          const persisted: PersistedLastUsed = {
+            applicationId: loadedConfig.applicationId,
+            environmentId: loadedConfig.environmentId,
+            appName:       loadedConfig.appName,
+            envName:       loadedConfig.envName,
+            at:            new Date().toISOString(),
+          }
+          localStorage.setItem(LAST_USED_CONFIG_KEY, JSON.stringify(persisted))
+        } catch {
+          // localStorage unavailable — ignore (auto-pre-select gracefully degrades)
+        }
+
+        if (overriddenFields.length > 0) {
+          const patch = buildSaveBackPatch(form, overriddenFields)
+          // Only fire the toast if the patch actually carries server-side
+          // fields. appName-only overrides yield an empty patch and we
+          // shouldn't bother the user with a no-op.
+          if (Object.keys(patch).length > 0) {
+            toast.custom(
+              (t) => (
+                <SaveBackToast
+                  toastId={t.id}
+                  loaded={loadedConfig}
+                  overriddenKeys={overriddenFields}
+                  patch={patch}
+                />
+              ),
+              { duration: 30_000 },
+            )
+          }
+        }
       }
 
       clearDraft()

@@ -28,7 +28,34 @@ import type { EnvironmentConfig } from '../types/EnvironmentConfig'
  *   3. PICKER    — default. Two side-by-side cards:
  *                    Left  (gold, preferred) — App + Env picker
  *                    Right (neutral)         — "Configure manually" escape
+ *
+ * §5.3c — the panel also pre-selects the dropdown values from the
+ *         last successful deploy's config (read from localStorage).
+ *         User still has to click "Load" — auto-loading without consent
+ *         would feel surprising, especially after the user has just
+ *         opened the page expecting a fresh form.
  */
+
+/** localStorage key — last successful deploy's saved-config selection. */
+export const LAST_USED_CONFIG_KEY = 'wiz-last-used-config'
+
+export interface PersistedLastUsed {
+  applicationId: string
+  environmentId: string
+  appName:       string
+  envName:       string
+  at:            string  // ISO timestamp
+}
+
+function readLastUsed(): PersistedLastUsed | null {
+  try {
+    const raw = localStorage.getItem(LAST_USED_CONFIG_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed?.applicationId || !parsed?.environmentId) return null
+    return parsed as PersistedLastUsed
+  } catch { return null }
+}
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -135,8 +162,15 @@ interface PickerProps {
 
 function PickerPanel({ onLoad, setDismissed }: PickerProps) {
   const navigate = useNavigate()
-  const [pickedAppId, setPickedAppId] = useState<string>('')
+  // Pre-seed from last successful deploy (§5.3c) so the most common
+  // case — "deploy the same app to the same env again" — is one click.
+  const lastUsed = useMemo(readLastUsed, [])
+  const [pickedAppId, setPickedAppId] = useState<string>(() => lastUsed?.applicationId ?? '')
   const [pickedEnvId, setPickedEnvId] = useState<string>('')
+  // Tracks whether we've already restored the env from last-used — only
+  // happens once per panel mount so the user's manual re-selection of an
+  // app doesn't get clobbered by the restore effect.
+  const [envRestored, setEnvRestored] = useState(false)
 
   // List of apps (shallow — no environments inlined yet)
   const appsQuery = useQuery({
@@ -158,12 +192,27 @@ function PickerPanel({ onLoad, setDismissed }: PickerProps) {
   const pickedEnv = envs.find(e => e.id === pickedEnvId) ?? null
   const pickedApp = appDetailQuery.data ?? apps.find(a => a.id === pickedAppId) ?? null
 
-  // Auto-pick the only env when an app has just one (§5.0 #2: auto-detect)
+  // Env restoration logic — priority order:
+  //   1. Last-used env from localStorage (only on first hydrate of this app)
+  //   2. Single-env apps: auto-pick the only env (§5.0 #2 auto-detect)
   useEffect(() => {
-    if (envs.length === 1 && !pickedEnvId) {
+    if (envs.length === 0 || pickedEnvId) return
+
+    // 1. Restore env from last-used if it matches the current app
+    if (!envRestored && lastUsed?.applicationId === pickedAppId && lastUsed.environmentId) {
+      const match = envs.find(e => e.id === lastUsed.environmentId)
+      if (match) {
+        setPickedEnvId(match.id)
+        setEnvRestored(true)
+        return
+      }
+    }
+
+    // 2. Auto-pick the only env when an app has just one
+    if (envs.length === 1) {
       setPickedEnvId(envs[0].id)
     }
-  }, [envs, pickedEnvId])
+  }, [envs, pickedEnvId, pickedAppId, lastUsed, envRestored])
 
   // Reset env pick when app changes
   useEffect(() => {
