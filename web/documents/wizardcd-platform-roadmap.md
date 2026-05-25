@@ -535,7 +535,9 @@ GET /applications/:id/environments/:envId/config-diff?from=<jobId>&to=<jobId>
 
 #### 5.5 Configuration Management & **Live Config Push** ⭐
 
-> **The headline feature.** Users can add, edit, and delete configuration **without rebuilding the JAR** and — in most cases — **without redeploying**. Changes hot-reload into the running app in <1 second when conditions allow, or apply via a 3–10 s JVM restart (no deploy pipeline) when they don't.
+> **The category shift.** This is the stage that moves WizardCD from *"VM deploy tool"* to **"deploy + config management platform."** The user's mental model flips: config changes become *editorial*, not *engineering*. An ops engineer flips a feature flag at 11pm without filing a ticket against the dev team. A DBA rotates a connection string without a deploy. No JAR rebuilds, no git commits for *"bumped log level to DEBUG."*
+>
+> **The mechanism.** Users add, edit, and delete configuration **without rebuilding the JAR** and — in most cases — **without redeploying**. Changes hot-reload into the running app in <1 second when conditions allow, or apply via a 3–10 s JVM restart (no deploy pipeline) when they don't.
 
 ##### 5.5.1 The Three Tiers
 
