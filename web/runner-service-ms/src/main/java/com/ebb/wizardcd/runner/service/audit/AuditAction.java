@@ -44,5 +44,13 @@ public final class AuditAction {
     // ── Configuration (Phase 5+) ──────────────────────────────────────────
     public static final String CONFIG_CHANGE = "CONFIG_CHANGE";
 
+    // ── Config overrides — Phase 5 §5.5 (Live Config Push) ────────────────
+    public static final String CONFIG_OVERRIDE_CREATED = "CONFIG_OVERRIDE_CREATED";
+    public static final String CONFIG_OVERRIDE_UPDATED = "CONFIG_OVERRIDE_UPDATED";
+    public static final String CONFIG_OVERRIDE_DELETED = "CONFIG_OVERRIDE_DELETED";
+    public static final String CONFIG_PUSHED_LIVE      = "CONFIG_PUSHED_LIVE";       // tier 1 — hot refresh
+    public static final String CONFIG_PUSH_RESTARTED   = "CONFIG_PUSH_RESTARTED";    // tier 2 — JVM restart
+    public static final String CONFIG_PUSH_FAILED      = "CONFIG_PUSH_FAILED";       // any tier — push aborted
+
     private AuditAction() {}
 }
